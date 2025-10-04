@@ -2,6 +2,10 @@
 // run the command below in terminal to install prompt-sync if you haven't already:
 // npm install prompt-sync
 /*
+NOTE:
+You need Node.js installed to run this file in the terminal.
+You also need the JavaScript extension installed in VS Code to run this file in the editor.
+
 To be able to run this file in terminal, run the command listed below:
 cd "c:\Users\Rober\OneDrive\Desktop\Coding Projects"
 
