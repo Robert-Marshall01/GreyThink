@@ -6,8 +6,7 @@ NOTE:
 You need Node.js installed to run this file in the terminal.
 You also need the JavaScript extension installed in VS Code to run this file in the editor.
 
-To be able to run this file in terminal, run the command listed below:
-cd "c:\Users\Rober\OneDrive\Desktop\Coding Projects"
+Change to the directory where your file is located
 
 Then run the command inside your project directory:
 node age_verification.js
