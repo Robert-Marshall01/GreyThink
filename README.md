@@ -36,6 +36,8 @@ When installing my code, you can either copy-paste it into an IDE that supports 
 
 ```
 #Some of the code is AI assisted and/or generated
+#Simply run the code in Colab
+#If that doesn't work, run it in Visual Studio with the Python development workload installed
 def assert_equals(computed_output, expected_output):
     if computed_output == expected_output:
         print("passed:", computed_output)
