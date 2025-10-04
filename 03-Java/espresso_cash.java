@@ -21,6 +21,15 @@ public class espresso_cash{
 
     /*
         NOTE:
+        You need to install Java extension in VS Code to run this file in the editor.
+        1. Open VS Code.
+        2. Go to Extensions (Ctrl+Shift+X).
+        3. Search for "Java Extension Pack" and install it.
+        4. Restart VS Code.
+        5. Open this file in VS Code.
+        6. You should see a "Run" and "Debug" option at the top right corner of the editor.
+        7. Click "Run" to execute the program.
+        8. The terminal will open at the bottom of the editor, and you can interact with the program there.
         You need to install Java Development Kit (JDK) to run this file in the terminal.
         1. Download JDK from: https://www.oracle.com/java/technologies/javase-jdk11-downloads.html
         2. Install JDK and set up the environment variables (PATH).
