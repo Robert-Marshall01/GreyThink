@@ -1,6 +1,17 @@
 #Some of the code is AI assisted and/or generated
 #Simply run the code in Colab
 #If that doesn't work, run it in Visual Studio with the Python development workload installed
+"""
+NOTE: This is a basic implementation and may not cover all edge cases or complex sentences.
+It is intended for educational purposes and can be expanded for more comprehensive
+
+NOTE: Because this program was made in Colab, it may not run properly in other IDEs.
+
+NOTE: To run it on Visual Code you must,
+1. Install Python extension
+2. Change to the directory where this file is located
+3. run "python Basic_Gender_Bias_Remover.py"
+"""
 def assert_equals(computed_output, expected_output):
     if computed_output == expected_output:
         print("passed:", computed_output)
