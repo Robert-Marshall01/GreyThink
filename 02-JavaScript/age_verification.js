@@ -4,6 +4,8 @@
 /*
 NOTE:
 You need Node.js installed to run this file in the terminal.
+(FYI: JavaScript can be quite quirky when it comes down to IDE compatibility and Node.js setup.
+Be mindful of potential errors when running this program)
 You also need the JavaScript extension installed in VS Code to run this file in the editor.
 
 Change to the directory where your file is located
