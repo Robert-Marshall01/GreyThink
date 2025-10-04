@@ -37,8 +37,8 @@ public class espresso_cash{
         4. Check if Java is installed by running the command: java -version
         5. Check if javac is installed by running the command: javac -version
         6. If both commands return a version number, you are good to go!
-        To be able to run this file in terminal, run the command listed below:
-        cd "c:\Users\Rober\OneDrive\Desktop\Coding Projects"
+        To be able to run this file in terminal:
+        Change to the directory where your file is located
         then run:
         java espresso_cash.java
     */
