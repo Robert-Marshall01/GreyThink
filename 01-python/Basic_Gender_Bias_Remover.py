@@ -1,3 +1,4 @@
+#Some of the code is AI assisted and/or generated
 def assert_equals(computed_output, expected_output):
     if computed_output == expected_output:
         print("passed:", computed_output)
