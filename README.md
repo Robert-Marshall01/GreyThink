@@ -35,7 +35,7 @@ When installing my code, you can either copy-paste it into an IDE that supports 
 ---
 
 ```
-//Some of the code is AI assisted and/or generated
+#Some of the code is AI assisted and/or generated
 def assert_equals(computed_output, expected_output):
     if computed_output == expected_output:
         print("passed:", computed_output)
