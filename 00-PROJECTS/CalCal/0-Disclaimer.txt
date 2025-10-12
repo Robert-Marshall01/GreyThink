@@ -1,0 +1,7 @@
+VERY IMPORTANT: The website has been generated with GitHub Copilot, then modified by me, review and test it.
+VERY IMPORTANT: Some security features weren't implemented due to compatibility issues with Bootstrap, JQuery, and the Database search.
+VERY IMPORTANT: The website comes with an "as is" warranty. More information can be found under the "LICENSE" page.
+
+IMPORTANT: The website has not been tested on other machines to verify compatibility.
+IMPORTANT: The website has been made by an indie developer, and is not sponsored by nor represents companies like Google and Microsoft.
+IMPORTANT: The website may contain uncaught bugs.
