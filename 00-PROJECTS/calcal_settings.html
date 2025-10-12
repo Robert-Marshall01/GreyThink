@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<!-- VERY IMPORTANT: GitHub Copilot AI-Generated Code, please review and test thoroughly -->
+<!-- Web Dev extension needs to be installed to edit this -->
+<!-- click on the file on Windows Explorer to run -->
+<html lang="en">
+<head>
+    <!-- Prevent site from being loaded in an iframe -->
+    <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'none'">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CalCalories Settings</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="calcal_css.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="calcal_js.js" defer></script>
+</head>
+<body>
+    <header class="bg-success text-white p-4 mb-4">
+        <div class="container d-flex justify-content-between align-items-center">
+            <h1 class="mb-0">CalCalories Settings</h1>
+            <a href="calcal_home.html" class="btn btn-outline-light rounded-circle" title="Home" style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </a>
+        </div>
+    </header>
+    <main class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card mb-4">
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h2 class="card-title">Nutritional Goals</h2>
+                        <form id="nutritional-goals-form">
+                            <div class="mb-3">
+                                <label class="form-label">Weight Goal</label>
+                                <h6>The weight goal auto changes settings. But you can adjust them as needed.</h6>
+                                <select class="form-select" id="goal-weight-goal">
+                                    <option value="maintain">Maintain Weight</option>
+                                    <option value="lose">Lose Weight</option>
+                                    <option value="gain">Gain Weight</option>
+                                </select>
+                            </div>
+                            <div class="mb-3 nutrition-setting">
+                                <label class="form-label">Calories</label>
+                                <div class="input-group">
+                                    <select class="form-select" id="goal-calories-type">
+                                        <option value="under">Under</option>
+                                        <option value="over">Over</option>
+                                    </select>
+                                    <input type="number" class="form-control" id="goal-calories-value" min="0" placeholder="kcal">
+                                    <span class="input-group-text">kcal</span>
+                                </div>
+                            </div>
+                            <div class="mb-3 nutrition-setting">
+                                <label class="form-label">Cholesterol</label>
+                                <div class="input-group">
+                                    <select class="form-select" id="goal-cholesterol-type">
+                                        <option value="under">Under</option>
+                                        <option value="over">Over</option>
+                                    </select>
+                                    <input type="number" class="form-control" id="goal-cholesterol-value" min="0" placeholder="mg">
+                                    <span class="input-group-text">mg</span>
+                                </div>
+                            </div>
+                            <div class="mb-3 nutrition-setting">
+                                <label class="form-label">Protein</label>
+                                <div class="input-group">
+                                    <select class="form-select" id="goal-protein-type">
+                                        <option value="under">Under</option>
+                                        <option value="over">Over</option>
+                                    </select>
+                                    <input type="number" class="form-control" id="goal-protein-value" min="0" placeholder="g">
+                                    <span class="input-group-text">g</span>
+                                </div>
+                            </div>
+                            <div class="mb-3 nutrition-setting">
+                                <label class="form-label">Fats</label>
+                                <div class="input-group">
+                                    <select class="form-select" id="goal-fats-type">
+                                        <option value="under">Under</option>
+                                        <option value="over">Over</option>
+                                    </select>
+                                    <input type="number" class="form-control" id="goal-fats-value" min="0" placeholder="g">
+                                    <span class="input-group-text">g</span>
+                                </div>
+                            </div>
+                            <div class="mb-3 nutrition-setting">
+                                <label class="form-label">Carbs</label>
+                                <div class="input-group">
+                                    <select class="form-select" id="goal-carbs-type">
+                                        <option value="under">Under</option>
+                                        <option value="over">Over</option>
+                                    </select>
+                                    <input type="number" class="form-control" id="goal-carbs-value" min="0" placeholder="g">
+                                    <span class="input-group-text">g</span>
+                                </div>
+                            </div>
+                            <div class="mb-3 nutrition-setting">
+                                <label class="form-label">Sugar</label>
+                                <div class="input-group">
+                                    <select class="form-select" id="goal-sugar-type">
+                                        <option value="under">Under</option>
+                                        <option value="over">Over</option>
+                                    </select>
+                                    <input type="number" class="form-control" id="goal-sugar-value" min="0" placeholder="g">
+                                    <span class="input-group-text">g</span>
+                                </div>
+                            </div>
+                            <div class="mb-3 nutrition-setting">
+                                <label class="form-label">Fiber</label>
+                                <div class="input-group">
+                                    <select class="form-select" id="goal-fiber-type">
+                                        <option value="under">Under</option>
+                                        <option value="over">Over</option>
+                                    </select>
+                                    <input type="number" class="form-control" id="goal-fiber-value" min="0" placeholder="g">
+                                    <span class="input-group-text">g</span>
+                                </div>
+                            </div>
+                            <div class="mb-3 nutrition-setting">
+                                <label class="form-label">Sodium</label>
+                                <div class="input-group">
+                                    <select class="form-select" id="goal-sodium-type">
+                                        <option value="under">Under</option>
+                                        <option value="over">Over</option>
+                                    </select>
+                                    <input type="number" class="form-control" id="goal-sodium-value" min="0" placeholder="mg">
+                                    <span class="input-group-text">mg</span>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-success">Save Nutritional Goals</button>
+                        </form>
+                        <div id="nutritional-goals-message" class="mt-3"></div>
+                    </div>
+                </div>
+                    <div class="card-body">
+                        <h2 class="card-title">User Settings</h2>
+                        <form id="user-settings-form">
+                            <div class="mb-3">
+                                <label for="settings-username" class="form-label">Username</label>
+                                <input type="text" class="form-control" id="settings-username" readonly>
+                            </div>
+                            <div class="mb-3">
+                                <label for="settings-password" class="form-label">Change Password</label>
+                                <input type="password" class="form-control" id="settings-password" placeholder="Enter new password">
+                                <small class="form-text text-muted">Leave blank to keep your current password.</small>
+                            </div>
+                            <div class="mb-3">
+                                <label for="settings-theme" class="form-label">Theme</label>
+                                <select class="form-select" id="settings-theme">
+                                    <option value="light">Light</option>
+                                    <option value="dark">Dark</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="settings-weight" class="form-label">Weight</label>
+                                <input type="number" class="form-control" id="settings-weight" min="0" placeholder="Weight">
+                            </div>
+                            <div class="mb-3">
+                                <label for="settings-height" class="form-label">Height</label>
+                                <input type="number" class="form-control" id="settings-height" min="0" placeholder="Height">
+                            </div>
+                            <div class="mb-3">
+                                <label for="settings-age" class="form-label">Age</label>
+                                <input type="number" class="form-control" id="settings-age" min="0" placeholder="Age">
+                            </div>
+                            <div class="mb-3">
+                                <label for="settings-gender" class="form-label">Gender</label>
+                                <select class="form-select" id="settings-gender">
+                                    <option value="male">Male</option>
+                                    <option value="female">Female</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="settings-activity" class="form-label">Activity Level</label>
+                                <select class="form-select" id="settings-activity">
+                                    <option value="sedentary">Sedentary</option>
+                                    <option value="light">Light</option>
+                                    <option value="moderate">Moderate</option>
+                                    <option value="active">Active</option>
+                                    <option value="very active">Very Active</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="settings-units" class="form-label">Units</label>
+                                <select class="form-select" id="settings-units">
+                                    <option value="metric">Metric (kg/cm)</option>
+                                    <option value="imperial">Imperial (lb/in)</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-success">Save Settings</button>
+                        </form>
+                        <div id="settings-message" class="mt-3"></div>
+                    </div>
+                </div>
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h2 class="card-title">Accessibility</h2>
+                        <form id="accessibility-settings-form">
+                            <div class="mb-3">
+                                <label for="access-font-size" class="form-label">Font Size</label>
+                                <select class="form-select" id="access-font-size">
+                                    <option value="normal">Normal</option>
+                                    <option value="large">Large</option>
+                                    <option value="xlarge">Extra Large</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">High Contrast Mode</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="access-contrast">
+                                    <label class="form-check-label" for="access-contrast">Enable High Contrast</label>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Dyslexia-Friendly Font</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="access-dyslexia">
+                                    <label class="form-check-label" for="access-dyslexia">Enable Dyslexia-Friendly Font</label>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-success">Save Accessibility</button>
+                        </form>
+                        <div id="accessibility-message" class="mt-3"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <section class="container mt-5 mb-4">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card border-danger">
+                    <div class="card-body text-center">
+                        <button id="delete-account-btn" class="btn btn-danger w-100">Delete Account</button>
+                        <div id="delete-account-message" class="mt-2"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <footer class="bg-light text-center py-3 mt-4">
+		<p class="mb-0">&copy; 2025 CalCalories</p>
+	</footer>
+    <script>
+    $(document).ready(function() {
+    // Auto-convert weight and height when units change
+    var lastUnits = null;
+    var lastWeight = null;
+    var lastHeight = null;
+    function convertWeight(value, from, to) {
+        if (!value || isNaN(value)) return '';
+        value = parseFloat(value);
+        if (from === to) return value;
+        if (from === 'metric' && to === 'imperial') {
+            return Math.round(value * 2.20462 * 100) / 100; // kg to lb
+        } else if (from === 'imperial' && to === 'metric') {
+            return Math.round(value / 2.20462 * 100) / 100; // lb to kg
+        }
+        return value;
+    }
+    function convertHeight(value, from, to) {
+        if (!value || isNaN(value)) return '';
+        value = parseFloat(value);
+        if (from === to) return value;
+        if (from === 'metric' && to === 'imperial') {
+            return Math.round(value * 0.393701 * 100) / 100; // cm to in
+        } else if (from === 'imperial' && to === 'metric') {
+            return Math.round(value / 0.393701 * 100) / 100; // in to cm
+        }
+        return value;
+    }
+    // Track last units and values
+    $('#settings-units').on('focus', function() {
+        lastUnits = $(this).val();
+        lastWeight = $('#settings-weight').val();
+        lastHeight = $('#settings-height').val();
+    });
+    $('#settings-units').on('change', function() {
+        var newUnits = $(this).val();
+        var weight = $('#settings-weight').val();
+        var height = $('#settings-height').val();
+        // Only convert if lastUnits is set and values are present
+        if (lastUnits && lastUnits !== newUnits) {
+            var newWeight = convertWeight(weight, lastUnits, newUnits);
+            var newHeight = convertHeight(height, lastUnits, newUnits);
+            $('#settings-weight').val(newWeight);
+            $('#settings-height').val(newHeight);
+        }
+        lastUnits = newUnits;
+    });
+    // Delete Account button logic
+    $('#delete-account-btn').on('click', function() {
+        if (!confirm('Are you sure you want to delete your account? This action cannot be undone.')) return;
+        var username = localStorage.getItem('calcal_last_user');
+        if (!username) {
+            $('#delete-account-message').text('No account found to delete.').css('color', 'red');
+            return;
+        }
+        // Call backend to delete user
+        $.ajax({
+            url: 'http://127.0.0.1:5000/delete_user',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ username: username }),
+            success: function(res) {
+                if (res.success) {
+                    localStorage.removeItem('calcal_last_user');
+                    localStorage.removeItem('calcal_foods_' + username);
+                    $('#delete-account-message').text('Account deleted. Redirecting to login...').css('color', 'green');
+                    setTimeout(function() {
+                        window.location.href = 'calcal_signin.html';
+                    }, 1200);
+                } else {
+                    $('#delete-account-message').text('Error deleting account.').css('color', 'red');
+                }
+            },
+            error: function() {
+                $('#delete-account-message').text('Error deleting account.').css('color', 'red');
+            }
+        });
+    });
+    // Helper to apply theme
+    function applyTheme(theme) {
+        $('body').removeClass('theme-light theme-dark');
+        if (theme === 'dark') {
+            $('body').addClass('theme-dark');
+        } else {
+            $('body').addClass('theme-light');
+        }
+        // Save theme to localStorage for persistence
+        localStorage.setItem('calcal_theme', theme);
+    }
+
+    var username = localStorage.getItem('calcal_last_user');
+    if (username) {
+        // Fetch user settings from backend
+        $.ajax({
+            url: 'http://127.0.0.1:5000/get_settings',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ username: username }),
+            success: function(res) {
+                var user = res.settings || {};
+                $('#settings-username').val(username);
+                $('#settings-theme').val(user.theme || 'light');
+                $('#settings-weight').val(user.weight || '');
+                $('#settings-height').val(user.height || '');
+                $('#settings-age').val(user.age || '');
+                $('#settings-gender').val((user.gender || '').toLowerCase());
+                $('#settings-activity').val((user.activity || '').toLowerCase());
+                $('#settings-units').val(user.units || 'metric');
+                // Accessibility
+                $('#access-font-size').val(user.fontSize || 'normal');
+                $('#access-contrast').prop('checked', !!user.contrast);
+                $('#access-dyslexia').prop('checked', !!user.dyslexia);
+                applyTheme(user.theme || 'light');
+                // Apply accessibility settings here where 'user' is defined
+                var access = {
+                    fontSize: user.fontSize || 'normal',
+                    contrast: !!user.contrast,
+                    dyslexia: !!user.dyslexia
+                };
+                applyAccessibilitySettings(access.fontSize, access.contrast, access.dyslexia);
+            }
+        });
+        // Fetch nutritional goals from backend
+        $.ajax({
+            url: 'http://127.0.0.1:5000/get_goals',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ username: username }),
+            success: function(res) {
+                var goals = res.goals || {};
+                $('#goal-weight-goal').val(goals.weightGoal || '');
+                $('#goal-calories-type').val(goals.caloriesType || 'under');
+                $('#goal-calories-value').val(goals.caloriesValue || '2000');
+                $('#goal-protein-type').val(goals.proteinType || 'over');
+                $('#goal-protein-value').val(goals.proteinValue || '50');
+                $('#goal-fats-type').val(goals.fatsType || 'under');
+                $('#goal-fats-value').val(goals.fatsValue || '78');
+                $('#goal-cholesterol-type').val(goals.cholesterolType || 'under');
+                $('#goal-cholesterol-value').val(goals.cholesterolValue || '300');
+                $('#goal-carbs-type').val(goals.carbsType || 'under');
+                $('#goal-carbs-value').val(goals.carbsValue || '275');
+                $('#goal-sugar-type').val(goals.sugarType || 'under');
+                $('#goal-sugar-value').val(goals.sugarValue || '50');
+                $('#goal-fiber-type').val(goals.fiberType || 'over');
+                $('#goal-fiber-value').val(goals.fiberValue || '28');
+                $('#goal-sodium-type').val(goals.sodiumType || 'under');
+                $('#goal-sodium-value').val(goals.sodiumValue || '2300');
+            }
+        });
+    }
+    // Save settings
+    $('#user-settings-form').on('submit', function(e) {
+        e.preventDefault();
+    var password = $('#settings-password').val();
+        var goal = $('#settings-goal').val();
+        var theme = $('#settings-theme').val();
+        var weight = $('#settings-weight').val();
+        var height = $('#settings-height').val();
+        var age = $('#settings-age').val();
+        var gender = $('#settings-gender').val();
+        var activity = $('#settings-activity').val();
+        var units = $('#settings-units').val();
+        if (!username) {
+            $('#settings-message').text('No user logged in.').css('color', 'red');
+            return;
+        }
+        var payload = {
+            username: username,
+            goal: goal,
+            theme: theme,
+            weight: weight,
+            height: height,
+            age: age,
+            gender: gender,
+            activity: activity,
+            units: units
+        };
+        if (password) {
+            payload.password = password;
+        }
+        $.ajax({
+            url: 'http://127.0.0.1:5000/update_settings',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(payload),
+            success: function() {
+                // On successful save, update the theme immediately
+                applyTheme(theme);
+                $('#settings-message').text('Settings saved!').css('color', 'green');
+            },
+            error: function() {
+                $('#settings-message').text('Error saving settings.').css('color', 'red');
+            }
+        });
+    });
+
+    // Save nutritional goals
+    $('#nutritional-goals-form').on('submit', function(e) {
+        e.preventDefault();
+        if (!username) {
+            $('#nutritional-goals-message').text('No user logged in.').css('color', 'red');
+            return;
+        }
+        $.ajax({
+            url: 'http://127.0.0.1:5000/update_goals',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                username: username,
+                weightGoal: $('#goal-weight-goal').val(),
+                nutritionAdjustment: $('#goal-nutrition-adjustment').val(),
+                caloriesType: $('#goal-calories-type').val(),
+                caloriesValue: $('#goal-calories-value').val(),
+                proteinType: $('#goal-protein-type').val(),
+                proteinValue: $('#goal-protein-value').val(),
+                fatsType: $('#goal-fats-type').val(),
+                fatsValue: $('#goal-fats-value').val(),
+                cholesterolType: $('#goal-cholesterol-type').val(),
+                cholesterolValue: $('#goal-cholesterol-value').val(),
+                carbsType: $('#goal-carbs-type').val(),
+                carbsValue: $('#goal-carbs-value').val(),
+                sugarType: $('#goal-sugar-type').val(),
+                sugarValue: $('#goal-sugar-value').val(),
+                fiberType: $('#goal-fiber-type').val(),
+                fiberValue: $('#goal-fiber-value').val(),
+                sodiumType: $('#goal-sodium-type').val(),
+                sodiumValue: $('#goal-sodium-value').val()
+            }),
+            success: function() {
+                $('#nutritional-goals-message').text('Nutritional goals saved!').css('color', 'green');
+            },
+            error: function() {
+                $('#nutritional-goals-message').text('Error saving nutritional goals.').css('color', 'red');
+            }
+        });
+    });
+
+    // Save accessibility settings
+    $('#accessibility-settings-form').on('submit', function(e) {
+        e.preventDefault();
+        var fontSize = $('#access-font-size').val();
+        var contrast = $('#access-contrast').is(':checked');
+        var dyslexia = $('#access-dyslexia').is(':checked');
+        if (!username) {
+            $('#accessibility-message').text('No user logged in.').css('color', 'red');
+            return;
+        }
+        $.ajax({
+            url: 'http://127.0.0.1:5000/update_accessibility',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                username: username,
+                fontSize: fontSize,
+                contrast: contrast,
+                dyslexia: dyslexia
+            }),
+            success: function() {
+                // Apply accessibility settings immediately
+                applyAccessibilitySettings(fontSize, contrast, dyslexia);
+                $('#accessibility-message').text('Accessibility settings saved!').css('color', 'green');
+            },
+            error: function() {
+                $('#accessibility-message').text('Error saving accessibility settings.').css('color', 'red');
+            }
+        });
+    });
+
+    // Helper to apply accessibility settings
+    function applyAccessibilitySettings(fontSize, contrast, dyslexia) {
+        // Font size
+        $('body').removeClass('font-normal font-large font-xlarge');
+        if (fontSize === 'large') {
+            $('body').addClass('font-large');
+        } else if (fontSize === 'xlarge') {
+            $('body').addClass('font-xlarge');
+        } else {
+            $('body').addClass('font-normal');
+        }
+        // High contrast
+        $('body').removeClass('high-contrast-light high-contrast-dark high-contrast');
+        if (contrast) {
+            var theme = ($('body').hasClass('theme-dark')) ? 'dark' : 'light';
+            if (theme === 'dark') {
+                $('body').addClass('high-contrast-dark');
+            } else {
+                $('body').addClass('high-contrast-light');
+            }
+        }
+        // Dyslexia-friendly font
+        if (dyslexia) {
+            $('body').addClass('dyslexia-font');
+        } else {
+            $('body').removeClass('dyslexia-font');
+        }
+    }
+
+    // Accessibility settings are now applied inside AJAX success callback above
+    });
+    </script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+/* VERY IMPORTANT: GitHub Copilot AI-Generated Code, please review and test thoroughly
+Web Dev extension needs to be installed to edit this */
+/* Theme: Light & Dark */
+.theme-light {
+	background-color: #f8f9fa !important;
+	color: #212529 !important;
+}
+.theme-light .card, .theme-light .form-control, .theme-light .btn, .theme-light .list-group-item {
+	background-color: #fff !important;
+	color: #212529 !important;
+	border-color: #dee2e6 !important;
+}
+
+.theme-dark {
+	background-color: #181a1b !important;
+	color: #f8f9fa !important;
+}
+.theme-dark .card, .theme-dark .form-control, .theme-dark .btn, .theme-dark .list-group-item {
+	background-color: #222 !important;
+	color: #f8f9fa !important;
+	border-color: #444 !important;
+}
+
+/* User setup form message styling */
+/* Accessibility: Font Sizes (true multipliers) */
+.font-normal { font-size: 1rem !important; }
+.font-large { font-size: 1.25rem !important; }
+.font-xlarge { font-size: 1.5rem !important; }
+
+/* Accessibility: High Contrast - Light Theme */
+.high-contrast-light {
+	background-color: #fff !important;
+	color: #000 !important;
+}
+.high-contrast-light .card, .high-contrast-light .form-control, .high-contrast-light .btn, .high-contrast-light .list-group-item {
+	background-color: #f8f9fa !important;
+	color: #000 !important;
+	border-color: #000 !important;
+}
+
+/* Accessibility: High Contrast - Dark Theme */
+.high-contrast-dark {
+	background-color: #000 !important;
+	color: #fff !important;
+}
+.high-contrast-dark .card, .high-contrast-dark .form-control, .high-contrast-dark .btn, .high-contrast-dark .list-group-item {
+	background-color: #222 !important;
+	color: #fff !important;
+	border-color: #fff !important;
+}
+
+/* Accessibility: Dyslexia-Friendly Font */
+.dyslexia-font {
+	font-family: 'OpenDyslexic', Arial, sans-serif !important;
+}
+#form-message {
+	color: red;
+	margin-top: 10px;
+}
