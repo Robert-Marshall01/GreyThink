@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<!-- VERY IMPORTANT: GitHub Copilot AI-Generated Code, please review and test thoroughly -->
+<!-- Web Dev extension needs to be installed to edit this -->
+<!-- click on the file on Windows Explorer to run -->
+<html lang="en">
+<head>
+	<!-- Prevent site from being loaded in an iframe -->
+	<meta http-equiv="Content-Security-Policy" content="frame-ancestors 'none'">
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>CalCalories Sign In</title>
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+	<link rel="stylesheet" href="calcal_css.css">
+	<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+	<script src="calcal_js.js" defer></script>
+</head>
+<body>
+	<header class="bg-success text-white p-4 mb-4">
+		<h1 class="container">Sign In to CalCalories</h1>
+	</header>
+	<main class="container">
+		<div class="card mx-auto" style="max-width: 400px;">
+			<div class="card-body">
+				<form id="signin-form">
+					<div class="mb-3">
+						<label for="login-username" class="form-label">Username:</label>
+						<input type="text" id="login-username" name="login-username" class="form-control" required>
+					</div>
+					<div class="mb-3">
+						<label for="login-password" class="form-label">Password:</label>
+						<input type="password" id="login-password" name="login-password" class="form-control" required>
+					</div>
+					<div class="d-flex justify-content-between align-items-center mb-3">
+						<button type="submit" id="login-btn" class="btn btn-success">Log In</button>
+						<button type="button" id="signup-btn" class="btn btn-outline-secondary">Sign Up</button>
+					</div>
+					<div id="login-message" class="mt-2"></div>
+				</form>
+			</div>
+		</div>
+	</main>
+	<footer class="bg-light text-center py-3 mt-4">
+		<p class="mb-0">&copy; 2025 CalCalories</p>
+	</footer>
+	<script>
+$(document).ready(function() {
+    $('#login-btn').on('click', function(e) {
+        e.preventDefault();
+        var username = $('#login-username').val().trim();
+        var password = $('#login-password').val();
+        if (!username || !password) {
+            $('#login-message').css('color', 'red').text('Please enter both username and password.');
+            return;
+        }
+        $.ajax({
+            url: 'http://127.0.0.1:5000/login',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ username: username, password: password }),
+            success: function(res) {
+                if (res.success) {
+                    localStorage.setItem('calcal_last_user', username);
+                    $('#login-message').css('color', 'green').text('Login successful! Redirecting...');
+                    setTimeout(function() {
+                        window.location.href = 'calcal_home.html';
+                    }, 1000);
+                } else {
+                    $('#login-message').css('color', 'red').text('Invalid username or password.');
+                }
+            },
+            error: function(xhr) {
+                if (xhr.responseJSON && xhr.responseJSON.error) {
+                    $('#login-message').css('color', 'red').text(xhr.responseJSON.error);
+                } else {
+                    $('#login-message').css('color', 'red').text('Login failed. Please try again.');
+                }
+            }
+        });
+    });
+    $('#signup-btn').on('click', function() {
+        window.location.href = 'calcal_usersetup.html';
+    });
+});
+</script>
+</body>
+</html>

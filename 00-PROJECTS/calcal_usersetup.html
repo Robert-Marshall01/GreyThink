@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<!-- VERY IMPORTANT: GitHub Copilot AI-Generated Code, please review and test thoroughly -->
+<!-- Web Dev extension needs to be installed to edit this -->
+<!-- click on the file on Windows Explorer to run -->
+<html lang="en">
+<head>
+	<!-- Prevent site from being loaded in an iframe -->
+	<meta http-equiv="Content-Security-Policy" content="frame-ancestors 'none'">
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>CalCalories User Setup</title>
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+	<link rel="stylesheet" href="calcal_css.css">
+	<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+	<script src="calcal_js.js" defer></script>
+</head>
+<body>
+	<main>
+		<header class="bg-success text-white p-4 mb-4">
+			<h1 class="container">User Setup - CalCalories</h1>
+		</header>
+		<main class="container">
+			<div class="card mx-auto" style="max-width: 500px;">
+				<div class="card-body">
+					<h2 class="card-title">User Setup</h2>
+					<form id="user-setup-form">
+						<div class="mb-3">
+							<label for="units" class="form-label"><strong>Preferred Units:</strong></label>
+							<select id="units" name="units" class="form-select" required>
+								<option value="metric">Metric (kg, cm)</option>
+								<option value="imperial">Imperial (lb, in)</option>
+							</select>
+						</div>
+						<div class="mb-3">
+							<label for="username" class="form-label">Username:</label>
+							<input type="text" id="username" name="username" class="form-control" required>
+						</div>
+						<div class="mb-3">
+							<label for="password" class="form-label">Password:</label>
+							<input type="password" id="password" name="password" class="form-control" required>
+						</div>
+						<div class="mb-3">
+							<label for="weight" id="weight-label" class="form-label">Weight (kg):</label>
+							<input type="number" id="weight" name="weight" min="0" class="form-control" required>
+						</div>
+						<div class="mb-3">
+							<label for="height" id="height-label" class="form-label">Height (cm):</label>
+							<input type="number" id="height" name="height" min="0" class="form-control" required>
+						</div>
+						<div class="mb-3">
+							<label for="age" class="form-label">Age:</label>
+							<input type="number" id="age" name="age" min="0" class="form-control" required>
+						</div>
+						<div class="mb-3">
+							<label for="gender" class="form-label">Gender:</label>
+							<select id="gender" name="gender" class="form-select" required>
+								<option value="male">Male</option>
+								<option value="female">Female</option>
+								<option value="other">Other</option>
+							</select>
+						</div>
+						<div class="mb-3">
+							<label for="activity" class="form-label">Activity Level:</label>
+							<select id="activity" name="activity" class="form-select" required>
+								<option value="sedentary">Sedentary</option>
+								<option value="lightly active">Lightly Active</option>
+								<option value="moderately active">Moderately Active</option>
+								<option value="very active">Very Active</option>
+								<option value="extra active">Extra Active</option>
+							</select>
+						</div>
+						<button type="submit" id="submit-btn" class="btn btn-success w-100" disabled>Submit</button>
+						<div id="form-message" class="mt-2"></div>
+					</form>
+				</div>
+			</div>
+		</main>
+		<footer class="bg-light text-center py-3 mt-4">
+			<p class="mb-0">&copy; 2025 CalCalories</p>
+		</footer>
+		<script>
+$(document).ready(function() {
+	// Real-time username availability check
+	var usernameAvailable = false;
+	$('#username').on('input', function() {
+		var username = $(this).val().trim();
+		if (!username) {
+			$('#username').removeClass('is-valid is-invalid');
+			$('#username-feedback').remove();
+			$('#submit-btn').prop('disabled', true);
+			usernameAvailable = false;
+			return;
+		}
+		$.ajax({
+			url: 'http://127.0.0.1:5000/check_username',
+			method: 'POST',
+			contentType: 'application/json',
+			data: JSON.stringify({ username: username }),
+			success: function(res) {
+				$('#username-feedback').remove();
+				if (res.available) {
+					$('#username').removeClass('is-invalid').addClass('is-valid');
+					$('<div id="username-feedback" class="valid-feedback">Username is available.</div>').insertAfter('#username');
+					usernameAvailable = true;
+				} else {
+					$('#username').removeClass('is-valid').addClass('is-invalid');
+					$('<div id="username-feedback" class="invalid-feedback">Username is already taken.</div>').insertAfter('#username');
+					usernameAvailable = false;
+				}
+				$('#submit-btn').prop('disabled', !usernameAvailable);
+			},
+			error: function() {
+				$('#username-feedback').remove();
+				$('#username').removeClass('is-valid').addClass('is-invalid');
+				$('<div id="username-feedback" class="invalid-feedback">Error checking username.</div>').insertAfter('#username');
+				usernameAvailable = false;
+				$('#submit-btn').prop('disabled', true);
+			}
+		});
+	});
+
+	// User setup form submission
+	$('#user-setup-form').on('submit', function(e) {
+		e.preventDefault();
+		var username = $('#username').val().trim();
+		var password = $('#password').val();
+		var weight = $('#weight').val();
+		var height = $('#height').val();
+		var age = $('#age').val();
+		var gender = $('#gender').val();
+		var activity = $('#activity').val();
+		var units = $('#units').val();
+		if (!usernameAvailable) {
+			$('#form-message').css('color', 'red').text('Please choose an available username.');
+			return;
+		}
+		// Register user in backend
+		$.ajax({
+			url: 'http://127.0.0.1:5000/register',
+			method: 'POST',
+			contentType: 'application/json',
+			data: JSON.stringify({ username: username, password: password }),
+			success: function(res) {
+				if (res.success) {
+					// Save additional user info to backend settings
+					$.ajax({
+						url: 'http://127.0.0.1:5000/update_settings',
+						method: 'POST',
+						contentType: 'application/json',
+						data: JSON.stringify({
+							username: username,
+							weight: weight,
+							height: height,
+							age: age,
+							gender: gender,
+							activity: activity,
+							units: units
+						}),
+						success: function() {
+							localStorage.setItem('calcal_last_user', username);
+							$('#form-message').css('color', 'green').text('User setup saved successfully!');
+							setTimeout(function() {
+								window.location.href = 'calcal_home.html';
+							}, 1000);
+						},
+						error: function() {
+							$('#form-message').css('color', 'red').text('Failed to save user settings.');
+						}
+					});
+				} else {
+					$('#form-message').css('color', 'red').text(res.error || 'Registration failed.');
+				}
+			},
+			error: function(xhr) {
+				if (xhr.responseJSON && xhr.responseJSON.error) {
+					$('#form-message').css('color', 'red').text(xhr.responseJSON.error);
+				} else {
+					$('#form-message').css('color', 'red').text('Registration failed.');
+				}
+			}
+		});
+		this.reset();
+		$('#submit-btn').prop('disabled', true);
+	});
+});
+</script>
+</body>
+</html>

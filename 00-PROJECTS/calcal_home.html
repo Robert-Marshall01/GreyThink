@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<!-- VERY IMPORTANT: GitHub Copilot AI-Generated Code, please review and test thoroughly -->
+<!-- Web Dev extension needs to be installed to edit this -->
+<!-- click on the file on Windows Explorer to run -->
+<html lang="en">
+<head>
+	<!-- Prevent site from being loaded in an iframe -->
+	<meta http-equiv="Content-Security-Policy" content="frame-ancestors 'none'">
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>CalCalories Home</title>
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+	<link rel="stylesheet" href="calcal_css.css">
+	<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+	<script src="calcal_js.js" defer></script>
+</head>
+<body>
+       <header class="bg-success text-white p-4 mb-4">
+	       <div class="container d-flex justify-content-between align-items-center">
+		       <h1 class="mb-0">Welcome to CalCalories</h1>
+		       <div class="d-flex align-items-center gap-2">
+			       <a href="calcal_settings.html" class="btn btn-outline-light rounded-circle" title="Settings" style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;">
+				       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.09A1.65 1.65 0 0 0 9 3.09V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+			       </a>
+			       <button id="logout-btn" class="btn btn-outline-light" title="Log Out">Logout</button>
+		       </div>
+	       </div>
+       </header>
+	<main class="container">
+		<div class="row">
+			<div class="col-8">
+				<div id="user-info" class="card mb-4">
+					<div class="card-body">
+						<h2 class="card-title" id="welcome-username">Welcome!</h2>
+						<div class="container">
+							<div class="row" id="profile-details-row">
+								<!-- User cards will be loaded here by JS -->
+							</div>
+						</div>
+					</div>
+				</div>
+				<div id="food-search-section" class="card mb-4">
+					<div class="card-body">
+						<h2 class="card-title">Search for Food</h2>
+						<form id="food-search-form" class="mb-3 d-flex align-items-center gap-2">
+							<input type="text" id="food-search-input" class="form-control" placeholder="Search food (e.g. apple, pizza)">
+							<button type="submit" class="btn btn-success">Add Food</button>
+						</form>
+						<div id="food-search-results" class="mb-2"></div>
+					</div>
+				</div>
+				<!-- Caloric Expenditure Section -->
+				<div id="caloric-expenditure-section" class="card mb-4">
+					<div class="card-body">
+						<h2 class="card-title">Your Caloric Expenditure</h2>
+						<div id="caloric-expenditure-details">
+							<!-- BMR and comparison will be loaded here by JS -->
+						</div>
+					</div>
+				</div>
+				<div id="food-entry-section" class="card mb-4">
+					<div class="card-body">
+						<h2 class="card-title">Add Food Item</h2>
+                        <hr>
+						<form id="food-entry-form">
+							<div class="mb-3">
+								<label for="food-name" class="form-label">Food Name</label>
+								<input type="text" class="form-control" id="food-name" required>
+							</div>
+							<div class="row">
+								<div class="col-md-3 mb-3">
+									<label for="calories" class="form-label">Calories</label>
+									<input type="number" class="form-control" id="calories" min="0" required>
+								</div>
+								<div class="col-md-3 mb-3">
+									<label for="protein" class="form-label">Protein (g)</label>
+									<input type="number" class="form-control" id="protein" min="0" required>
+								</div>
+								<div class="col-md-3 mb-3">
+									<label for="fats" class="form-label">Fats (g)</label>
+									<input type="number" class="form-control" id="fats" min="0" required>
+								</div>
+								<div class="col-md-3 mb-3">
+									<label for="cholesterol" class="form-label">Cholesterol (mg)</label>
+									<input type="number" class="form-control" id="cholesterol" min="0" required>
+								</div>
+							</div>
+							<div class="row">
+								<div class="col-md-3 mb-3">
+									<label for="carbs" class="form-label">Carbs (g)</label>
+									<input type="number" class="form-control" id="carbs" min="0" required>
+								</div>
+								<div class="col-md-3 mb-3">
+									<label for="sugar" class="form-label">Sugar (g)</label>
+									<input type="number" class="form-control" id="sugar" min="0" required>
+								</div>
+								<div class="col-md-3 mb-3">
+									<label for="fiber" class="form-label">Fiber (g)</label>
+									<input type="number" class="form-control" id="fiber" min="0" required>
+								</div>
+								<div class="col-md-3 mb-3">
+									<label for="sodium" class="form-label">Sodium (mg)</label>
+									<input type="number" class="form-control" id="sodium" min="0" required>
+								</div>
+							</div>
+							<button type="submit" class="btn btn-success">Add Food</button>
+						</form>
+                        <p></p>
+                        <h6 style="font-weight: normal;"">Values are based on serving size.</h6>
+					</div>
+				</div>
+                <div id="food-delete-section" class="card mb-4">
+					<div class="card-body">
+						<h2 class="card-title">Delete Food Item</h2>
+						<form id="food-delete-form" class="row g-2 align-items-center">
+							<div class="col-auto">
+								<label for="delete-food-name" class="form-label">Food Name</label>
+								<input type="text" class="form-control" id="delete-food-name" required>
+							</div>
+							<div class="col-auto">
+								<button type="submit" class="btn btn-danger">Delete</button>
+							</div>
+						</form>
+						<div id="delete-message" class="mt-2"></div>
+					</div>
+				</div>
+				<div id="food-list-section" class="card mb-4">
+				</div>
+				<div id="food-list-section" class="card mb-4">
+					<div class="card-body">
+						<h2 class="card-title">Your Food List</h2>
+                        <hr>
+						<ul id="food-list" class="list-group list-group-flush">
+							<!-- Food items will be loaded here by JS -->
+						</ul>
+					</div>
+				</div>
+			</div>
+			<div class="col-4" id="right-col">
+				<div id="daily-intake-section" class="mb-4">
+					<h4 class="mb-3">Daily Intake Overview</h4>
+					<div id="donut-bars" class="d-flex flex-wrap gap-4 justify-content-center">
+						<!-- Donut bars will be rendered here by JS -->
+					</div>
+				</div>
+			</div>
+		</div>
+		<p class="lead">Track your food and nutrition easily.</p>
+	</main>
+	<footer class="bg-light text-center py-3 mt-4">
+		<p class="mb-0">&copy; 2025 CalCalories</p>
+	</footer>
+	<script>
+$(document).ready(function() {
+       // Logout button logic
+       $('#logout-btn').on('click', function() {
+	       localStorage.removeItem('calcal_last_user');
+	       window.location.href = 'calcal_signin.html';
+       });
+	var username = localStorage.getItem('calcal_last_user');
+	if (username) {
+		// Fetch user info from backend
+		$.ajax({
+			url: 'http://127.0.0.1:5000/get_settings',
+			method: 'POST',
+			contentType: 'application/json',
+			data: JSON.stringify({ username: username }),
+			success: function(res) {
+				var user = res.settings || {};
+				$('#welcome-username').text('Welcome, ' + username + '!');
+				   var units = (user.units || 'metric');
+				   var weightUnit = units === 'imperial' ? 'lb' : 'kg';
+				   var heightUnit = units === 'imperial' ? 'in' : 'cm';
+				   var cards = [
+					   { label: 'Username', value: username },
+					   { label: 'Weight', value: (user.weight ? user.weight + ' ' + weightUnit : '') },
+					   { label: 'Height', value: (user.height ? user.height + ' ' + heightUnit : '') },
+					   { label: 'Age', value: user.age || '' },
+					   { label: 'Gender', value: user.gender || '' },
+					   { label: 'Activity', value: user.activity || '' }
+				   ];
+				   var html = '';
+				   for (var i = 0; i < cards.length; i++) {
+					   if (i % 3 === 0) html += '<div class="row mb-2">';
+					   html += '<div class="col-md-4 mb-2">'
+						   + '<div class="card h-100 shadow-sm">'
+						   + '<div class="card-body text-center">'
+						   + '<h5 class="card-title">' + cards[i].label + '</h5>'
+						   + '<p class="card-text">' + cards[i].value + '</p>'
+						   + '</div></div></div>';
+					   if (i % 3 === 2 || i === cards.length - 1) html += '</div>';
+				   }
+				   $('#profile-details-row').html(html);
+			},
+			error: function() {
+				$('#profile-details-row').html('<div class="text-danger">Failed to load user info.</div>');
+			}
+		});
+	} else {
+		$('#profile-details-row').html('<div class="text-danger">No user signed in.</div>');
+	}
+	// ...existing code for food list, search, etc...
+});
+</script>
+</body>
+</html>
