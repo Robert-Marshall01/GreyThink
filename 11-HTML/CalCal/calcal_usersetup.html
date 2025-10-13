@@ -6,6 +6,11 @@
 <head>
 	<!-- Prevent site from being loaded in an iframe -->
 	<meta http-equiv="Content-Security-Policy" content="frame-ancestors 'none'">
+	<!-- Security Headers -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta name="referrer" content="no-referrer">
+    <meta http-equiv="Permissions-Policy" content="geolocation=(), microphone=(), camera=()">
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>CalCalories User Setup</title>
