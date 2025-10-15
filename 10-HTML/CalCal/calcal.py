@@ -1,5 +1,6 @@
 """
-IMPORTANT: AI has been mostly used to generate this code. Please review and test thoroughly.
+IMPORTANT: AI has been mostly used to generate this code, then modified by me. Please review and test thoroughly.
+LANGUAGE VERSION: Python 3.8+
 
 This program calculates the total calorie intake based on user input for different food items.
 Factors include:

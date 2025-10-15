@@ -1,7 +1,9 @@
 /*
-VERY IMPORTANT: GitHub Copilot AI generated this code. Please review it carefully before using it.
+VERY IMPORTANT: GitHub Copilot AI generated this code. Please review it carefully before using it, then modified by me.
 It may contain errors or security vulnerabilities.
-    
+
+LANGUAGE VERSION: Java 8+
+
 IMPORTANT: This program is made by an indie developer and is not affiliated with any company.
 IMPORTANT: Use at your own risk. The developer is not responsible for any damage or loss of data that may occur from using this program.
 */

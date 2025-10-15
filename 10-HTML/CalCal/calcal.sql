@@ -1,4 +1,5 @@
-/*VERY-IMPORTANT: GitHub Copilot AI-Generated Code, please review and test thoroughly*/
+/*VERY-IMPORTANT: GitHub Copilot AI-Generated Code, then modified by me. Please review and test thoroughly.*/
+/*LANGUAGE VERSION: SQLite 3.x*/
 /*to use this, run it in a SQLite environment to create the necessary tables for the CalCal application*/
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

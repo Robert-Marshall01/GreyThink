@@ -1,12 +1,13 @@
 #include <stdio.h>
 /*
 NOTE: Most of this code is AI-generated, with human oversight and modifications to ensure accuracy and functionality.
-NOTE: This program is inspired from a project idea from https://www.w3schools.com/c/c_projects.php 
+NOTE: This program is inspired from a project idea from https://www.w3schools.com/c/c_projects.php
 NOTE: Because I am new to C programming, I used AI to help me write this code, so I could learn from it.
 NOTE: This code is for educational purposes only, not intended for high-stakes or production use, as it may contain errors or inefficiencies.
 It is a simple student gradebook system that allows a teacher to manage and retrieve student grades.
+LANGUAGE VERSION: C99 (compatible with GCC)
 */
-/*To run the program, 
+/*To run the program,
 1. Have C/C++ extension installed in your VS Code editor.
 2. Install GCC compiler from https://jmeubank.github.io/tdm-gcc/
 3. Test the installation by running `gcc --version` in the terminal.

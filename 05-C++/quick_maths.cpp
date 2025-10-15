@@ -5,6 +5,8 @@ IMPORTANT: This program is made by an indie developer and is not affiliated with
 IMPORTANT: This program is not intended to be a professional solution and may not follow best practices or coding standards.
 IMPORTANT: I am new to C++ and programming in general, so please forgive any mistakes or misunderstandings.
 
+LANGUAGE VERSION: C++11 (compatible with GCC and MSVC)
+
 NOTE: Because of the previously mentioned statement, I may struggle with more advanced concepts or syntax.
 NOTE: This program is intended for you and me to learn from and improve upon.
 NOTE: This program is not intended to be a complete or fully functional program.

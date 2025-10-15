@@ -1,9 +1,9 @@
-#VERY-IMPORTANT: GitHub Copilot AI-Generated Code, please review and test thoroughly
+#VERY-IMPORTANT: GitHub Copilot AI-Generated Code, then modified by me. Please review and test thoroughly.
 from flask import Flask, request, jsonify, send_from_directory
 import sqlite3
 import hashlib
 from flask_cors import CORS
-
+#LANGUAGE VERSION: Python 3.8+
 app = Flask(__name__)
 CORS(app)
 

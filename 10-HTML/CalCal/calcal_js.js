@@ -1,8 +1,8 @@
 /*
-VERY IMPORTANT: GitHub Copilot AI-Generated Code, please review and test thoroughly.
+VERY IMPORTANT: GitHub Copilot AI-Generated Code, then modified by me. Please review and test thoroughly.
 IMPORTANT: This program is made by an indie developer, not a professional.
 IMPORTANT: This program is not endorsed nor sponsored by major tech firms like Google and Microsoft.
-
+LANGUAGE VERSION: JavaScript (Node.js ES6+)
 NOTE: To test, open the calcal html pages in a web browser,
 or, install the Web Dev extension and run on vscode.
 
@@ -10,7 +10,7 @@ Food Searchbar now uses the USDA FoodData Central API. You must provide your own
 Instructions: Get your API key at https://fdc.nal.usda.gov/api-key-signup.html
 Citation: USDA FoodData Central API documentation: https://fdc.nal.usda.gov/api-guide.html
 Replace 'YOUR_USDA_API_KEY' below with your actual API key.
-Database starts at line 555.
+Database starts at line 554.
 */
 // Sign in page logic
 $(document).ready(function() {

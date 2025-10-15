@@ -1,9 +1,10 @@
 #This program is a compilation of basic IT network utility commands
-
 #IMPORTANT: This program is made by an indie developer, and therefore, it is not sponsored by, nor endorsed by
 #major tech firms like Google and Microsoft.
 #IMPORTANT: This program is made in BASH (not Git Bash), and therefore, may not be compatible with all shells.
 #IMPORTANT: This program is not intended for use in high-stakes scenarios involving lives and/or money.
+
+#LANGUAGE VERSION: Bash 4.x or later recommended
 
 #WARNING: Extra installations may have been installed on the machine the program has been coded on.
 

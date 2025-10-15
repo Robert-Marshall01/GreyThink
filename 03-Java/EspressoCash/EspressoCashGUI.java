@@ -1,31 +1,33 @@
 /*
-    VERY IMPORTANT: GitHub Copilot AI generated this code. Please review it carefully before using it.
-    It may contain errors or security vulnerabilities.
-    
-    IMPORTANT: This program is made by an indie developer and is not affiliated with any company.
-    IMPORTANT: Use at your own risk. The developer is not responsible for any damage or loss of data that may occur from using this program.
-    
-    EspressoCashGUI - Java Swing GUI Version
-    ----------------------------------------
-    This is the graphical version of the Espresso Cash money manager.
-    Features:
-      - Deposit and withdraw money
-      - Set and view income
-      - View current balance
+        VERY IMPORTANT: GitHub Copilot AI generated this code, then modified by me. Please review it carefully before using it.
+        It may contain errors or security vulnerabilities.
 
-    Instructions to Run:
-      1. Make sure you have Java JDK installed (https://www.oracle.com/java/technologies/javase-downloads.html)
-      2. Open a terminal and navigate to the folder containing this file.
-      3. Compile the program:
-         javac EspressoCashGUI.java
-      4. Run the program:
-         java EspressoCashGUI
+        IMPORTANT: This program is made by an indie developer and is not affiliated with any company.
+        IMPORTANT: Use at your own risk. The developer is not responsible for any damage or loss of data that may occur from using this program.
 
-    Notes:
-      - This version uses Java Swing for the GUI.
-      - You can expand this program to include budget categories and more features.
-      - No data is saved between runs (session is not persistent).
-      - For questions or issues, review the code and Java Swing documentation.
+        LANGUAGE VERSION: Java 8+
+
+        EspressoCashGUI - Java Swing GUI Version
+        ----------------------------------------
+        This is the graphical version of the Espresso Cash money manager.
+        Features:
+            - Deposit and withdraw money
+            - Set and view income
+            - View current balance
+
+        Instructions to Run:
+            1. Make sure you have Java JDK installed (https://www.oracle.com/java/technologies/javase-downloads.html)
+            2. Open a terminal and navigate to the folder containing this file.
+            3. Compile the program:
+                 javac EspressoCashGUI.java
+            4. Run the program:
+                 java EspressoCashGUI
+
+        Notes:
+            - This version uses Java Swing for the GUI.
+            - You can expand this program to include budget categories and more features.
+            - No data is saved between runs (session is not persistent).
+            - For questions or issues, review the code and Java Swing documentation.
 */
 import javax.swing.*;
 import java.awt.*;
