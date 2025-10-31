@@ -1,4 +1,4 @@
-# Msh — Minimal Shell (Repository)
+# Msh — Marshall Shell (Repository)
 
 This repository contains the source for a small shell project (Msh) implemented in C and related helper scripts.
 
@@ -131,3 +131,4 @@ Final note: This repository contains various debug and test files (for example, 
 
 ---
 Last updated: 2025-10-30
+
