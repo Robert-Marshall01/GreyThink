@@ -1,6 +1,9 @@
-# This workflow will do a clean installation of node dependencies, cache/restore them, build the source code and run tests across different versions of node
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-nodejs
-
+# Updated Node.js CI workflow
+# - use npm ci for reproducible installs (falls back to npm install if lockfile missing)
+# - ensure caching is enabled via setup-node's cache option
+# - add fail-fast = false so matrix runs all node versions
+# - set CI=true so tests and scripts can detect CI environment
+# - run build only if present; exit will be non-failing when build script is absent
 name: Node.js CI
 
 on:
@@ -9,23 +12,43 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     strategy:
+      fail-fast: false
       matrix:
         node-version: [18.x, 20.x, 22.x]
-        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+
+    env:
+      CI: true
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-    - run: npm install
-    - run: npm run build --if-present
-    - run: npm test
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      # Prefer npm ci for reproducible installs when a lockfile exists.
+      # If package-lock.json is not present, npm ci will fail; we detect that and fall back to npm install.
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+            npm ci --prefer-offline --no-audit --progress=false
+          else
+            npm install --no-audit --progress=false
+          fi
+
+      - name: Build (if present)
+        run: npm run build --if-present
+
+      - name: Run tests
+        run: npm test
