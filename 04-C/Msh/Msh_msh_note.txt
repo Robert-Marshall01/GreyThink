@@ -1,0 +1,26 @@
+msh builtin
+
+Usage: msh <script-file>
+
+Description:
+The new builtin `msh` reads the specified script file and executes each non-empty,
+non-comment line as a shell command. Lines beginning with `#` (after optional leading
+whitespace) are treated as comments and ignored.
+
+Implementation details:
+- Implemented as a builtin in `run_builtin_command.c`.
+- For each script line, the current `Msh.exe` is invoked with `--run-cmd "<line>"`
+  so the line is dispatched through the shell's existing command handling,
+  preserving builtin semantics.
+- The builtin supports quoted script filenames.
+
+Example:
+  msh myscript.sh
+
+Limitations / notes:
+- The implementation runs each line in a fresh subprocess; side-effects that rely
+  on shell state persisting across lines (like changing the shell's working
+  directory with `cd`) will not affect the parent shell.
+- Empty lines and lines starting with `#` are ignored.
+- Script lines are not concatenated; complex shell constructs may not behave
+  identically to bash.

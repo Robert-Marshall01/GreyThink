@@ -1,0 +1,21 @@
+This repository contains two licensing regimes:
+
+- The Msh project source (top-level files) is licensed under the MIT License. See `LICENSE` for the full MIT text.
+- The bundled upstream Bash sources in `upstream_bash/` are licensed under the GNU GPLv3 (see `upstream_bash/COPYING`).
+
+Note: The source under `upstream_bash/` is upstream GNU Bash and is not authored by the Msh project. This repository includes a verbatim copy of upstream Bash for convenience; per-file modification notices will be present only if a particular upstream file has been changed locally.
+
+If you receive object code or a binary distribution of this project and the corresponding source for any GPL-covered components is not included,
+you may obtain a complete machine-readable copy of the Corresponding Source for the GPL-covered parts from the distributor as follows.
+
+Option A (preferred): The Corresponding Source for the GPL-covered components is available in this repository under `upstream_bash/` (the full upstream Bash source tree). Additionally, a compressed archive of the Corresponding Source is included in this repository at:
+
+	CORRESPONDING_SOURCE_upstream_bash.zip
+
+Option B (written offer): If the distributor chooses not to include the Corresponding Source directly in the distributed package, they must include a written offer that will provide a physical copy of the Corresponding Source on a durable physical medium for the cost of shipping and materials, or provide access to download the Corresponding Source from a publicly accessible URL.
+
+Suggested written-offer wording to include with binary distributions (use the contact below):
+
+"A complete machine-readable copy of the Corresponding Source for the GPL-covered parts of this distribution will be provided on request. Contact: RobertCMarshall2007@outlook.com."
+
+Before distributing binaries under the GPL, ensure the contact above is accurate and monitored for the period you promise availability, or include the Corresponding Source directly in the distributed package to avoid relying on a written offer.
