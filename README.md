@@ -1,3 +1,6 @@
+![LOC](https://tokei.rs/b1/github/Robert-Marshall01/GreyThink)
+<h1>Lines of Code Above</h1>
+<p>The above number may be up to 20% inflated due to text files.</p>
 <h1>Who Am I, and My Specialty 🧑‍💻</h1>
 
 ---
