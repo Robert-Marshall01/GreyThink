@@ -1,0 +1,11 @@
+# Example commands to exercise the passwd builtin
+# Note: passwd prompts interactively for the new password (twice).
+# On Windows, if running elevated, Msh will try to invoke `net user USERNAME *` which prompts
+# for password interactively in the system tool. When not possible Msh will use a local
+# emulated store `.msh_passwd` in the current directory with simple hashes (FNV-1a 64-bit).
+
+# Change current user's password (username omitted):
+passwd
+
+# Change another user's password (may require elevation or will update .msh_passwd):
+passwd testuser

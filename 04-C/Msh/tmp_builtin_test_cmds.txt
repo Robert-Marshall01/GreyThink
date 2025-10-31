@@ -1,0 +1,14 @@
+useradd
+useradd invalid!name
+userdel
+adduser
+deluser
+groupadd
+addgroup
+groupdel
+delgroup
+chown
+chgrp
+chmod
+echo TEST_DONE
+exit

@@ -1,0 +1,28 @@
+SED builtin (lightweight) for Msh
+
+Usage examples (supported):
+
+1) Replace in stdin:
+   echo hello | .\Msh.exe --run-cmd "sed 's/hello/HELLO/'"
+
+2) Replace in file (print result):
+   .\Msh.exe --run-cmd "sed 's/old/new/g' myfile.txt"
+
+3) In-place edit (modify files):
+   .\Msh.exe --run-cmd "sed -i 's/old/new/g' file1.txt file2.txt"
+
+Notes:
+- This builtin supports simple substring substitutions of the form s<delim>old<delim>new<delim>[g]
+  (e.g. s/old/new/g). Delimiters other than '/' are supported.
+- Options supported: -n (only print lines that changed), -i (in-place edit).
+- This implementation is intentionally minimal: it does NOT implement full regular expressions,
+  addressing, or most advanced sed features. It performs simple substring replacements.
+- If you need the full GNU sed behavior, run a system sed (if available) instead of the builtin.
+
+Examples:
+- Replace globally and print:
+    .\Msh.exe --run-cmd "sed 's/foo/bar/g' file.txt"
+- Replace only changed lines:
+    .\Msh.exe --run-cmd "sed -n 's/foo/bar/g' file.txt"
+- Edit files in-place:
+    .\Msh.exe --run-cmd "sed -i 's/foo/bar/g' file.txt"

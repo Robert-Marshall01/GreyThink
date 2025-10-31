@@ -1,0 +1,2 @@
+useradd fakeuser2
+userdel fakeuser2

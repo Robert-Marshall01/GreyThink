@@ -1,0 +1,42 @@
+{
+  "repo_root": "C:\\Users\\Rober\\OneDrive\\Desktop\\Coding Projects\\04-C\\Msh",
+  "k": 10,
+  "w": 4,
+  "files": [
+    {
+      "path": "TEST\\BBBBB.txt",
+      "total_kgrams": 68,
+      "matches": [
+        {
+          "upstream_file": "upstream_bash\\y.tab.c",
+          "match_kgrams": 13,
+          "percent_of_file_kgrams": 19.118,
+          "repo_kgram_positions_sample": [
+            23,
+            25,
+            29,
+            33,
+            37,
+            41,
+            42,
+            44,
+            45,
+            49
+          ],
+          "upstream_positions_sample": [
+            1232,
+            1232,
+            1232,
+            1232,
+            1234,
+            1234,
+            1238,
+            1238,
+            1238,
+            1238
+          ]
+        }
+      ]
+    }
+  ]
+}
