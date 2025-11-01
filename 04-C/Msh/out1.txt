@@ -1,7 +1,0 @@
-Marshall Shell - Type 'exit' to quit.
-Documentation: visit https://www.gnu.org/software/bash/manual/ for command manuals.
-Attribution: Some command documentation and design inspired by GNU Bash manual.
-GNU Bash manual © Free Software Foundation, Inc., licensed under the GNU Free Documentation License (GFDL).
-License details: https://www.gnu.org/licenses/fdl.html
-
-Rober@RCM_LAPTOP:C:/Users/Rober/OneDrive/Desktop/Coding Projects/04-C/Msh$ Rober@RCM_LAPTOP:C:/Users/Rober/OneDrive/Desktop/Coding Projects/04-C/Msh$ Exiting Msh.
