@@ -1,6 +1,5 @@
 ![LOC](https://tokei.rs/b1/github/Robert-Marshall01/GreyThink)
 <h1>Lines of Code Above</h1>
-<p>The above number may be up to 20% inflated due to text files.</p>
 <h1>Who Am I, and My Specialty 🧑‍💻</h1>
 
 ---
@@ -102,4 +101,4 @@ assert_equals(remove_gender_bias(text1), expected)
 print(gender_bias_remover(input("Insert Text Here: ")))
 ```
 
-Signed: Robert-Marshall01@10/3/25
+Signed: Robert-Marshall01@11/1/2025
