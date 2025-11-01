@@ -1,0 +1,22 @@
+[package]
+name = "password_checker"
+version = "0.1.0"
+authors = ["Robert-Marshall01 <RobertCMarshall2007@outlook.com>"]
+edition = "2021"
+description = "Small password strength checker (CLI + GUI) implemented in Rust."
+readme = "README.md"
+license = "MIT"
+keywords = ["password", "strength", "checker", "security"]
+repository = "https://github.com/Robert-Marshall01/GreyThink"
+exclude = ["Cargo.lock"]
+
+[dependencies]
+
+# CLI and hidden-password input
+clap = { version = "4.3", features = ["derive"] }
+rpassword = "7.0"
+
+# JSON output
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+eframe = "0.27"
