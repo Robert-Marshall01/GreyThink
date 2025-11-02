@@ -1,2 +1,0 @@
-chmod +h test_chmod_shell.tmp  
-exit  
