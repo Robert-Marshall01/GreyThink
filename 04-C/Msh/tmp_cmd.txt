@@ -1,2 +1,0 @@
-wc TEST\\nicole.txt
-exit

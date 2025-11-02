@@ -1,8 +1,0 @@
-echo hello
-pwd
-uname
-forward-wsl status
-forward-wsl on
-forward-wsl status
-apt --version
-exit

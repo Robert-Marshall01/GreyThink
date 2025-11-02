@@ -1,3 +1,0 @@
-useradd joe
-userdel joe
-deluser joe
