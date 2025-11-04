@@ -1,0 +1,112 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>WorkOverAchiever</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x86;x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <RuntimeIdentifierToPack>win-x64</RuntimeIdentifierToPack>
+    <PublishProfile>win-$(Platform).pubxml</PublishProfile>
+    <UseWinUI>true</UseWinUI>
+    <WinUISDKReferences>false</WinUISDKReferences>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Ensure standard asset filenames are packaged; the actual bytes will be synchronized from WorkOverAchieverLogo.png at build time -->
+    <Content Include="Assets\SplashScreen.png" />
+    <Content Include="Assets\SplashScreen.scale-200.png" />
+    <Content Include="Assets\LockScreenLogo.scale-200.png" />
+    <Content Include="Assets\Square150x150Logo.png" />
+    <Content Include="Assets\Square150x150Logo.scale-200.png" />
+    <Content Include="Assets\Square44x44Logo.png" />
+    <Content Include="Assets\Square44x44Logo.scale-200.png" />
+    <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
+    <Content Include="Assets\StoreLogo.png" />
+    <Content Include="Assets\Wide310x150Logo.png" />
+    <Content Include="Assets\Wide310x150Logo.scale-200.png" />
+    <!-- Include the provided logo PNG in the project assets -->
+    <Content Include="Assets\WorkOverAchieverLogo.png" />
+  </ItemGroup>
+
+  <!-- Copy WorkOverAchieverLogo.png to all standard asset filenames before build so they effectively use the same logo -->
+  <Target Name="SyncLogoAssets" BeforeTargets="PrepareForBuild">
+    <ItemGroup>
+      <LogoDest Include="Assets\SplashScreen.png" />
+      <LogoDest Include="Assets\SplashScreen.scale-200.png" />
+      <LogoDest Include="Assets\LockScreenLogo.scale-200.png" />
+      <LogoDest Include="Assets\Square150x150Logo.png" />
+      <LogoDest Include="Assets\Square150x150Logo.scale-200.png" />
+      <LogoDest Include="Assets\Square44x44Logo.png" />
+      <LogoDest Include="Assets\Square44x44Logo.scale-200.png" />
+      <LogoDest Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
+      <LogoDest Include="Assets\StoreLogo.png" />
+      <LogoDest Include="Assets\Wide310x150Logo.png" />
+      <LogoDest Include="Assets\Wide310x150Logo.scale-200.png" />
+    </ItemGroup>
+
+    <!-- Expand DestinationFiles with full project path and create a matching SourceFiles list that repeats the logo for each destination -->
+    <ItemGroup>
+      <SyncSrc Include="$(MSBuildProjectDirectory)\Assets\WorkOverAchieverLogo.png" />
+      <SyncSrc Include="$(MSBuildProjectDirectory)\Assets\WorkOverAchieverLogo.png" />
+      <SyncSrc Include="$(MSBuildProjectDirectory)\Assets\WorkOverAchieverLogo.png" />
+      <SyncSrc Include="$(MSBuildProjectDirectory)\Assets\WorkOverAchieverLogo.png" />
+      <SyncSrc Include="$(MSBuildProjectDirectory)\Assets\WorkOverAchieverLogo.png" />
+      <SyncSrc Include="$(MSBuildProjectDirectory)\Assets\WorkOverAchieverLogo.png" />
+      <SyncSrc Include="$(MSBuildProjectDirectory)\Assets\WorkOverAchieverLogo.png" />
+      <SyncSrc Include="$(MSBuildProjectDirectory)\Assets\WorkOverAchieverLogo.png" />
+      <SyncSrc Include="$(MSBuildProjectDirectory)\Assets\WorkOverAchieverLogo.png" />
+      <SyncSrc Include="$(MSBuildProjectDirectory)\Assets\WorkOverAchieverLogo.png" />
+      <SyncSrc Include="$(MSBuildProjectDirectory)\Assets\WorkOverAchieverLogo.png" />
+    </ItemGroup>
+
+    <Message Importance="Low" Text="Synchronizing logo assets to standard filenames..." />
+    <Copy SourceFiles="@(SyncSrc)" DestinationFiles="@(LogoDest->'$(MSBuildProjectDirectory)\%(Identity)')" SkipUnchangedFiles="false" />
+  </Target>
+
+  <ItemGroup>
+    <Manifest Include="$(ApplicationManifest)" />
+  </ItemGroup>
+
+  <!--
+    Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging
+    Tools extension to be activated for this project even if the Windows App SDK Nuget
+    package has not yet been restored.
+  -->
+  <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <ProjectCapability Include="Msix" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.6901" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.251003001" />
+    <PackageReference Include="System.Drawing.Common" Version="8.0.2" />
+  </ItemGroup>
+
+  <!-- Ensure theme XAML files are compiled as Page resources so merged dictionaries are available at runtime -->
+  <!-- The SDK includes Page items implicitly; do not explicitly include them to avoid duplicates -->
+
+  <!-- Disable generated Debugger.Break on unhandled exceptions to allow app-level handler to run first -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_BREAK_ON_UNHANDLED_EXCEPTION</DefineConstants>
+  </PropertyGroup>
+
+  <!--
+    Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
+    Explorer "Package and Publish" context menu entry to be enabled for this project even if
+    the Windows App SDK Nuget package has not yet been restored.
+  -->
+  <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
+  </PropertyGroup>
+
+  <!-- Publish Properties -->
+  <PropertyGroup>
+    <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
+    <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
+    <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
+    <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
+  </PropertyGroup>
+</Project>
