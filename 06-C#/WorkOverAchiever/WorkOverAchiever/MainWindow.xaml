@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+ x:Class="WorkOverAchiever.MainWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:local="using:WorkOverAchiever"
+ xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+ xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+ xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+ mc:Ignorable="d"
+ Title="WorkOverAchiever">
+
+ <Window.SystemBackdrop>
+ <MicaBackdrop />
+ </Window.SystemBackdrop>
+
+ <!-- Wrap the main content in a ScrollViewer so the window shows a vertical scrollbar when needed -->
+ <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="0">
+ <Grid x:Name="RootGrid" Padding="8" MinWidth="420" MinHeight="320" Background="{ThemeResource WindowBackgroundBrush}">
+ <Grid.RowDefinitions>
+ <RowDefinition Height="Auto" />
+ <RowDefinition Height="*" />
+ </Grid.RowDefinitions>
+
+ <!-- Top toolbar -->
+ <!-- Disable dynamic overflow so the CommandBar doesn't show a 'More' overflow button -->
+ <CommandBar Grid.Row="0" HorizontalAlignment="Stretch" IsDynamicOverflowEnabled="False">
+ <!-- Open Details removed -->
+ <AppBarSeparator />
+ <!-- Theme toggle: checked = Dark -->
+ <AppBarToggleButton x:Name="ThemeToggle" Label="Dark" Checked="ThemeToggle_Checked" Unchecked="ThemeToggle_Unchecked" ToolTipService.ToolTip="Toggle dark/light theme" AutomationProperties.Name="Toggle theme" />
+ <CommandBar.Content>
+   <!-- Show app logo image if present in Assets; use ms-appx URI so the runtime loads the asset from package/project. If missing the Image will simply not display. -->
+   <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
+     <Image Source="ms-appx:///Assets/WorkOverAchieverLogo.png" Width="36" Height="36" Stretch="UniformToFill" AutomationProperties.Name="App logo" />
+     <TextBlock VerticalAlignment="Center" Margin="0,0,0,0" Text="WorkOverAchiever" FontWeight="SemiBold" Foreground="{ThemeResource PageTextBrush}" />
+   </StackPanel>
+ </CommandBar.Content>
+ </CommandBar>
+
+ <!-- Tab view for switching between pages -->
+ <!-- Provide styles the TabView template uses for its add/overflow AppBarButtons so they remain collapsed -->
+ <muxc:TabView Grid.Row="1" x:Name="MainTabView">
+
+   <muxc:TabView.Resources>
+     <!-- The TabView template uses AppBarButton instances for add/overflow controls; provide styles with these resource keys to collapse them -->
+     <Style x:Key="TabViewOverflowButtonStyle" TargetType="AppBarButton">
+       <Setter Property="Visibility" Value="Collapsed" />
+     </Style>
+     <Style x:Key="TabViewAddButtonStyle" TargetType="AppBarButton">
+       <Setter Property="Visibility" Value="Collapsed" />
+     </Style>
+   </muxc:TabView.Resources>
+
+ <!-- Calculator tab -->
+ <muxc:TabViewItem Header="Calculator" IsClosable="False">
+ <Grid Padding="20" MinWidth="420" MinHeight="320">
+ <Grid.RowDefinitions>
+ <RowDefinition Height="Auto" />
+ <RowDefinition Height="Auto" />
+ <RowDefinition Height="Auto" />
+ <RowDefinition Height="Auto" />
+ <RowDefinition Height="Auto" />
+ <RowDefinition Height="*" />
+ </Grid.RowDefinitions>
+ <Grid.ColumnDefinitions>
+ <ColumnDefinition Width="160" />
+ <ColumnDefinition Width="*" />
+ </Grid.ColumnDefinitions>
+
+ <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="Enter your details" Style="{StaticResource HeadingTextStyle}" />
+
+ <TextBlock Grid.Row="1" Grid.Column="0" Text="Current salary" VerticalAlignment="Center" Foreground="{ThemeResource PageTextBrush}" />
+ <TextBox x:Name="CurrentSalaryTextBox" Grid.Row="1" Grid.Column="1" PlaceholderText="$55,000" Style="{StaticResource InputTextBoxStyle}" ToolTipService.ToolTip="Enter your current annual salary (numbers and currency symbols allowed)" AutomationProperties.Name="Current salary" />
+
+ <TextBlock Grid.Row="2" Grid.Column="0" Text="Hours per week" VerticalAlignment="Center" Foreground="{ThemeResource PageTextBrush}" />
+ <TextBox x:Name="HoursPerWeekTextBox" Grid.Row="2" Grid.Column="1" PlaceholderText="40" Style="{StaticResource InputTextBoxStyle}" ToolTipService.ToolTip="Enter number of paid working hours per week" AutomationProperties.Name="Hours per week" />
+
+ <TextBlock Grid.Row="3" Grid.Column="0" Text="Goal salary" VerticalAlignment="Center" Foreground="{ThemeResource PageTextBrush}" />
+ <TextBox x:Name="GoalSalaryTextBox" Grid.Row="3" Grid.Column="1" PlaceholderText="$80,000" Style="{StaticResource InputTextBoxStyle}" ToolTipService.ToolTip="Enter the target annual salary you want to achieve" AutomationProperties.Name="Goal salary" />
+
+ <StackPanel Grid.Row="4" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0" Spacing="8">
+ <Button x:Name="ClearButton" Content="Clear" Width="100" Click="ClearButton_Click" Style="{StaticResource SecondaryButtonStyle}" ToolTipService.ToolTip="Clear input fields" AutomationProperties.Name="Clear" />
+ <Button x:Name="CalculateButton" Content="Calculate" Width="120" Click="CalculateButton_Click" Style="{StaticResource PrimaryButtonStyle}" ToolTipService.ToolTip="Calculate results" AutomationProperties.Name="Calculate" />
+ </StackPanel>
+
+ <Border Grid.Row="5" Grid.ColumnSpan="2" Background="{ThemeResource ControlBackgroundBrush}" BorderBrush="{ThemeResource ControlBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,12,0,0">
+ <StackPanel>
+ <TextBlock Text="Result" FontWeight="SemiBold" Margin="0,0,0,8" Foreground="{ThemeResource PageTextBrush}" FontSize="16" />
+ <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="200">
+ <TextBlock x:Name="ResultTextBlock" Text="" TextWrapping="Wrap" Foreground="{ThemeResource ResultTextBrush}" FontSize="14" Style="{StaticResource ResultTextStyle}" AutomationProperties.Name="Calculator result" />
+ </ScrollViewer>
+ </StackPanel>
+ </Border>
+ </Grid>
+ </muxc:TabViewItem>
+
+ <!-- Student Planner tab -->
+ <muxc:TabViewItem Header="Student Planner" IsClosable="False">
+ <Grid Padding="20" MinWidth="420" MinHeight="320">
+ <Grid.RowDefinitions>
+ <RowDefinition Height="Auto" /> <!-- title -->
+ <RowDefinition Height="Auto" /> <!-- weekly time -->
+ <RowDefinition Height="Auto" /> <!-- current gpa -->
+ <RowDefinition Height="Auto" /> <!-- current credits -->
+ <RowDefinition Height="Auto" /> <!-- desired gpa -->
+ <RowDefinition Height="Auto" /> <!-- desired credits -->
+ <RowDefinition Height="Auto" /> <!-- current year -->
+ <RowDefinition Height="Auto" /> <!-- years remaining -->
+ <RowDefinition Height="Auto" /> <!-- credits per semester -->
+ <RowDefinition Height="Auto" /> <!-- buttons -->
+ <RowDefinition Height="*" /> <!-- result -->
+ </Grid.RowDefinitions>
+ <Grid.ColumnDefinitions>
+ <ColumnDefinition Width="220" />
+ <ColumnDefinition Width="*" />
+ </Grid.ColumnDefinitions>
+
+ <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="Student Planner" Style="{StaticResource HeadingTextStyle}" />
+
+ <TextBlock Grid.Row="1" Grid.Column="0" Text="Weekly time (class + homework)" VerticalAlignment="Center" Foreground="{ThemeResource PageTextBrush}" />
+ <TextBox x:Name="StudentWeeklyTimeTextBox" Grid.Row="1" Grid.Column="1" PlaceholderText="e.g.30" Style="{StaticResource InputTextBoxStyle}" ToolTipService.ToolTip="Total weekly hours spent on class and homework" AutomationProperties.Name="Weekly time" />
+
+ <TextBlock Grid.Row="2" Grid.Column="0" Text="Current GPA" VerticalAlignment="Center" Foreground="{ThemeResource PageTextBrush}" />
+ <TextBox x:Name="StudentCurrentGpaTextBox" Grid.Row="2" Grid.Column="1" PlaceholderText="e.g.3.2" Style="{StaticResource InputTextBoxStyle}" ToolTipService.ToolTip="Your current GPA" AutomationProperties.Name="Current GPA" />
+
+ <TextBlock Grid.Row="3" Grid.Column="0" Text="Current credit hours" VerticalAlignment="Center" Foreground="{ThemeResource PageTextBrush}" />
+ <TextBox x:Name="StudentCurrentCreditsTextBox" Grid.Row="3" Grid.Column="1" PlaceholderText="e.g.60" Style="{StaticResource InputTextBoxStyle}" ToolTipService.ToolTip="Current completed credit hours" AutomationProperties.Name="Current credits" />
+
+ <TextBlock Grid.Row="4" Grid.Column="0" Text="Desired GPA" VerticalAlignment="Center" Foreground="{ThemeResource PageTextBrush}" />
+ <TextBox x:Name="StudentDesiredGpaTextBox" Grid.Row="4" Grid.Column="1" PlaceholderText="e.g.3.5" Style="{StaticResource InputTextBoxStyle}" ToolTipService.ToolTip="Desired target GPA" AutomationProperties.Name="Desired GPA" />
+
+ <TextBlock Grid.Row="5" Grid.Column="0" Text="Desired total credit hours" VerticalAlignment="Center" Foreground="{ThemeResource PageTextBrush}" />
+ <TextBox x:Name="StudentDesiredCreditsTextBox" Grid.Row="5" Grid.Column="1" PlaceholderText="e.g.120" Style="{StaticResource InputTextBoxStyle}" ToolTipService.ToolTip="Desired total credits to graduate" AutomationProperties.Name="Desired credits" />
+
+ <TextBlock Grid.Row="6" Grid.Column="0" Text="Current Year" VerticalAlignment="Center" Foreground="{ThemeResource PageTextBrush}" />
+ <TextBox x:Name="StudentCurrentYearTextBox" Grid.Row="6" Grid.Column="1" PlaceholderText="e.g.2" Style="{StaticResource InputTextBoxStyle}" ToolTipService.ToolTip="Your current academic year" AutomationProperties.Name="Current year" />
+
+ <TextBlock Grid.Row="7" Grid.Column="0" Text="Years remaining" VerticalAlignment="Center" Foreground="{ThemeResource PageTextBrush}" />
+ <TextBox x:Name="StudentLastYearTextBox" Grid.Row="7" Grid.Column="1" PlaceholderText="e.g.2" Style="{StaticResource InputTextBoxStyle}" ToolTipService.ToolTip="Years left until graduation" AutomationProperties.Name="Years remaining" />
+
+ <TextBlock Grid.Row="8" Grid.Column="0" Text="Credits per semester" VerticalAlignment="Center" Foreground="{ThemeResource PageTextBrush}" />
+ <TextBox x:Name="StudentCreditsPerSemesterTextBox" Grid.Row="8" Grid.Column="1" PlaceholderText="e.g.15" Style="{StaticResource InputTextBoxStyle}" ToolTipService.ToolTip="Typical credits you take per semester" AutomationProperties.Name="Credits per semester" />
+
+ <StackPanel Grid.Row="9" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0" Spacing="8">
+ <Button x:Name="StudentClearButton" Content="Clear" Width="100" Click="StudentClearButton_Click" Style="{StaticResource SecondaryButtonStyle}" ToolTipService.ToolTip="Clear student inputs" AutomationProperties.Name="Student clear" />
+ <Button x:Name="StudentCalculateButton" Content="Calculate" Width="120" Click="StudentCalculateButton_Click" Style="{StaticResource PrimaryButtonStyle}" ToolTipService.ToolTip="Calculate student plan" AutomationProperties.Name="Student calculate" />
+ </StackPanel>
+
+ <Border Grid.Row="10" Grid.ColumnSpan="2" Background="{ThemeResource ControlBackgroundBrush}" BorderBrush="{ThemeResource ControlBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,12,0,0">
+ <StackPanel>
+ <TextBlock Text="Result" FontWeight="SemiBold" Margin="0,0,0,8" Foreground="{ThemeResource PageTextBrush}" FontSize="16" />
+ <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="200">
+ <TextBlock x:Name="StudentResultTextBlock" Text="" TextWrapping="Wrap" Foreground="{ThemeResource ResultTextBrush}" FontSize="14" Style="{StaticResource ResultTextStyle}" AutomationProperties.Name="Student planner result" />
+ </ScrollViewer>
+ </StackPanel>
+ </Border>
+ </Grid>
+ </muxc:TabViewItem>
+
+ <!-- About tab -->
+ <muxc:TabViewItem Header="About" IsClosable="False">
+ <ScrollViewer Padding="12">
+ <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource PageTextBrush}">The Calculator tab compares your current salary to a target salary and shows hourly/monthly/weekly breakdowns. The Student Planner tab helps estimate how many additional credits and weekly study hours are required to reach a goal GPA: enter your current GPA, current credits, desired GPA, desired total credits, years remaining, credits per semester, and your current weekly study time. The planner provides several strategies (even spread, accelerated, max-load) plus estimated total weekly workloads.</TextBlock>
+ </ScrollViewer>
+ </muxc:TabViewItem>
+
+ </muxc:TabView>
+ </Grid>
+ </ScrollViewer>
+</Window>

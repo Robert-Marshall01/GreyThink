@@ -1,0 +1,51 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <Identity
+    Name="c73a0a0b-a38e-4821-8169-987a6d1605e4"
+    Publisher="CN=Rober"
+    Version="1.0.0.0" />
+
+  <mp:PhoneIdentity PhoneProductId="c73a0a0b-a38e-4821-8169-987a6d1605e4" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
+
+  <Properties>
+    <DisplayName>WorkOverAchiever</DisplayName>
+    <PublisherDisplayName>Rober</PublisherDisplayName>
+    <Logo>Assets\WorkOverAchieverLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" />
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="x-generate"/>
+  </Resources>
+
+  <Applications>
+    <Application Id="App"
+      Executable="$targetnametoken$.exe"
+      EntryPoint="$targetentrypoint$">
+      <uap:VisualElements
+        DisplayName="WorkOverAchiever"
+        Description="WorkOverAchiever"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\WorkOverAchieverLogo.png"
+        Square44x44Logo="Assets\WorkOverAchieverLogo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\WorkOverAchieverLogo.png" />
+        <uap:SplashScreen Image="Assets\WorkOverAchieverLogo.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>
