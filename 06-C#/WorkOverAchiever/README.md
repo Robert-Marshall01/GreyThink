@@ -2,6 +2,8 @@
 
 Personal .NET application.
 
+> Note: This README (and parts of the project) were generated with the help of an AI and later modified by the author. It may contain inaccuracies or bugs — use caution and verify behavior before relying on it.
+
 ## Overview
 
 This repository contains the `GreyThink` project, a .NET 8 application developed by Robert Marshall.
@@ -74,3 +76,4 @@ Or open the solution in Visual Studio and run.
 ## License
 
 This project is licensed under the MIT License - see the `LICENSE` file for details.
+
