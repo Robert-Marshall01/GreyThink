@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "WorkOverAchiever (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "WorkOverAchiever (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
