@@ -28,9 +28,9 @@ This is done to ensure the safety of the user's feelings.
 //Some of the code might be incomplete or untested. Please review and modify as necessary.
 //You would input the values of the media below manually
 const media = {
-  Name: "South Park",
+  Name: "Name",
   //Valid media types: Movie, TV Show, Video Game, Book, Music, Podcast, Other
-  Media_Type: "TV Show",
+  Media_Type: "Media_Type",
   /*
     Movie/Book Ratings: PG-13: 13+, R: 17+, NC-17: 18+
     TV Ratings: TV-14: 14+, TV-MA: 17+
@@ -38,10 +38,10 @@ const media = {
     Music/Podcast Ratings: Explicit: 18+
     Other Ratings: Custom age rating based on content
   */
-  Age_Rating: 17,
+  Age_Rating: 13,
   //Older content might have had looser standards as far as age ratings go.
-  Year: 1997,
-  Genre: "Animated, Comedy"
+  Year: 2000,
+  Genre: "Genre"
 };
 console.log("================================================================")
 console.log("================================================================")
