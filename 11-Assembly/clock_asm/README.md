@@ -1,5 +1,6 @@
 ﻿# clock_asm
 
+NOTE: This is only calibrated in UTC time.
 Simple Assembly project: `clock_asm.asm`
 
 Overview
@@ -85,3 +86,4 @@ Acknowledgements
 - Some build scripts and helper instructions were generated with assistance from Microsoft Copilot and then modified by the project owner (`Robert-Marshall01`). Review commands before running.
 
 If you'd like, I can run the local build and commit everything. I can also update the CI badge with your repository path if you want me to commit that change.
+
