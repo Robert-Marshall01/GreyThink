@@ -1,0 +1,8 @@
+Sample run (user input shown after prompt):
+
+Enter a number (0 to quit): 5
+Number is positive
+
+Enter a number (0 to quit): 0
+
+Program exits when 0 is entered.
