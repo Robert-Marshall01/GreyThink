@@ -19,7 +19,7 @@ This repository contains a single assembly program that implements a basic calcu
 
 ## Project Version & Supported Targets
 
-- **Version:** `0.1.0` (see the `VERSION` file in the repository root). The project follows [Semantic Versioning](https://semver.org/) — update `VERSION` and `CHANGELOG.md` when making releases.
+- **Version:** `0.2.0` (see the `VERSION` file in the repository root). The project follows [Semantic Versioning](https://semver.org/) — update `VERSION` and `CHANGELOG.md` when making releases.
 - **Primary target:** Linux x86 (i386) — the source uses `int 0x80` syscalls and defines the `_start` entry symbol. Assemble with `nasm -f elf32` and link with `ld -m elf_i386` as shown below.
 - **Other supported formats (examples included):**
 	- x86_64 / ELF64 (WSL / Linux): assemble with `nasm -f elf64` and link with `gcc` or `ld`.
@@ -71,3 +71,4 @@ Some parts of this repository (documentation and boilerplate) were generated or 
 ## License
 
 This project is licensed under the MIT License — see the `LICENSE` file.
+
