@@ -1,4 +1,7 @@
-# Code of Conduct
+# GreyThink Code of Conduct
+
+Version: 1.1  
+Last updated: 2025-12-01
 
 This repository exists to build and share software in a respectful, constructive environment. We welcome contributions from people of all backgrounds and expect everyone to follow this Code of Conduct.
 
@@ -10,31 +13,30 @@ Summary: Be respectful. Do not attack, harass, threaten, or intentionally offend
 This Code of Conduct applies to all repository spaces and activities related to this project, including:
 - Issues, pull requests, and reviews
 - Comments on commits and discussions
-- Project documentation, wikis, and community spaces
+- Project documentation, wikis, discussion forums, and community spaces
 - Direct messages and any official communication channels maintained by the project
+- Project-sponsored events (online and in-person) and official social media accounts
 
 ---
 
 ## Immediate "Do NOTs" (CRITICAL)
-The following behaviors are unacceptable and will result in immediate action and reporting when appropriate:
-
+The following behaviors are unacceptable and will result in prompt action and reporting when appropriate:
 - Targeting people for their race, ethnicity, nationality, sex, gender identity or expression, sexual orientation, religion, age, disability, or any protected characteristic.
 - Threats of violence or threats of any kind against people, their property, or their families.
-- Harassment, including targeted or persistent harassment and especially harassment that includes threats or violence.
+- Harassment, including targeted or persistent harassment and harassment that includes threats or violence.
 - Use of slurs, hateful language, or content intended to demean a protected class or individual.
-- Bashing, ridiculing, or attacking others for their beliefs. GitHub is not a battleground for ideological or religious disputes.
+- Bashing, ridiculing, or attacking others for their beliefs; GitHub is not a battleground for ideological or religious disputes.
 - Intentionally offensive comments or jokes meant to provoke, humiliate, or shock.
 - Posting, linking to, or embedding graphic imagery or graphic textual descriptions (for example sexual violence or extreme gore).
-- Posting someone's very private information such as location, credit card number, SSN, password, and their personal photos (especially when used as a means to blackmail).
+- Posting someone's very private information such as location, credit card number, SSN, password, or private photos (especially when used as blackmail).
 
-These behaviors are non-negotiable. They will be treated as severe violations, and may be reported to GitHub and/or other authorities depending on severity.
+These behaviors are non-negotiable and will be treated as severe violations. They may be reported to GitHub and/or other authorities depending on severity.
 
 ---
 
 ## Impolite — Please refrain from these
 These behaviors may not always trigger immediate reporting, but they degrade the community and should be avoided:
-
-- Excessive profanity, especially explicit sexual or violent expletives (avoid the F-word). GitHub content is publicly visible and may be viewed by people 13+.
+- Excessive profanity, especially explicit sexual or violent expletives.
 - Crude or toilet-humor comments that serve no constructive purpose.
 - Plain obnoxious behavior: trolling, intentional derailment of discussions, or repeated low-effort disruptions.
 
@@ -43,54 +45,75 @@ When you slip up: apologize, edit or delete the offending content, and learn fro
 ---
 
 ## Examples of Unacceptable Content
-- Imposing/threatening X punishment on someone for Y deed/quality (threat / hateful)
-- Using a slur directed at a contributor. (hateful)
-- Posting an image of graphic violence in an issue to shock maintainers. (graphic)
-- Repeating the same crude joke in multiple threads after being asked to stop. (obnoxious)
+- Threatening someone with punishment for a perceived offense (threat / hateful).
+- Using a slur directed at a contributor (hateful).
+- Posting an image of graphic violence in an issue to shock maintainers (graphic).
+- Repeating the same crude joke in multiple threads after being asked to stop (obnoxious).
 
 ---
 
 ## Reporting a Violation
-If you experience or witness a violation, please report it promptly and provide as much detail as possible:
-1. Create a new issue in this repository titled: "Code of Conduct Report: [short description]" and include:
+If you experience or witness a violation, please report it promptly and provide as much detail as possible.
+
+Preferred reporting options:
+1. Public report (if you are comfortable): Create a new issue in this repository titled:
+   "Code of Conduct Report: [short description]" and include:
    - The user(s) involved (GitHub usernames)
    - Links to offending comments, issues, PRs, or files (URLs)
    - Date/time (UTC) of the incident
    - A short description of what happened and any relevant context
    - Any screenshots or copies of content (do not alter evidence)
-2. If you prefer not to use an issue (because it would be public), contact the repository owner/maintainer directly:
-   - GitHub user: @Robert-Marshall01
-   - If you'd like a private channel for reports, please provide a preferred email address and the maintainers will add it to this file.
+   Note: If you make a public report and want it removed later for privacy, contact the maintainers (see private option below).
 
-If you believe someone is in immediate danger, contact your local authorities right away.
+2. Private report (recommended if you want confidentiality): Email the maintainers at: MAINTAINER_CONDUCT_EMAIL_PLACEHOLDER
+   - Replace MAINTAINER_CONDUCT_EMAIL_PLACEHOLDER with an email address project maintainers decide and manage.
+   - If you don't see an address here, contact the primary maintainer via their GitHub handle: @Robert-Marshall01 and request a private reporting channel.
+
+3. If you believe someone is in immediate danger, contact your local authorities right away.
+
+4. You may also report content directly to GitHub using their report flow: https://docs.github.com/en/site-policy/reporting-abuse-or-policy-violations/reporting-abuse-or-policy-violations-on-github
+
+What to avoid in reports:
+- Do not include unrelated personal data about yourself or others beyond what is necessary to document the incident.
+- Do not alter evidence; provide screenshots or links to the original content when possible.
+
+---
+
+## Non-retaliation and Confidentiality
+- We will not tolerate retaliation against anyone who reports a violation in good faith or who participates in an investigation.
+- We will make reasonable efforts to keep reports confidential. However, some information may need to be shared with project maintainers, GitHub, or law enforcement as part of an investigation.
 
 ---
 
 ## Enforcement and Consequences
+We will review reports promptly and take action appropriate to the severity and frequency of violations. Possible actions include:
+- Removal or editing of offending content.
+- Private warning to the offending contributor.
+- Temporary restriction or temporary ban from contributing (typical durations: 7, 30, or 90 days, depending on severity and recurrence).
+- Permanent ban from contributing to this repository.
+- Reporting to GitHub for policy violations.
+- Reporting to law enforcement when the behavior is unlawful or involves credible threats or violence.
 
-We will review reports promptly and take actions appropriate to the severity and frequency of violations. Below are the specific consequences that apply to the two categories used in this document.
+Consequences for CRITICAL violations (the "Do NOTs" listed above):
+- Guaranteed permanent ban from contributing and removal of write/comment privileges for severe incidents.
+- Reporting to GitHub for policy violations.
+- If unlawful or involving credible threats, reporting to law enforcement or other appropriate authorities.
 
-Consequences for CRITICAL violations (the "Do NOTs" listed above)
-- Guaranteed permanent ban from contributing to this repository and removal of write/comment privileges.
-- The incident will be reported to GitHub for policy violations.
-- If the behavior is unlawful or involves credible threats or violence, the incident will be reported to law enforcement or other appropriate authorities.
-- Other actions may include removal of offending content and documentation of the enforcement actions taken.
-
-Consequences for Impolite violations (the "please refrain" list)
-- An initial request to stop the specific behavior (for example: refrain from excessive use of profanity).
+Consequences for Impolite violations ("please refrain" list):
+- An initial request to stop the behavior.
 - Moderators may require the offending content to be edited or removed.
-- If the behavior is repeated or escalates after warnings, temporary restrictions or a temporary ban may be applied. These temporary bans are not intended to be permanent but will remain in effect for a period proportionate to the behavior and prior warnings.
-- Repeated pattern of impolite behavior may escalate to more serious enforcement actions.
+- If repeated or escalated after warnings, temporary restrictions or temporary bans may be applied.
+- Repeated patterns may escalate to more serious enforcement actions.
 
-All enforcement actions will be documented and the reporter will be notified of the outcome when possible and appropriate.
+All enforcement actions will be documented and, where possible, the reporter will be notified of outcomes.
 
 ---
 
 ## How Maintainers Handle Reports
-- We will acknowledge receipt of a report within a reasonable timeframe.
-- We may request additional information from the reporter.
-- We will aim for consistency and transparency in enforcement while protecting the privacy of reporters where feasible.
-- Appeals: If you believe enforcement was unfair, open an issue titled "Code of Conduct Appeal: [short description]" and explain why.
+- Acknowledgement: We will acknowledge receipt of a report within 72 hours when possible.
+- Investigation: We may ask the reporter for additional information and will investigate with discretion.
+- Decision and follow-up: We will aim to reach a resolution and inform the reporter of the outcome within a reasonable timeframe (typically within 14 days, though complex cases may take longer).
+- Appeals: If you believe enforcement was unfair, open an issue titled "Code of Conduct Appeal: [short description]" and explain why. Appeals will be reviewed by a different maintainer or an appointed review panel where possible.
 
 ---
 
@@ -99,11 +122,12 @@ All enforcement actions will be documented and the reporter will be notified of 
 - Be concise, clear, and constructive in feedback.
 - Assume good faith and ask clarifying questions when tone is unclear.
 - When you disagree, explain why and offer alternatives.
+- Give maintainers and other contributors reasonable time to respond.
 
 ---
 
-## Acknowledgements
-This document is intended to be practical and direct about unacceptable behavior. It is inspired by community best practices and adapted to this repository's needs.
+## Acknowledgements and Resources
+This document is adapted from community best practices including the Contributor Covenant (https://www.contributor-covenant.org/). It is intended to be practical and direct about unacceptable behavior and enforcement.
 
 ---
 
