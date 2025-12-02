@@ -1,4 +1,3 @@
-![LOC](https://tokei.rs/b1/github/Robert-Marshall01/GreyThink)
 <h1>Who Am I, and My Specialty 🧑‍💻</h1>
 
 ---
