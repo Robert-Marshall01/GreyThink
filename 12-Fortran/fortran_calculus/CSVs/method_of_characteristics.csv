@@ -1,0 +1,10 @@
+N,method,L2_error,Linf_error
+101,semi-lagrangian,  4.091977E-02,  1.523989E-01
+101,upwind,  4.091977E-02,  1.523989E-01
+101,lax-wendroff,  7.763044E-03,  2.668494E-02
+201,semi-lagrangian,  2.276982E-02,  8.637772E-02
+201,upwind,  2.276982E-02,  8.637772E-02
+201,lax-wendroff,  2.001118E-03,  6.806205E-03
+401,semi-lagrangian,  1.208374E-02,  4.632335E-02
+401,upwind,  1.208374E-02,  4.632335E-02
+401,lax-wendroff,  5.054081E-04,  1.713956E-03
