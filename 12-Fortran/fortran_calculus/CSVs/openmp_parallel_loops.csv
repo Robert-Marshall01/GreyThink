@@ -1,0 +1,2 @@
+N,threads,serial_time_avg,parallel_time_avg,speedup,sum_serial,sum_parallel
+20000000,22,  9.5999717712E-03,  2.6000022888E-03,  3.6922935847E+00,  1.0855143853E+07,  1.0855143853E+07
