@@ -1,0 +1,8 @@
+NOTICE
+
+This project references the Hugging Face model "google/flan-t5-base".
+The model is distributed under the Apache License, Version 2.0. A copy of the Apache 2.0 license is included at `models/COPYING.APACHE2.txt`.
+
+Model page: https://huggingface.co/google/flan-t5-base
+
+If you distribute this project or derivatives that include the model, you must include the Apache 2.0 license text and preserve this NOTICE file in accordance with the license terms.
