@@ -1,0 +1,21 @@
+# NOTICE
+
+This repository uses the Hugging Face model `google/flan-t5-base` (Apache-2.0).
+
+Required files to include in any redistributed artifact that contains model
+weights (e.g., Docker images, wheels, tarballs):
+
+- `licenses/COPYING.APACHE2.txt` (or `models/COPYING.APACHE2.txt`) — full Apache 2.0 license text for the model
+- `licenses/google-flan-t5-base.NOTICE.txt` (or `models/google-flan-t5-base.NOTICE.txt`) — model NOTICE file (attribution).
+- `CITATION.md` / `CITATION.bib` — suggested citation and BibTeX for the underlying research paper.
+
+Do not assume redistribution is allowed without including these files. If you
+modify any model files from upstream, add a prominent notice of changes. Do
+not include model weights in this repository; fetch them at runtime using
+`transformers.from_pretrained("google/flan-t5-base")`. See `PACKAGING_CHECKLIST.md` for details.
+
+This NOTICE is intentionally assertive to make compliance explicit to downstream users.
+not include model weights in this repository; fetch them at runtime using
+`transformers.from_pretrained("google/flan-t5-base")`. See `PACKAGING_CHECKLIST.md` for details.
+
+This NOTICE is intentionally assertive to make compliance explicit to downstream users.

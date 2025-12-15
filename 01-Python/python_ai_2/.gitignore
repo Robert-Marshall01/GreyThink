@@ -1,0 +1,39 @@
+# Virtualenvs
+.venv/
+venv/
+/.venvs/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+
+# PyTorch / model weights
+models/*.bin
+models/*.pt
+models/*.pth
+models/*.safetensors
+
+# Caches
+.cache/
+.pytest_cache/
+
+# Environment
+.env
+.env.*
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
