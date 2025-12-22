@@ -1,0 +1,73 @@
+name: Quantize and verify
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  quantize:
+    name: Quantize & Verify (quant runner)
+    runs-on: [self-hosted, linux, quant]
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt || true
+          pip install onnx onnxruntime onnxruntime-tools skl2onnx scikit-learn numpy
+
+      - name: Show versions
+        run: |
+          python - <<'PY'
+          import sys, importlib
+          for m in ('onnx', 'onnxruntime', 'skl2onnx', 'numpy'):
+              try:
+                  print(m, importlib.import_module(m).__version__)
+              except Exception as e:
+                  print(m, 'not available:', e)
+          PY
+
+      - name: Run prototype export to build/quant_test
+        run: |
+          rm -rf build/quant_test || true
+          python - <<'PY'
+          from powerapp.ml.fine_tune import prototype_finetune_and_export
+          fp, q, meta = prototype_finetune_and_export(out_dir='build/quant_test')
+          print('Exported:', fp, q)
+          PY
+
+      - name: Verify quantized model
+        run: |
+          python scripts/verify_quantized_model.py build/quant_test
+
+      - name: Upload quantized artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: quantized-model
+          path: build/quant_test
+
+  runner-info:
+    name: Quantization runner info (fallback)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print runner guidance
+        run: |
+          echo "NOTE: The 'quantize' job is configured to run on a self-hosted runner labeled 'quant'."
+          echo "If you don't have such a runner, the job will remain pending. To add one, see: https://docs.github.com/en/actions/hosting-your-own-runners"
+          echo "Required Python packages: onnx, onnxruntime (with quantization support), onnxruntime-tools, skl2onnx, scikit-learn, numpy"
+          echo "Example install (Ubuntu):"
+          echo "  sudo apt update && sudo apt install -y build-essential python3-dev python3-venv"
+          echo "  python3 -m venv .venv && . .venv/bin/activate"
+          echo "  pip install --upgrade pip"
+          echo "  pip install onnx onnxruntime onnxruntime-tools skl2onnx scikit-learn numpy"
+          echo "When registering your self-hosted runner, add the 'quant' label (and 'linux' / 'self-hosted' are typical)."

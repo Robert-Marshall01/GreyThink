@@ -1,0 +1,21 @@
+name: powerapp
+base: core22
+version: '0.0.0'
+summary: Power usage and emissions insights (prototype)
+description: |
+  PowerApp is a GNOME desktop utility that measures system power usage and
+  helps users reduce energy consumption and emissions.
+grade: devel
+confinement: strict
+
+apps:
+  powerapp:
+    command: python3 -m powerapp.gtk.main
+    plugs: [home, network, system-observe, hardware-observe]
+
+parts:
+  powerapp:
+    plugin: python
+    source: ..
+    python-packages: [Markdown]
+    stage-packages: [gir1.2-webkit2-4.0, libwebkit2gtk-4.0-37, xdg-utils]

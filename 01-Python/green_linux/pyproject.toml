@@ -1,0 +1,43 @@
+[project]
+name = "powerapp"
+version = "0.0.0"
+description = "Power usage and emissions insights for Ubuntu (prototype)"
+authors = [ { name = "PowerApp Developers", email = "maintainers@example.com" } ]
+readme = "docs/HELP.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+dependencies = [
+  "Markdown>=3.4"
+]
+
+[project.optional-dependencies]
+# Development helpers and test tooling
+dev = [
+  "pytest>=7.0",
+  "flake8>=6.0",
+  "PyYAML>=6.0",
+  "Pillow>=9.0",
+  "pycairo>=1.24",
+  "numpy>=1.24",
+  "joblib>=1.5",
+]
+
+# Machine-learning / ONNX toolchain used for model export and quantization
+ml = [
+  "scikit-learn>=1.2",
+  "skl2onnx>=1.16",
+  "onnx>=1.15",
+  "onnxruntime>=1.15",
+]
+
+# GUI dependencies (PyGObject is usually provided by the OS package manager; document in CONTRIBUTING.md)
+gui = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["powerapp*"]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"

@@ -1,0 +1,331 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10','3.11','3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install system packages for WebKit and common tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gir1.2-webkit2-4.0 libwebkit2gtk-4.0-dev xdg-utils flatpak-builder
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+
+      - name: Generate PNG fallback icon
+        run: |
+          python scripts/generate_icon_png.py
+          test -f scripts/assets/powerapp-128.png
+
+      - name: Upload generated icon artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: powerapp-icon-128
+          path: scripts/assets/powerapp-128.png
+          retention-days: 3
+
+      - name: Save concise wheelhouse log to workspace (main job)
+        run: |
+          LOG=${GITHUB_WORKSPACE:-.}/wheelhouse-log-main.txt
+          echo "Wheelhouse (main job) log for run ${GITHUB_RUN_ID:-unknown} at $(date)" > "$LOG"
+          if [ -d ~/.cache/pip/wheels ]; then
+            echo "" >> "$LOG"
+            echo "Listing (first 200 lines):" >> "$LOG"
+            ls -la ~/.cache/pip/wheels | head -n 200 >> "$LOG" || true
+            echo "" >> "$LOG"
+            echo "Disk usage:" >> "$LOG"
+            du -sh ~/.cache/pip/wheels || true >> "$LOG"
+          else
+            echo "Wheelhouse directory not present" >> "$LOG"
+          fi
+
+      - name: Annotate wheelhouse summary (main job)
+        run: |
+          WH_PATH=~/.cache/pip/wheels
+          if [ -d "$WH_PATH" ]; then
+            n=$(ls -1 "$WH_PATH" | wc -l || true)
+            size=$(du -sh "$WH_PATH" | cut -f1 || echo '0')
+            echo "::notice ::wheelhouse [run=${GITHUB_RUN_ID:-unknown}] [path=${WH_PATH}]: ${n} files, size ${size}"
+          else
+            echo "::warning ::wheelhouse [run=${GITHUB_RUN_ID:-unknown}] [path=${WH_PATH}]: not present"
+          fi
+
+      - name: Upload wheelhouse log artifact (main job)
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheelhouse-log-main
+          path: wheelhouse-log-main.txt
+          retention-days: 5
+
+      - name: Run tests
+        run: pytest -q
+      - name: Lint
+        run: flake8
+      - name: Syntax check
+        run: python -m py_compile $(git ls-files '*.py')
+
+  gui-headful:
+    name: GUI (headful) tests
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install system packages for GUI tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb dbus-x11 x11-utils gir1.2-gtk-4.0 gir1.2-webkit2-4.0 libwebkit2gtk-4.0-dev xdg-utils
+      - name: Start X virtual framebuffer
+        run: |
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+          Xvfb :99 -screen 0 1280x1024x24 &>/dev/null &
+      - name: Cache pip and wheelhouse
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/pip/wheels
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt','**/requirements-dev.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Build wheelhouse
+        run: |
+          mkdir -p ~/.cache/pip/wheels
+          python -m pip wheel -r requirements.txt -w ~/.cache/pip/wheels || true
+          python -m pip wheel -r requirements-dev.txt -w ~/.cache/pip/wheels || true
+
+      - name: Inspect wheelhouse cache (observability)
+        run: |
+          echo "Wheelhouse path: ~/.cache/pip/wheels"
+          if [ -d ~/.cache/pip/wheels ]; then
+            echo "Listing wheelhouse files:"
+            ls -la ~/.cache/pip/wheels || true
+            echo "Wheel count: $(ls -1 ~/.cache/pip/wheels 2>/dev/null | wc -l || true)"
+            du -sh ~/.cache/pip/wheels || true
+          else
+            echo "Wheelhouse directory not present"
+          fi
+
+      - name: Save concise wheelhouse log to workspace
+        run: |
+          LOG=${GITHUB_WORKSPACE:-.}/wheelhouse-log.txt
+          echo "Wheelhouse log for run ${GITHUB_RUN_ID:-unknown} at $(date)" > "$LOG"
+          if [ -d ~/.cache/pip/wheels ]; then
+            echo "" >> "$LOG"
+            echo "Listing (first 200 lines):" >> "$LOG"
+            ls -la ~/.cache/pip/wheels | head -n 200 >> "$LOG" || true
+            echo "" >> "$LOG"
+            echo "Disk usage:" >> "$LOG"
+            du -sh ~/.cache/pip/wheels || true >> "$LOG"
+          else
+            echo "Wheelhouse directory not present" >> "$LOG"
+          fi
+
+      - name: Annotate wheelhouse summary (gui job)
+        run: |
+          WH_PATH=~/.cache/pip/wheels
+          if [ -d "$WH_PATH" ]; then
+            n=$(ls -1 "$WH_PATH" | wc -l || true)
+            size=$(du -sh "$WH_PATH" | cut -f1 || echo '0')
+            echo "::notice ::wheelhouse [run=${GITHUB_RUN_ID:-unknown}] [path=${WH_PATH}]: ${n} files, size ${size}"
+          else
+            echo "::warning ::wheelhouse [run=${GITHUB_RUN_ID:-unknown}] [path=${WH_PATH}]: not present"
+          fi
+
+      - name: Upload wheelhouse log artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheelhouse-log
+          path: wheelhouse-log.txt
+          retention-days: 5
+
+      - name: Install Python dependencies (prefer wheelhouse)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --no-index --find-links ~/.cache/pip/wheels -r requirements.txt || python -m pip install -r requirements.txt
+          python -m pip install --no-index --find-links ~/.cache/pip/wheels -r requirements-dev.txt || python -m pip install -r requirements-dev.txt
+
+      - name: Run headful UI tests (xvfb-run)
+        run: |
+          xvfb-run -s "-screen 0 1280x1024x24" pytest -q tests/test_ui_headful.py -q
+        timeout-minutes: 20
+
+  visual-regression:
+    name: Visual regression for simulator
+    needs: gui-headful
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect PR changed files
+        id: detect
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.ref }} || true
+          CHANGED=$(git diff --name-only origin/${{ github.event.pull_request.base.ref }}..HEAD || true)
+          echo "changed_files=$CHANGED" >> $GITHUB_OUTPUT
+          echo "CHANGED=$CHANGED"
+      - name: Decide whether to run visual check
+        id: decide
+        run: |
+          CHANGED="${{ steps.detect.outputs.changed_files }}"
+          echo "Files changed: $CHANGED"
+          echo "$CHANGED" | grep -E '(^| )powerapp/gtk/|^scripts/generate_golden_simulator_image.py|^tests/golden/' && echo "run_visual=true" >> $GITHUB_OUTPUT || echo "run_visual=false" >> $GITHUB_OUTPUT
+      - name: Skip if no visual files changed
+        if: steps.decide.outputs.run_visual == 'false'
+        run: echo 'No visual files changed, skipping visual regression.'
+      - name: Install system packages and start Xvfb
+        if: steps.decide.outputs.run_visual == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb dbus-x11 x11-utils pkg-config libcairo2-dev libx11-dev
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+          Xvfb :99 -screen 0 1280x1024x24 &>/dev/null &
+      - name: Set up Python (visual)
+        if: steps.decide.outputs.run_visual == 'true'
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      - name: Install Python deps (visual)
+        if: steps.decide.outputs.run_visual == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+      - name: Save committed golden
+        if: steps.decide.outputs.run_visual == 'true'
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/.ci
+          cp tests/golden/simulator_per_app_bars_golden.png $GITHUB_WORKSPACE/.ci/golden_ref.png
+      - name: Regenerate golden (script)
+        if: steps.decide.outputs.run_visual == 'true'
+        run: |
+          python scripts/generate_golden_simulator_image.py
+          ls -la tests/golden
+      - name: Compare regenerated golden with committed one (metadata-first)
+        if: steps.decide.outputs.run_visual == 'true'
+        run: |
+          # copy committed metadata
+          cp tests/golden/simulator_per_app_bars_golden.json $GITHUB_WORKSPACE/.ci/golden_ref.json || true
+          # if metadata exists, prefer structural compare
+          if [ -f ".ci/golden_ref.json" ]; then
+            echo 'Comparing metadata JSONs first'
+            python scripts/compare_visual_meta.py .ci/golden_ref.json tests/golden/simulator_per_app_bars_golden.json --frac-tol 0.05 --color-tol 0.12 || (echo 'Metadata mismatch detected' && ls -la tests/golden && python scripts/compare_pngs.py $GITHUB_WORKSPACE/.ci/golden_ref.png tests/golden/simulator_per_app_bars_golden.png --out-diff .ci/sim_diff.png || true && exit 2)
+          else
+            echo 'No metadata to compare, falling back to pixel diff'
+            python scripts/compare_pngs.py $GITHUB_WORKSPACE/.ci/golden_ref.png tests/golden/simulator_per_app_bars_golden.png --out-diff .ci/sim_diff.png || (echo 'Visual mismatch detected' && ls -la . && exit 2)
+          fi
+      - name: Upload visual diff for inspection
+        if: steps.decide.outputs.run_visual == 'true' && (always() && failure())
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-diff
+          path: .ci/sim_diff.png
+          retention-days: 7
+
+
+  package-smoke:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak-builder jq
+      - name: Validate snapcraft.yaml syntax
+        run: |
+          python - <<'PY'
+import yaml, sys
+try:
+    yaml.safe_load(open('snap/snapcraft.yaml'))
+    print('snapcraft.yaml: OK')
+except Exception as e:
+    print('snapcraft.yaml parse error:', e)
+    sys.exit(1)
+PY
+      - name: Validate Flatpak manifest JSON
+        run: python - <<'PY'
+import json, sys
+try:
+    json.load(open('flatpak/org.example.powerapp.json'))
+    print('flatpak manifest: OK')
+except Exception as e:
+    print('flatpak manifest parse error:', e)
+    sys.exit(1)
+PY
+      - name: Flatpak smoke build (fetch)
+        run: |
+          flatpak-builder --subject='powerapp-smoke' --repo=repo --force-clean build-dir flatpak/org.example.powerapp.json --stop-at=fetch || echo 'fetch failed or requires network, ignoring'
+      - name: Lint snap manifest for fields
+        run: |
+          grep -E 'python-packages|stage-packages' snap/snapcraft.yaml || true
+
+  snap-build:
+    needs: package-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install snapcraft
+        run: |
+          sudo snap install snapcraft --classic || true
+      - name: Show snapcraft version
+        run: snapcraft --version || true
+      - name: Pack snap with snapcraft
+        run: |
+          # Create a snap using the snapcraft.yaml in snap/
+          snapcraft pack snap/ --output=powerapp.snap
+      - name: Upload snap artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: powerapp-snap
+          path: powerapp.snap
+
+  snap-publish:
+    # Only run on a push to main and only if the SNAPCRAFT_LOGIN secret is set
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.SNAPCRAFT_LOGIN != '' }}
+    needs: snap-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install snapcraft
+        run: |
+          sudo snap install snapcraft --classic || true
+      - name: Prepare snapcraft login file
+        env:
+          SNAPCRAFT_LOGIN: ${{ secrets.SNAPCRAFT_LOGIN }}
+        run: |
+          echo "$SNAPCRAFT_LOGIN" > snapcraft.login
+          chmod 600 snapcraft.login
+      - name: Login to Snapcraft
+        run: |
+          snapcraft login --with snapcraft.login
+      - name: Upload snap to Snap Store (stable)
+        run: |
+          snapcraft upload powerapp.snap --release=stable
+      - name: Clean up login file
+        run: rm -f snapcraft.login

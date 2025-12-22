@@ -1,0 +1,17 @@
+#. POT file template -- initial
+msgid ""
+msgstr ""
+"Project-Id-Version: PowerApp\n"
+"MIME-Version: 1.0\n"
+
+msgid "Legend"
+msgstr ""
+
+msgid "Red = Busy (conflicts with calendar events)"
+msgstr ""
+
+msgid "Red shaded areas mark calendar events (busy times). Suggestions avoid these times when \"Respect my calendar\" is enabled."
+msgstr ""
+
+msgid "Some candidate windows were removed because they conflict with events on your calendar."
+msgstr ""

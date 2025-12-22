@@ -1,0 +1,53 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+.venv-test/
+.venv2/
+.venv_sys/
+.env/
+venv/
+ENV/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Editor directories and files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Misc
+node_modules/
+*.swp
+
+# Local application cache (not committed)
+.cache/
+
+# Ignore local desktop install artifacts created by install scripts
+# (these live under the user's home and should not be in the repo)
+# ~/.local/bin/powerapp-run and ~/.local/share/applications/powerapp.desktop are not tracked here
+
+.fake

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="PowerApp icon">
+  <rect width="100%" height="100%" fill="#0B9E58" rx="36"/>
+  <g transform="translate(40,40) scale(0.7)" fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round" stroke-width="12">
+    <!-- stylized leaf -->
+    <path d="M88 12 C120 12 164 44 144 96 C136 120 108 148 72 164 C36 148 12 112 12 80 C12 56 36 24 72 12" fill="#FFFFFF" stroke="none" opacity="0.96" />
+    <!-- power glyph inside leaf -->
+    <path d="M92 36 v32" stroke="#0B9E58" stroke-width="10" stroke-linecap="round" />
+    <path d="M72 84 a28 28 0 1 1 32 0" stroke="#FFFFFF" fill="none" />
+  </g>
+</svg>
