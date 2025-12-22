@@ -1,3 +1,5 @@
+This was made and tested in Ubuntu 24.04 LTS
+
 PowerApp GNOME/GTK Prototype
 
 **Status:** Prototype / Proof‑of‑Concept — intended as a forkable starter for experimentation and development. We used AI-assisted tooling to accelerate prototyping; core application flows are covered by tests and key paths have human review where practical. There are documented limitations and targeted TODOs (see **Known issues**); contributions, reviews, and test improvements are welcome.
