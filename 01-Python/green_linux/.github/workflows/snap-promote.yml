@@ -1,0 +1,39 @@
+name: Snap Promote
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  promote:
+    if: ${{ secrets.SNAPCRAFT_LOGIN != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install snapcraft
+        run: |
+          sudo snap install snapcraft --classic || true
+      - name: Pack snap with snapcraft
+        run: |
+          snapcraft pack snap/ --output=powerapp.snap
+      - name: Determine channel from tag
+        id: channel
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          echo "tag=$TAG"
+          if [[ "$TAG" == *"beta"* ]]; then CHAN=beta; else CHAN=stable; fi
+          echo "channel=$CHAN" >> $GITHUB_OUTPUT
+      - name: Prepare snapcraft login file
+        env:
+          SNAPCRAFT_LOGIN: ${{ secrets.SNAPCRAFT_LOGIN }}
+        run: |
+          echo "$SNAPCRAFT_LOGIN" > snapcraft.login
+          chmod 600 snapcraft.login
+      - name: Login to Snapcraft
+        run: snapcraft login --with snapcraft.login
+      - name: Upload snap to channel
+        run: snapcraft upload powerapp.snap --release=${{ steps.channel.outputs.channel }}
+      - name: Clean up
+        run: rm -f snapcraft.login

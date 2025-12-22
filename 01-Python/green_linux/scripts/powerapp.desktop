@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=PowerApp
+Comment=Power usage and emission insights (PowerApp prototype)
+Exec="${HOME}/.local/bin/powerapp-run"
+Terminal=false
+Categories=Utility;X-Environment;
+Icon=
+StartupWMClass=PowerApp

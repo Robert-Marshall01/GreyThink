@@ -1,0 +1,38 @@
+name: Check translations (POT up-to-date)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  i18n-pot-check:
+    runs-on: ubuntu-latest
+    name: Verify powerapp.pot is current
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install gettext (best-effort)
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y gettext || true
+
+      - name: Generate POT
+        run: |
+          python3 scripts/generate_pot.py --output locale/powerapp.new.pot
+
+      - name: Compare POT file
+        run: |
+          if ! diff -u locale/powerapp.pot locale/powerapp.new.pot > pot.diff; then
+            echo "ERROR: locale/powerapp.pot is out of date. Please run 'make extract-pot' locally and include the updated file in your PR.";
+            echo "---- diff (first 200 lines) ----";
+            sed -n '1,200p' pot.diff || true;
+            exit 1;
+          fi

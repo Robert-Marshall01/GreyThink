@@ -1,0 +1,19 @@
+{
+  "app-id": "org.example.powerapp",
+  "runtime": "org.gnome.Platform",
+  "runtime-version": "44",
+  "sdk": "org.gnome.Sdk",
+  "command": "python3 -m powerapp.gtk.main",
+  "modules": [
+    {
+      "name": "powerapp-source",
+      "buildsystem": "simple",
+      "build-commands": [
+        "pip3 install --no-deps --prefix=$FLATPAK_DEST --root=$FLATPAK_DEST Markdown"
+      ],
+      "sources": [
+        { "type": "dir", "path": "." }
+      ]
+    }
+  ]
+}
