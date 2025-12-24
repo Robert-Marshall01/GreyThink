@@ -1,0 +1,19 @@
+[package]
+name = "linux-equalizer"
+version = "1.0.0"
+edition = "2021"
+authors = ["Robert Marshall"]
+description = "A system-wide Linux audio equalizer with graphical interface"
+license = "MIT"
+repository = "https://github.com/yourusername/linux-equalizer"
+
+[dependencies]
+gtk4 = "0.9"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+dirs = "5.0"
+ctrlc = "3.4"
+
+[profile.release]
+opt-level = 3
+lto = true
