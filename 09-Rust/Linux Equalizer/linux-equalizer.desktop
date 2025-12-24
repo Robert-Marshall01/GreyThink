@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Linux Equalizer
+GenericName=Audio Equalizer
+Comment=System-wide 10-band audio equalizer
+Exec=linux-equalizer
+Icon=multimedia-volume-control
+Terminal=false
+Categories=Audio;AudioVideo;Music;GTK;
+Keywords=equalizer;eq;audio;sound;bass;treble;
+StartupNotify=true
+StartupWMClass=linux-equalizer

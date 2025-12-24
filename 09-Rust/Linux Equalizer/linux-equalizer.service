@@ -1,0 +1,16 @@
+[Unit]
+Description=Linux Equalizer - System-Wide Audio Equalizer
+After=pipewire.service pipewire-pulse.service pulseaudio.service sound.target
+Wants=pipewire-pulse.service
+
+[Service]
+Type=simple
+ExecStart="%h/Desktop/Linux Equalizer/target/release/linux-equalizer" --headless
+Restart=on-failure
+RestartSec=5
+Environment="PIPEWIRE_RUNTIME_DIR=/run/user/%U"
+Environment="PULSE_RUNTIME_PATH=/run/user/%U/pulse"
+Environment="XDG_RUNTIME_DIR=/run/user/%U"
+
+[Install]
+WantedBy=default.target
