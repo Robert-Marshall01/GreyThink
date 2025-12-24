@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Install Web Search
+Comment=Install the Web Search application
+Exec="/home/robert-marshall01/Desktop/Java Search/install.sh"
+Icon=system-software-install
+Terminal=false
+Categories=System;
+Keywords=install;setup;websearch;
+StartupNotify=true
