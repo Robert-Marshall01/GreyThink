@@ -37,6 +37,7 @@ These behaviors are non-negotiable and will be treated as severe violations. The
 ## Impolite — Please refrain from these
 These behaviors may not always trigger immediate reporting, but they degrade the community and should be avoided:
 - Excessive profanity, especially explicit sexual or violent expletives.
+NOTE: the only exception to profanity is if it is being used to reference a specific language, tool, dependency, metaphor, etc. for technical accuracy.
 - Crude or toilet-humor comments that serve no constructive purpose.
 - Plain obnoxious behavior: trolling, intentional derailment of discussions, or repeated low-effort disruptions.
 
