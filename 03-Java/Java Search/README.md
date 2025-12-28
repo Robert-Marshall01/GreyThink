@@ -2,7 +2,7 @@
 
 A full-featured web search browser built in Java with JavaFX, featuring an embedded browser that supports multiple search engines including Google, DuckDuckGo, Bing, Wikipedia, and YouTube.
 
-**Note:** This project implements a search engine (local indexing + web search GUI). Portions of the codebase were generated with the assistance of AI tools and may require manual review.
+**Note:** This project implements a search engine (local indexing + web search GUI). Portions of the codebase were generated with the assistance of AI tools and may require manual review. Videos are not supported.
 
 **Stability:** This is an experimental project — there are known stability issues (e.g., incomplete error handling, occasional crashes, and behavior differences between platforms). See the "Stability & Limitations" section below for details.
 
