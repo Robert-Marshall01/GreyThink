@@ -1,0 +1,43 @@
+# =============================================================================
+# Java Search Engine - Kubernetes Kustomization
+# =============================================================================
+# Kustomize configuration for managing all Kubernetes resources together.
+# Usage: kubectl apply -k k8s/
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: java-search
+
+# Namespace for all resources
+namespace: default
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: java-search
+  app.kubernetes.io/version: "1.0.0"
+  app.kubernetes.io/component: search-engine
+  app.kubernetes.io/managed-by: kustomize
+
+# Resources to include
+resources:
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  # Uncomment when ready to expose externally
+  # - ingress.yaml
+
+# Image customization (update for your registry)
+images:
+  - name: java-search
+    newName: java-search
+    newTag: websearch
+
+# ConfigMap generator (alternative to static configmap.yaml)
+# configMapGenerator:
+#   - name: java-search-config
+#     literals:
+#       - MAX_RESULTS=10
+#       - LOG_LEVEL=INFO

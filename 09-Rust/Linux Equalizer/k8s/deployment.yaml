@@ -1,0 +1,238 @@
+# =============================================================================
+# Linux Equalizer - Kubernetes Deployment
+# =============================================================================
+# NOTE: This is a desktop audio application. Kubernetes deployment requires:
+# - Host audio system access (PulseAudio socket mounting)
+# - Privileged access for audio devices
+# - Node affinity to specific audio-enabled nodes
+#
+# This deployment is suitable for:
+# - Audio processing server nodes
+# - CI/CD build environments
+# - Development clusters with audio hardware
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: linux-equalizer
+  namespace: linux-equalizer
+  labels:
+    app.kubernetes.io/name: linux-equalizer
+    app.kubernetes.io/instance: linux-equalizer
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/component: audio-processor
+    app.kubernetes.io/part-of: audio-tools
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  replicas: 1
+  
+  # Rolling update strategy
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: linux-equalizer
+      app.kubernetes.io/instance: linux-equalizer
+  
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: linux-equalizer
+        app.kubernetes.io/instance: linux-equalizer
+        app.kubernetes.io/version: "1.0.0"
+        app.kubernetes.io/component: audio-processor
+      annotations:
+        # Trigger rolling update on config changes
+        checksum/config: "{{ include (print $.Template.BasePath \"/configmap.yaml\") . | sha256sum }}"
+    
+    spec:
+      # Security context for the pod
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        # Audio group for device access
+        supplementalGroups: [29]  # audio group GID
+      
+      # Require nodes with audio hardware
+      nodeSelector:
+        audio.enabled: "true"
+      
+      # Tolerate audio-specific node taints
+      tolerations:
+        - key: "audio.workload"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+      
+      # Affinity rules
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                      - linux
+        # Anti-affinity: don't schedule multiple equalizers on same node
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: linux-equalizer
+                topologyKey: kubernetes.io/hostname
+      
+      # Init container to check PulseAudio availability
+      initContainers:
+        - name: check-pulseaudio
+          image: debian:bookworm-slim
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Checking for PulseAudio socket..."
+              if [ -S /run/user/1000/pulse/native ]; then
+                echo "PulseAudio socket found!"
+                exit 0
+              else
+                echo "WARNING: PulseAudio socket not found at /run/user/1000/pulse/native"
+                echo "Audio processing may not work correctly."
+                exit 0
+              fi
+          volumeMounts:
+            - name: pulse-socket
+              mountPath: /run/user/1000/pulse
+              readOnly: true
+          resources:
+            limits:
+              cpu: "100m"
+              memory: "32Mi"
+            requests:
+              cpu: "10m"
+              memory: "16Mi"
+      
+      containers:
+        - name: linux-equalizer
+          image: linux-equalizer:1.0.0
+          imagePullPolicy: IfNotPresent
+          
+          # Run in headless mode
+          args:
+            - "--headless"
+          
+          # Environment from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: linux-equalizer-env
+          
+          # Additional environment variables
+          env:
+            - name: HOME
+              value: "/home/equalizer"
+            - name: RUST_BACKTRACE
+              value: "1"
+          
+          # Resource limits
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "1000m"
+              memory: "256Mi"
+          
+          # Volume mounts
+          volumeMounts:
+            # PulseAudio socket from host
+            - name: pulse-socket
+              mountPath: /run/user/1000/pulse
+            # Configuration presets
+            - name: config
+              mountPath: /home/equalizer/.config/linux-equalizer
+            # Sound devices (if using ALSA directly)
+            - name: sound-devices
+              mountPath: /dev/snd
+          
+          # Security context for container
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+              add:
+                # Required for audio device access
+                - SYS_NICE
+          
+          # Liveness probe - check if process is running
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "pgrep -x linux-equalizer"
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # Readiness probe - check PulseAudio connection
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "pactl info >/dev/null 2>&1"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # Startup probe - allow time for audio system initialization
+          startupProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "pactl list short sinks | grep -q linux_equalizer"
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 10
+            failureThreshold: 30
+      
+      # Volumes
+      volumes:
+        # PulseAudio socket from host
+        - name: pulse-socket
+          hostPath:
+            path: /run/user/1000/pulse
+            type: Directory
+        
+        # Configuration from ConfigMap
+        - name: config
+          configMap:
+            name: linux-equalizer-config
+        
+        # Sound devices from host
+        - name: sound-devices
+          hostPath:
+            path: /dev/snd
+            type: Directory
+      
+      # Don't restart too quickly on failure
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      
+      # DNS policy
+      dnsPolicy: ClusterFirst
+      
+      # Service account (use default, no special permissions needed)
+      automountServiceAccountToken: false

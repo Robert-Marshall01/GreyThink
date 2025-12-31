@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: MIT
+# Kustomization file for Msh Kubernetes resources
+# Usage: kubectl apply -k k8s/
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: msh
+  labels:
+    app: msh
+
+# Namespace for all resources
+namespace: default
+
+# Common labels applied to all resources
+commonLabels:
+  app: msh
+  app.kubernetes.io/name: msh
+  app.kubernetes.io/part-of: msh-project
+
+# Resources to include
+resources:
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+
+# Image configuration (can be overridden)
+images:
+  - name: msh
+    newTag: "1.0.0"
+
+# ConfigMap generator (alternative approach)
+# configMapGenerator:
+#   - name: msh-config
+#     literals:
+#       - MSH_FORWARD_LINUX_CMDS=0
+#       - TERM=xterm-256color

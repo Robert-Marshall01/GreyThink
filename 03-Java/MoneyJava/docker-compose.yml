@@ -1,0 +1,66 @@
+# =============================================================================
+# MoneyJava - Docker Compose Configuration
+# Java Swing Desktop Application
+# =============================================================================
+# Usage:
+#   Linux (X11):
+#     xhost +local:docker
+#     docker-compose up
+#   
+#   macOS (XQuartz required):
+#     xhost + 127.0.0.1
+#     docker-compose up
+# =============================================================================
+
+services:
+  moneyjava:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: moneyjava:latest
+    container_name: moneyjava-app
+    
+    # X11 Display configuration for GUI
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+      - JAVA_OPTS=-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
+    
+    # Mount X11 socket for display access
+    volumes:
+      # X11 Unix socket for display
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # Persistent data storage for user accounts
+      - moneyjava-data:/app/data
+    
+    # Network mode for X11 (host mode simplifies X11 access on Linux)
+    network_mode: "host"
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    
+    # Restart policy
+    restart: "no"
+    
+    # Health check (basic process check for GUI app)
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "LoginSignupGUI"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+# Named volumes for data persistence
+volumes:
+  moneyjava-data:
+    driver: local

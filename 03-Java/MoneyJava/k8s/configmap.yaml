@@ -1,0 +1,26 @@
+# =============================================================================
+# MoneyJava - Kubernetes ConfigMap
+# =============================================================================
+# Configuration settings for the MoneyJava application
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: moneyjava-config
+  namespace: default
+  labels:
+    app: moneyjava
+    tier: frontend
+data:
+  # JVM configuration options
+  java-opts: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+  
+  # Display configuration for X11 (optional, for GUI support)
+  # Update this based on your X11 forwarding setup
+  display: ":0"
+  
+  # Application settings
+  app-name: "MoneyJava"
+  app-version: "1.0"
+  log-level: "INFO"

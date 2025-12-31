@@ -1,0 +1,86 @@
+# =============================================================================
+# Kubernetes Deployment for input_asm
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: input-asm
+  labels:
+    app: input-asm
+    version: "0.2.0"
+    component: cli
+    managed-by: kubectl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: input-asm
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: input-asm
+        version: "0.2.0"
+        component: cli
+    spec:
+      # Disable service account token automounting (not needed for this CLI app)
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: input-asm
+          image: input-asm:0.2.0
+          imagePullPolicy: IfNotPresent
+          # Interactive CLI - requires stdin
+          stdin: true
+          tty: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              memory: "16Mi"
+              cpu: "10m"
+              ephemeral-storage: "10Mi"
+            limits:
+              memory: "32Mi"
+              cpu: "50m"
+              ephemeral-storage: "50Mi"
+          # Liveness probe - check if binary exists
+          livenessProbe:
+            exec:
+              command:
+                - test
+                - -x
+                - /app/input_asm
+            initialDelaySeconds: 5
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Readiness probe - same as liveness for CLI app
+          readinessProbe:
+            exec:
+              command:
+                - test
+                - -x
+                - /app/input_asm
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: input-asm-config
+                optional: true
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 10

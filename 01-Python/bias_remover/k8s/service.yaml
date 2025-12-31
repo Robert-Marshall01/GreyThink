@@ -1,0 +1,22 @@
+# Note: This is a ClusterIP service for internal communication.
+# Since bias-remover is a CLI tool (not a web service), 
+# this service is optional and provided for completeness.
+# It can be used if the application is extended to expose an API.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: bias-remover
+  labels:
+    app: bias-remover
+spec:
+  type: ClusterIP
+  selector:
+    app: bias-remover
+  # No ports exposed - CLI application
+  # Uncomment below if application is extended to expose HTTP API
+  # ports:
+  #   - name: http
+  #     port: 8080
+  #     targetPort: 8080
+  #     protocol: TCP

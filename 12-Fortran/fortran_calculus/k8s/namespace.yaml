@@ -1,0 +1,10 @@
+# =============================================================================
+# Namespace for Fortran Calculus Demos
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fortran-calculus
+  labels:
+    app.kubernetes.io/name: fortran-calculus
+    app.kubernetes.io/component: namespace

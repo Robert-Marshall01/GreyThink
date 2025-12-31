@@ -1,0 +1,208 @@
+# =============================================================================
+# PowerApp - Kubernetes Deployment
+# =============================================================================
+# This deployment runs the PowerApp CLI as a long-running service with mock
+# power data. Adjust replicas and resources based on your cluster capacity.
+#
+# Apply: kubectl apply -f k8s/
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: powerapp
+  labels:
+    app: powerapp
+    app.kubernetes.io/name: powerapp
+    app.kubernetes.io/component: cli
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: powerapp
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: powerapp
+        app.kubernetes.io/name: powerapp
+        app.kubernetes.io/component: cli
+      annotations:
+        # Force pod restart on configmap changes
+        checksum/config: "{{ include (print $.Template.BasePath \"/configmap.yaml\") . | sha256sum }}"
+    spec:
+      # Security context for the pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+
+      # Graceful shutdown
+      terminationGracePeriodSeconds: 30
+
+      # Disable automounting service account token (not needed for this app)
+      automountServiceAccountToken: false
+
+      containers:
+        - name: powerapp
+          image: powerapp:0.0.0
+          imagePullPolicy: IfNotPresent
+
+          # Command to run the CLI in watch mode (continuous sampling)
+          command:
+            - python
+            - -m
+            - powerapp.cli.power_reader
+            - --pretty
+
+          # Environment variables from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: powerapp-config
+
+          # Resource requests and limits
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+              ephemeral-storage: "100Mi"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+              ephemeral-storage: "500Mi"
+
+          # Security context for the container
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+
+          # Volume mounts for persistent config
+          volumeMounts:
+            - name: config-volume
+              mountPath: /home/powerapp/.config/powerapp
+            - name: state-volume
+              mountPath: /home/powerapp/.local/state/powerapp
+
+          # Liveness probe - check if the Python process is responsive
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "from powerapp.cli import power_reader; print('OK')"
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+
+          # Readiness probe - check if the application is ready
+          readinessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "from powerapp.cli import power_reader; print('OK')"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # Startup probe - give the application time to start
+          startupProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import powerapp; print('OK')"
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 30
+
+      # Volumes
+      volumes:
+        - name: config-volume
+          emptyDir: {}
+        - name: state-volume
+          emptyDir: {}
+
+      # Node affinity (optional - uncomment if needed)
+      # affinity:
+      #   nodeAffinity:
+      #     preferredDuringSchedulingIgnoredDuringExecution:
+      #       - weight: 1
+      #         preference:
+      #           matchExpressions:
+      #             - key: kubernetes.io/arch
+      #               operator: In
+      #               values:
+      #                 - amd64
+      #                 - arm64
+
+---
+# =============================================================================
+# PowerApp Test Job - Run tests on demand
+# =============================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: powerapp-test
+  labels:
+    app: powerapp
+    app.kubernetes.io/name: powerapp
+    app.kubernetes.io/component: test
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: powerapp
+        app.kubernetes.io/component: test
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+
+      # Disable automounting service account token
+      automountServiceAccountToken: false
+
+      containers:
+        - name: powerapp-test
+          image: powerapp:0.0.0-dev
+          imagePullPolicy: IfNotPresent
+          command:
+            - pytest
+            - -v
+            - --tb=short
+            - -x
+          envFrom:
+            - configMapRef:
+                name: powerapp-config
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+              ephemeral-storage: "200Mi"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+              ephemeral-storage: "1Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL

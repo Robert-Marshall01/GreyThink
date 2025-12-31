@@ -1,0 +1,37 @@
+# =============================================================================
+# Spectastic - Kubernetes Service
+# =============================================================================
+# Service definition for spectastic.
+#
+# Note: Since spectastic is a desktop GUI application and does not expose
+# network ports, this service is primarily for Kubernetes internal purposes
+# such as pod discovery and potential future extensions (e.g., if a web UI
+# or metrics endpoint is added).
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: spectastic
+  namespace: spectastic
+  labels:
+    app.kubernetes.io/name: spectastic
+    app.kubernetes.io/component: service
+    app.kubernetes.io/part-of: spectastic
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  type: ClusterIP
+  
+  selector:
+    app.kubernetes.io/name: spectastic
+    app.kubernetes.io/component: application
+  
+  # Ports are placeholders for future metrics/API endpoints
+  # Currently, the GUI app doesn't expose network services
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+      protocol: TCP
+  
+  # Session affinity for consistent client routing
+  sessionAffinity: None

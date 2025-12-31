@@ -1,0 +1,30 @@
+# ==============================================================================
+# Quick Maths - Docker Compose Configuration
+# For running the interactive C++ console application
+# ==============================================================================
+
+services:
+  quick_maths:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: quick_maths:latest
+    container_name: quick_maths_game
+    # Interactive mode required for console input
+    stdin_open: true
+    tty: true
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 32M
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    # Restart policy
+    restart: "no"

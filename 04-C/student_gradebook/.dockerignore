@@ -1,0 +1,25 @@
+# Ignore build artifacts
+*.o
+*.out
+student_gradebook
+!student_gradebook.c
+
+# Ignore IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Ignore git
+.git/
+.gitignore
+
+# Ignore documentation
+*.md
+LICENSE
+
+# Ignore Docker/K8s files (not needed in image)
+Dockerfile
+docker-compose.yml
+k8s/

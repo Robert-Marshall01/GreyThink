@@ -1,0 +1,24 @@
+# =============================================================================
+# Kustomization for house-gui Kubernetes Resources
+# =============================================================================
+# Usage:
+#   kubectl apply -k k8s/
+#   kubectl delete -k k8s/
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: house-gui
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: house-gui
+  app.kubernetes.io/version: "0.1.0"
+  app.kubernetes.io/managed-by: kustomize
+
+# Resources to include
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml

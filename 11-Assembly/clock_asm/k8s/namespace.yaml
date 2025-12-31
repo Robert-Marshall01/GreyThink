@@ -1,0 +1,10 @@
+# =============================================================================
+# Kubernetes Namespace for clock_asm
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: clock-asm
+  labels:
+    app.kubernetes.io/name: clock-asm
+    app.kubernetes.io/component: namespace

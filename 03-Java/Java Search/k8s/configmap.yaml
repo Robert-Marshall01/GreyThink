@@ -1,0 +1,56 @@
+# =============================================================================
+# Java Search Engine - Kubernetes ConfigMap
+# =============================================================================
+# Configuration for the Java Search Engine application.
+# Contains JVM tuning, search engine settings, and feature flags.
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: java-search-config
+  namespace: default
+  labels:
+    app: java-search
+    component: search-engine
+data:
+  # -------------------------------------------------------------------------
+  # JVM Configuration
+  # -------------------------------------------------------------------------
+  JAVA_TOOL_OPTIONS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+
+  # -------------------------------------------------------------------------
+  # Application Configuration
+  # -------------------------------------------------------------------------
+  # Maximum number of search results to return
+  MAX_RESULTS: "10"
+
+  # Connection timeout in milliseconds for web searches
+  CONNECTION_TIMEOUT: "15000"
+
+  # Read timeout in milliseconds for web searches
+  READ_TIMEOUT: "15000"
+
+  # User agent string for web requests
+  USER_AGENT: "JavaSearchEngine/1.0 (Container)"
+
+  # -------------------------------------------------------------------------
+  # Search Engine Settings
+  # -------------------------------------------------------------------------
+  # Default search engine (0=Google, 1=DuckDuckGo, 2=Bing, 3=Wikipedia, 4=YouTube)
+  DEFAULT_SEARCH_ENGINE: "0"
+
+  # Enable/disable specific search backends
+  ENABLE_WIKIPEDIA: "true"
+  ENABLE_STACKEXCHANGE: "true"
+
+  # -------------------------------------------------------------------------
+  # Logging Configuration
+  # -------------------------------------------------------------------------
+  LOG_LEVEL: "INFO"
+
+  # -------------------------------------------------------------------------
+  # Feature Flags
+  # -------------------------------------------------------------------------
+  ENABLE_CACHING: "false"
+  ENABLE_METRICS: "false"

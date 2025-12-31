@@ -1,0 +1,38 @@
+# =============================================================================
+# Docker Compose for Hello World Assembly Application
+# =============================================================================
+# This is a simple CLI application, so docker-compose is minimal.
+# Useful for consistent local development and testing.
+# =============================================================================
+
+services:
+  hello-world:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: hello-world-asm:latest
+    container_name: hello-world-asm
+    # Restart policy for production deployments
+    restart: "no"
+    # Read-only root filesystem for security
+    read_only: true
+    # Drop all capabilities since this is a simple CLI app
+    cap_drop:
+      - ALL
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 16M
+        reservations:
+          cpus: '0.01'
+          memory: 4M
+    # Labels for organization
+    labels:
+      app: hello-world
+      environment: production
+      language: assembly

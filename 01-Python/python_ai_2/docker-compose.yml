@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: MIT
+# Docker Compose for python_ai_2 - Flan-T5 Chatbot
+
+version: "3.9"
+
+services:
+  chatbot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: python-ai-2-chatbot:latest
+    container_name: flan-t5-chatbot
+    
+    # Environment variables (override defaults from Dockerfile)
+    environment:
+      - MODEL_NAME=${MODEL_NAME:-google/flan-t5-base}
+      - MAX_LENGTH=${MAX_LENGTH:-128}
+      - DEVICE=${DEVICE:-cpu}
+      - HF_HOME=/app/.cache/huggingface
+      - TRANSFORMERS_CACHE=/app/.cache/huggingface/transformers
+    
+    # Volume for persisting downloaded models (avoids re-downloading)
+    volumes:
+      - huggingface_cache:/app/.cache/huggingface
+    
+    # Resource limits for production stability
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          cpus: "1.0"
+          memory: 2G
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    
+    # For interactive mode, use: docker-compose run --rm chatbot python python_ai_2.py
+    stdin_open: true
+    tty: true
+    
+    # Restart policy
+    restart: unless-stopped
+
+# Named volume for Hugging Face model cache persistence
+volumes:
+  huggingface_cache:
+    driver: local

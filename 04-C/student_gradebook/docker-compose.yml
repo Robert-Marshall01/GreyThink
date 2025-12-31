@@ -1,0 +1,30 @@
+# =============================================================================
+# Student Gradebook - Docker Compose
+# =============================================================================
+# Note: This is an interactive CLI application that requires terminal input.
+# Use: docker-compose run --rm gradebook
+# =============================================================================
+
+services:
+  gradebook:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: debug  # Use debug stage for interactive terminal support
+    container_name: student-gradebook
+    stdin_open: true  # Keep stdin open for interactive input
+    tty: true         # Allocate a pseudo-TTY
+    restart: "no"     # CLI app - don't restart
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M
+        reservations:
+          cpus: '0.1'
+          memory: 16M
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    read_only: true

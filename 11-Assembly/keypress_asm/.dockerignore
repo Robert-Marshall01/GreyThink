@@ -1,0 +1,35 @@
+# Docker build context exclusions
+
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+LICENSE
+*.md
+
+# Build artifacts (will be created in container)
+*.o
+*.obj
+keypress_asm
+keypress_asm.exe
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Docker files (prevent recursive context)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Kubernetes manifests
+k8s/
+
+# OS generated files
+.DS_Store
+Thumbs.db

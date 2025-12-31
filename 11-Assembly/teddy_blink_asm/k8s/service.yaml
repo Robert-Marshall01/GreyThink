@@ -1,0 +1,18 @@
+# Kubernetes Service for teddy-blink-asm
+# Note: This is a console/terminal application with no network ports
+# This service is included for completeness and future extensibility
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: teddy-blink-asm
+  labels:
+    app: teddy-blink-asm
+    version: "1.0.0"
+spec:
+  # ClusterIP with no ports - headless service for pod discovery
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: teddy-blink-asm
+  # No ports exposed - this is a terminal-only application

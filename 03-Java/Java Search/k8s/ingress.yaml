@@ -1,0 +1,86 @@
+# =============================================================================
+# Java Search Engine - Kubernetes Ingress
+# =============================================================================
+# Ingress configuration for external access to the Java Search service.
+# Note: This application is primarily a CLI tool. This ingress is provided
+# as a template for when an HTTP REST API wrapper is implemented.
+# =============================================================================
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: java-search-ingress
+  namespace: default
+  labels:
+    app: java-search
+    component: search-engine
+  annotations:
+    # NGINX Ingress Controller annotations
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "10"
+    nginx.ingress.kubernetes.io/limit-connections: "5"
+
+    # CORS configuration
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization"
+
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header X-Frame-Options "DENY" always;
+      add_header X-XSS-Protection "1; mode=block" always;
+      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+spec:
+  # TLS configuration (uncomment and configure for HTTPS)
+  # tls:
+  #   - hosts:
+  #       - search.example.com
+  #     secretName: java-search-tls
+
+  rules:
+    - host: search.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: java-search
+                port:
+                  number: 8080
+
+          # API endpoint path
+          - path: /api/search
+            pathType: Prefix
+            backend:
+              service:
+                name: java-search
+                port:
+                  number: 8080
+
+          # Health check endpoint
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: java-search
+                port:
+                  number: 8080
+
+  # Default backend (optional)
+  # defaultBackend:
+  #   service:
+  #     name: java-search
+  #     port:
+  #       number: 8080

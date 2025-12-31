@@ -1,0 +1,36 @@
+# =============================================================================
+# PowerApp - Kubernetes Service
+# =============================================================================
+# Note: PowerApp is primarily a CLI/desktop application and does not expose
+# HTTP ports. This service is provided for completeness and can be used if
+# you add a metrics endpoint or REST API in the future.
+#
+# For now, this creates a headless service for pod discovery.
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: powerapp
+  labels:
+    app: powerapp
+    app.kubernetes.io/name: powerapp
+    app.kubernetes.io/component: cli
+spec:
+  # Headless service (no cluster IP) - used for pod discovery
+  # Change to ClusterIP if you add an HTTP endpoint
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: powerapp
+  ports: []
+  # Uncomment and modify if you add HTTP endpoints:
+  # ports:
+  #   - name: http
+  #     port: 8080
+  #     targetPort: 8080
+  #     protocol: TCP
+  #   - name: metrics
+  #     port: 9090
+  #     targetPort: 9090
+  #     protocol: TCP

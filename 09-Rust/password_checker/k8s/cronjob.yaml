@@ -1,0 +1,75 @@
+# =============================================================================
+# Kubernetes CronJob for password_checker
+# Use this for scheduled password policy validation
+# =============================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: password-checker-cronjob
+  namespace: default
+  labels:
+    app: password-checker
+    app.kubernetes.io/name: password-checker
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: cronjob
+spec:
+  # Run daily at midnight
+  schedule: "0 0 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels:
+            app: password-checker
+            app.kubernetes.io/name: password-checker
+        spec:
+          # Disable service account token automounting
+          automountServiceAccountToken: false
+          
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+          
+          containers:
+            - name: password-checker
+              image: password-checker:0.1.0
+              imagePullPolicy: IfNotPresent
+              
+              # Example validation command
+              args:
+                - "--json"
+                - "--min-score"
+                - "5"
+                - "$(PASSWORD_TO_CHECK)"
+              
+              env:
+                - name: PASSWORD_TO_CHECK
+                  valueFrom:
+                    secretKeyRef:
+                      name: password-checker-secret
+                      key: password
+                      optional: true
+              
+              resources:
+                requests:
+                  cpu: "10m"
+                  memory: "16Mi"
+                  ephemeral-storage: "10Mi"
+                limits:
+                  cpu: "100m"
+                  memory: "64Mi"
+                  ephemeral-storage: "50Mi"
+              
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+          
+          restartPolicy: OnFailure

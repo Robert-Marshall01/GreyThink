@@ -1,0 +1,36 @@
+# =============================================================================
+# Docker ignore file for calculator_asm
+# =============================================================================
+
+# Build artifacts
+*.o
+calculator_asm
+!calculator_asm.asm
+
+# Git
+.git
+.gitignore
+
+# Documentation (not needed in build)
+README.md
+LICENSE
+CHANGELOG.md
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Docker files (prevent recursive copy)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Kubernetes manifests
+k8s/
+
+# Temporary files
+*.tmp
+*.log

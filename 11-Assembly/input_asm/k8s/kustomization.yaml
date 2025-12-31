@@ -1,0 +1,28 @@
+# =============================================================================
+# Kustomization file for input_asm Kubernetes resources
+# Usage: kubectl apply -k k8s/
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: input-asm
+
+# Common labels applied to all resources
+commonLabels:
+  app: input-asm
+  managed-by: kustomize
+
+# Resources to include
+resources:
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+
+# Namespace (uncomment and modify as needed)
+# namespace: input-asm
+
+# Image customization (for CI/CD pipelines)
+images:
+  - name: input-asm
+    newTag: latest

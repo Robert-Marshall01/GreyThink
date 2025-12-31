@@ -1,0 +1,23 @@
+# =============================================================================
+# Kubernetes ConfigMap for password_checker
+# Configuration options for the password checker
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: password-checker-config
+  namespace: default
+  labels:
+    app: password-checker
+    app.kubernetes.io/name: password-checker
+    app.kubernetes.io/version: "0.1.0"
+data:
+  # Minimum acceptable password score (0-7)
+  MIN_SCORE: "5"
+  
+  # Output format (json or text)
+  OUTPUT_FORMAT: "json"
+  
+  # Application metadata
+  APP_NAME: "password_checker"
+  APP_VERSION: "0.1.0"

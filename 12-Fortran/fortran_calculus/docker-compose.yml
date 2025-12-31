@@ -1,0 +1,61 @@
+# =============================================================================
+# Docker Compose for Fortran Calculus Demos
+# =============================================================================
+# Usage:
+#   Build:     docker compose build
+#   Run:       docker compose up
+#   Run demo:  docker compose run --rm fortran-calculus --demo rk4_decay
+#   Plot:      docker compose run --rm fortran-calculus-viz python plot_demo.py --all
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Minimal service: Fortran demos only
+  # ---------------------------------------------------------------------------
+  fortran-calculus:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime-minimal
+    image: fortran-calculus:minimal
+    container_name: fortran-calculus
+    volumes:
+      - ./CSVs:/app/CSVs
+      - ./PNGs:/app/PNGs
+    environment:
+      - OMP_NUM_THREADS=0  # 0 = auto-detect
+    # Run all demos by default; override with specific demo
+    # command: ["--demo", "rk4_decay"]
+    user: "1000:1000"
+    read_only: false
+    security_opt:
+      - no-new-privileges:true
+
+  # ---------------------------------------------------------------------------
+  # Full service: Fortran + Python visualization
+  # ---------------------------------------------------------------------------
+  fortran-calculus-viz:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime-full
+    image: fortran-calculus:full
+    container_name: fortran-calculus-viz
+    volumes:
+      - ./CSVs:/app/CSVs
+      - ./PNGs:/app/PNGs
+    environment:
+      - OMP_NUM_THREADS=0
+      - PYTHONUNBUFFERED=1
+    user: "1000:1000"
+    read_only: false
+    security_opt:
+      - no-new-privileges:true
+    # Override entrypoint for Python visualization
+    # entrypoint: ["python", "plot_demo.py"]
+    # command: ["--all"]
+
+# Named volumes for persistent output (alternative to bind mounts)
+# volumes:
+#   csv-data:
+#   png-data:

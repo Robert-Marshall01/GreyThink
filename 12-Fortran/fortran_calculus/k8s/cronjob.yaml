@@ -1,0 +1,75 @@
+# =============================================================================
+# CronJob for scheduled Fortran Calculus demo runs
+# Use this for periodic batch processing
+# =============================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fortran-calculus-scheduled
+  namespace: fortran-calculus
+  labels:
+    app.kubernetes.io/name: fortran-calculus
+    app.kubernetes.io/component: scheduled-job
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  # Run daily at midnight
+  schedule: "0 0 * * *"
+  # Timezone (requires Kubernetes 1.27+)
+  # timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      completions: 1
+      parallelism: 1
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: fortran-calculus
+            app.kubernetes.io/component: scheduled-job
+        spec:
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+          containers:
+            - name: fortran-calculus
+              image: fortran-calculus:minimal
+              imagePullPolicy: IfNotPresent
+              args: []
+              env:
+                - name: OMP_NUM_THREADS
+                  valueFrom:
+                    configMapKeyRef:
+                      name: fortran-calculus-config
+                      key: OMP_NUM_THREADS
+                      optional: true
+              resources:
+                requests:
+                  cpu: "500m"
+                  memory: "256Mi"
+                limits:
+                  cpu: "2000m"
+                  memory: "1Gi"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: false
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: output-data
+                  mountPath: /app/CSVs
+                  subPath: CSVs
+                - name: output-data
+                  mountPath: /app/PNGs
+                  subPath: PNGs
+          volumes:
+            - name: output-data
+              persistentVolumeClaim:
+                claimName: fortran-calculus-output
+          restartPolicy: OnFailure

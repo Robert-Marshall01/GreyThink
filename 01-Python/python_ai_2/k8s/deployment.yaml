@@ -1,0 +1,127 @@
+# SPDX-License-Identifier: MIT
+# Kubernetes Deployment for python_ai_2 - Flan-T5 Chatbot
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flan-t5-chatbot
+  labels:
+    app: flan-t5-chatbot
+    app.kubernetes.io/name: flan-t5-chatbot
+    app.kubernetes.io/component: chatbot
+    app.kubernetes.io/part-of: python-ai-2
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flan-t5-chatbot
+  
+  # Rolling update strategy for zero-downtime deployments
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  
+  template:
+    metadata:
+      labels:
+        app: flan-t5-chatbot
+        app.kubernetes.io/name: flan-t5-chatbot
+        app.kubernetes.io/component: chatbot
+        app.kubernetes.io/part-of: python-ai-2
+    spec:
+      # Security context for the pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      
+      # Disable automounting service account token (not needed for this app)
+      automountServiceAccountToken: false
+      
+      # Graceful shutdown
+      terminationGracePeriodSeconds: 30
+      
+      containers:
+        - name: chatbot
+          # Use a versioned tag in production; update version as needed
+          image: python-ai-2-chatbot:1.0.0
+          imagePullPolicy: IfNotPresent
+          
+          # Command to run the chatbot in sample mode
+          # For interactive use, consider running as a Job or using kubectl exec
+          command: ["python", "python_ai_2.py", "--run-sample"]
+          
+          # Environment variables from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: chatbot-config
+          
+          # Resource requests and limits (including ephemeral storage)
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "2Gi"
+              ephemeral-storage: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+              ephemeral-storage: "2Gi"
+          
+          # Security context for the container
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+          
+          # Volume mounts for model cache persistence
+          volumeMounts:
+            - name: huggingface-cache
+              mountPath: /app/.cache/huggingface
+          
+          # Liveness probe - check if the process is alive
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import torch; print('alive')"
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          
+          # Readiness probe - check if dependencies are loaded
+          readinessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "from transformers import AutoTokenizer; print('ready')"
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 3
+          
+          # Startup probe - allow extra time for model download on first run
+          startupProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import torch; from transformers import AutoTokenizer; print('started')"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 15
+            failureThreshold: 30
+      
+      # Volumes
+      volumes:
+        - name: huggingface-cache
+          persistentVolumeClaim:
+            claimName: huggingface-cache-pvc

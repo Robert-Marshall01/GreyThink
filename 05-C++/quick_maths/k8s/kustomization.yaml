@@ -1,0 +1,29 @@
+# ==============================================================================
+# Quick Maths - Kustomization File
+# Manages all Kubernetes resources together
+# ==============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: quick-maths
+
+# Common labels applied to all resources
+commonLabels:
+  app: quick-maths
+  managed-by: kustomize
+
+# Resources to include
+resources:
+  - deployment.yaml
+  - service.yaml
+  - configmap.yaml
+
+# Namespace (uncomment and modify as needed)
+# namespace: quick-maths
+
+# Image customization (useful for different environments)
+# images:
+#   - name: quick_maths
+#     newTag: v1.0.0

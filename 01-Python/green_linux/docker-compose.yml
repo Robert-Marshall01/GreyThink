@@ -1,0 +1,130 @@
+# =============================================================================
+# PowerApp - Docker Compose Configuration
+# =============================================================================
+# This file defines services for development, testing, and CLI usage.
+#
+# Usage:
+#   docker compose up powerapp-cli    # Run CLI with mock power data
+#   docker compose up powerapp-test   # Run test suite
+#   docker compose run powerapp-dev   # Interactive development shell
+#
+# For GUI (requires X11 forwarding):
+#   xhost +local:docker
+#   docker compose up powerapp-gui
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # CLI Service - Run power reader CLI
+  # ---------------------------------------------------------------------------
+  powerapp-cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: powerapp:latest
+    container_name: powerapp-cli
+    environment:
+      - POWERAPP_MOCK_POWER=1
+      - XDG_CONFIG_HOME=/home/powerapp/.config
+      - XDG_STATE_HOME=/home/powerapp/.local/state
+    volumes:
+      - powerapp-config:/home/powerapp/.config/powerapp
+      - powerapp-state:/home/powerapp/.local/state/powerapp
+    command: ["python", "-m", "powerapp.cli.power_reader", "--pretty"]
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # Test Service - Run pytest suite
+  # ---------------------------------------------------------------------------
+  powerapp-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    image: powerapp:dev
+    container_name: powerapp-test
+    environment:
+      - POWERAPP_MOCK_POWER=1
+      - PYTEST_CURRENT_TEST=1
+      - XDG_CONFIG_HOME=/home/powerapp/.config
+      - XDG_STATE_HOME=/home/powerapp/.local/state
+    volumes:
+      # Mount source for live testing during development
+      - ./powerapp:/app/powerapp:ro
+      - ./tests:/app/tests:ro
+      - powerapp-config:/home/powerapp/.config/powerapp
+    command: ["pytest", "-v", "--tb=short", "-x"]
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # Development Service - Interactive shell for development
+  # ---------------------------------------------------------------------------
+  powerapp-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    image: powerapp:dev
+    container_name: powerapp-dev
+    stdin_open: true
+    tty: true
+    environment:
+      - POWERAPP_MOCK_POWER=1
+      - XDG_CONFIG_HOME=/home/powerapp/.config
+      - XDG_STATE_HOME=/home/powerapp/.local/state
+    volumes:
+      # Mount source for live development
+      - ./powerapp:/app/powerapp
+      - ./tests:/app/tests
+      - ./scripts:/app/scripts:ro
+      - powerapp-config:/home/powerapp/.config/powerapp
+      - powerapp-state:/home/powerapp/.local/state/powerapp
+    command: ["/bin/bash"]
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # GUI Service - GTK4 application (requires X11 forwarding)
+  # ---------------------------------------------------------------------------
+  powerapp-gui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: gui
+    image: powerapp:gui
+    container_name: powerapp-gui
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+      - POWERAPP_MOCK_POWER=1
+      - XDG_CONFIG_HOME=/home/powerapp/.config
+      - XDG_STATE_HOME=/home/powerapp/.local/state
+      # Wayland support (optional)
+      - WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}
+      - XDG_RUNTIME_DIR=/tmp
+    volumes:
+      # X11 socket for display
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # Wayland socket (optional)
+      - ${XDG_RUNTIME_DIR:-/run/user/1000}/${WAYLAND_DISPLAY:-wayland-0}:/tmp/${WAYLAND_DISPLAY:-wayland-0}:rw
+      # Persist config
+      - powerapp-config:/home/powerapp/.config/powerapp
+      - powerapp-state:/home/powerapp/.local/state/powerapp
+    # Allow access to host display
+    network_mode: host
+    restart: "no"
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  powerapp-config:
+    driver: local
+  powerapp-state:
+    driver: local
+
+# =============================================================================
+# Networks (default bridge is sufficient for this app)
+# =============================================================================
+networks:
+  default:
+    name: powerapp-network

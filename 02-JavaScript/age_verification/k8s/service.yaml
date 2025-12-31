@@ -1,0 +1,45 @@
+# ============================================
+# Service Configuration for Age Verification
+# ============================================
+# NOTE: This application is a CLI tool that requires 
+# interactive terminal input (stdin/tty). It does NOT 
+# expose any HTTP/TCP ports or network services.
+#
+# A Kubernetes Service is typically NOT needed for this 
+# type of application. This file is provided as a template
+# in case the application is modified to include a web 
+# interface or API in the future.
+# ============================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: age-verification
+  labels:
+    app: age-verification
+spec:
+  # ClusterIP with no ports since this is a CLI app
+  type: ClusterIP
+  clusterIP: None  # Headless service
+  selector:
+    app: age-verification
+
+---
+# Alternative: If the app is modified to expose a web interface
+# Uncomment and modify the service below:
+#
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: age-verification-web
+#   labels:
+#     app: age-verification
+# spec:
+#   type: ClusterIP
+#   ports:
+#     - port: 80
+#       targetPort: 3000
+#       protocol: TCP
+#       name: http
+#   selector:
+#     app: age-verification

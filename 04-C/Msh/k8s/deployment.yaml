@@ -1,0 +1,178 @@
+# SPDX-License-Identifier: MIT
+# Kubernetes Deployment for Msh (Marshall Shell)
+# This is a Job-based deployment as Msh is an interactive CLI application
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: msh
+  namespace: default
+  labels:
+    app: msh
+    app.kubernetes.io/name: msh
+    app.kubernetes.io/instance: msh-prod
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/component: shell
+    app.kubernetes.io/part-of: msh-project
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: msh
+      app.kubernetes.io/name: msh
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: msh
+        app.kubernetes.io/name: msh
+        app.kubernetes.io/instance: msh-prod
+        app.kubernetes.io/version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "false"
+    spec:
+      # Security context for the pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      
+      # Service account
+      serviceAccountName: default
+      automountServiceAccountToken: false
+      
+      containers:
+        - name: msh
+          image: msh:1.0.0
+          imagePullPolicy: IfNotPresent
+          
+          # Container security context
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          
+          # Environment variables from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: msh-config
+          
+          # Resource limits and requests
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+              ephemeral-storage: "50Mi"
+            limits:
+              cpu: "500m"
+              memory: "128Mi"
+              ephemeral-storage: "100Mi"
+          
+          # Volume mounts
+          volumeMounts:
+            - name: msh-data
+              mountPath: /app/.msh_apt
+            - name: tmp
+              mountPath: /tmp
+          
+          # Liveness probe - checks if process is alive
+          livenessProbe:
+            exec:
+              command:
+                - test
+                - -f
+                - /app/msh
+            initialDelaySeconds: 5
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # Readiness probe - checks if container is ready
+          readinessProbe:
+            exec:
+              command:
+                - test
+                - -f
+                - /app/msh
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # Startup probe - for slow starting containers
+          startupProbe:
+            exec:
+              command:
+                - test
+                - -f
+                - /app/msh
+            initialDelaySeconds: 1
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 10
+          
+          # TTY for interactive shell sessions
+          stdin: true
+          tty: true
+      
+      # Volumes
+      volumes:
+        - name: msh-data
+          persistentVolumeClaim:
+            claimName: msh-data-pvc
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+      
+      # Node selector (optional - uncomment if needed)
+      # nodeSelector:
+      #   kubernetes.io/os: linux
+      
+      # Tolerations (optional)
+      tolerations: []
+      
+      # Pod anti-affinity for HA (optional for multi-replica)
+      # affinity:
+      #   podAntiAffinity:
+      #     preferredDuringSchedulingIgnoredDuringExecution:
+      #       - weight: 100
+      #         podAffinityTerm:
+      #           labelSelector:
+      #             matchLabels:
+      #               app: msh
+      #           topologyKey: kubernetes.io/hostname
+      
+      # Termination grace period
+      terminationGracePeriodSeconds: 30
+      
+      # Restart policy
+      restartPolicy: Always
+
+---
+# PersistentVolumeClaim for shell data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: msh-data-pvc
+  namespace: default
+  labels:
+    app: msh
+    app.kubernetes.io/name: msh
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+  # Uncomment to use specific storage class
+  # storageClassName: standard

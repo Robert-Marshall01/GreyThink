@@ -1,0 +1,38 @@
+# ==============================================================================
+# Quick Maths - Kubernetes ConfigMap
+# Configuration for the C++ console application
+# ==============================================================================
+#
+# NOTE: The current Quick Maths application does not require external
+# configuration. This ConfigMap is provided as a template for future use
+# if environment-based configuration is added to the application.
+#
+# ==============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: quick-maths-config
+  labels:
+    app: quick-maths
+    version: v1
+data:
+  # Game configuration (template for future use)
+  # These values could be read by the application if environment variable
+  # support is added to the C++ code
+  
+  # Maximum player level
+  MAX_LEVEL: "10"
+  
+  # Starting lives
+  STARTING_LIVES: "3"
+  
+  # XP per correct answer
+  XP_PER_CORRECT: "100"
+  
+  # Points per correct answer
+  POINTS_PER_CORRECT: "10"
+  
+  # Application info
+  APP_NAME: "Quick Maths"
+  APP_VERSION: "1.0.0"

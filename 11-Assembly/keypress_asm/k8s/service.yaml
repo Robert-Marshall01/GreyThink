@@ -1,0 +1,19 @@
+# Kubernetes Service for keypress_asm
+# Note: This is a CLI application that doesn't expose network ports.
+# This service is provided for completeness and potential future extensions.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: keypress-asm
+  labels:
+    app: keypress-asm
+    app.kubernetes.io/name: keypress-asm
+    app.kubernetes.io/component: cli
+    app.kubernetes.io/part-of: keypress-asm
+spec:
+  # ClusterIP with no ports - headless service for pod discovery
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: keypress-asm

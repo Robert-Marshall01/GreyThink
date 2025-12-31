@@ -1,0 +1,35 @@
+# Docker Compose for net_util
+# Minimal configuration for running network diagnostics
+
+version: "3.9"
+
+services:
+  net-util:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: net-util:latest
+    container_name: net-util
+    hostname: net-util-container
+    # Network mode host gives access to host network for accurate diagnostics
+    # Use bridge mode for isolated testing
+    network_mode: bridge
+    # Run interactively for CLI tool
+    stdin_open: true
+    tty: true
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    # Read-only filesystem for security
+    read_only: true
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+        reservations:
+          cpus: "0.1"
+          memory: 32M
+    # Restart policy
+    restart: "no"

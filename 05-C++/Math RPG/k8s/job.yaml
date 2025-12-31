@@ -1,0 +1,63 @@
+# =============================================================================
+# Kubernetes Job for Math RPG (one-time execution)
+# =============================================================================
+# This Job runs the Math RPG in sample mode once and completes.
+# Useful for CI/CD testing or generating sample output.
+# =============================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: math-rpg-sample-job
+  namespace: math-rpg
+  labels:
+    app.kubernetes.io/name: math-rpg
+    app.kubernetes.io/component: job
+spec:
+  ttlSecondsAfterFinished: 300  # Clean up after 5 minutes
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: math-rpg
+        app.kubernetes.io/component: job
+    spec:
+      # Disable automounting of service account token
+      automountServiceAccountToken: false
+      
+      # Security context for the pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+
+      containers:
+        - name: math-rpg
+          image: math-rpg:1.0.0
+          imagePullPolicy: IfNotPresent
+          
+          # Run in sample mode
+          args:
+            - "--sample"
+            - "12345"
+            - "10"
+          
+          # Resource requests and limits
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+              ephemeral-storage: "10Mi"
+            limits:
+              cpu: "250m"
+              memory: "128Mi"
+              ephemeral-storage: "50Mi"
+          
+          # Security context for the container
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+      restartPolicy: Never

@@ -1,0 +1,53 @@
+# =============================================================================
+# docker-compose.yml - clock_asm development and runtime configuration
+# =============================================================================
+# Usage:
+#   docker compose build    # Build the image
+#   docker compose up       # Run the clock (Ctrl+C to stop)
+#   docker compose down     # Stop and remove containers
+# =============================================================================
+
+services:
+  clock:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: clock_asm:latest
+    container_name: clock_asm
+    # Interactive mode to see stdout output
+    stdin_open: true
+    tty: true
+    # Restart policy for production
+    restart: unless-stopped
+    # Security: Run as non-root user (UID 1000)
+    user: "1000:1000"
+    # Read-only root filesystem for security
+    read_only: true
+    # Drop all capabilities (binary uses only syscalls)
+    cap_drop:
+      - ALL
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 8M
+        reservations:
+          cpus: "0.01"
+          memory: 2M
+    # Health check (simple process check since it's a console app)
+    healthcheck:
+      test: ["CMD-SHELL", "exit 0"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    # Logging configuration
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "3"

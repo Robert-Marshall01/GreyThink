@@ -1,0 +1,162 @@
+# =============================================================================
+# Java Search Engine - Kubernetes Deployment
+# =============================================================================
+# This deployment runs the Web Search service as a long-running Job processor
+# that can handle search queries via a simple REST wrapper or batch processing.
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-search
+  namespace: default
+  labels:
+    app: java-search
+    component: search-engine
+    version: v1.0.0
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: java-search
+      component: search-engine
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: java-search
+        component: search-engine
+        version: v1.0.0
+      annotations:
+        prometheus.io/scrape: "false"
+    spec:
+      # Security context at pod level
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Graceful termination
+      terminationGracePeriodSeconds: 30
+
+      # Disable automounting service account token (not needed for this app)
+      automountServiceAccountToken: false
+
+      containers:
+        - name: java-search
+          image: java-search:websearch
+          imagePullPolicy: IfNotPresent
+
+          # Container security context
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+          # Environment variables from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: java-search-config
+                optional: true
+
+          # Java-specific environment variables
+          env:
+            - name: JAVA_OPTS
+              value: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+
+          # Resource requests and limits
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+              ephemeral-storage: 100Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+              ephemeral-storage: 500Mi
+
+          # Liveness probe - ensures container is alive
+          livenessProbe:
+            exec:
+              command:
+                - java
+                - -version
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
+
+          # Readiness probe - ensures container can accept traffic
+          readinessProbe:
+            exec:
+              command:
+                - java
+                - -version
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+
+          # Startup probe - for slow starting containers
+          startupProbe:
+            exec:
+              command:
+                - java
+                - -version
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 10
+            failureThreshold: 30
+
+          # Volume mounts
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+            - name: app-cache
+              mountPath: /app/.cache
+
+      # Volumes
+      volumes:
+        - name: tmp-volume
+          emptyDir:
+            sizeLimit: 100Mi
+        - name: app-cache
+          emptyDir:
+            sizeLimit: 50Mi
+
+      # Node selection and tolerations
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: java-search
+                topologyKey: kubernetes.io/hostname
+
+      # Restart policy
+      restartPolicy: Always
+
+      # DNS policy
+      dnsPolicy: ClusterFirst

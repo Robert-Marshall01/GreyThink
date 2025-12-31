@@ -1,0 +1,55 @@
+# =============================================================================
+# Docker Compose for house_gui - x86-64 Assembly SDL2 GUI Application
+# =============================================================================
+# 
+# Usage:
+#   Build:  docker compose build
+#   Run:    xhost +local:docker && docker compose up
+#   Stop:   docker compose down
+#
+# Note: Requires X11 display access for GUI rendering
+# =============================================================================
+
+services:
+  house-gui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: house-gui
+    image: house-gui:0.1.0
+    
+    # X11 display forwarding for GUI
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+      - SDL_VIDEODRIVER=x11
+    
+    # Mount X11 socket for display access
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+      - ${XAUTHORITY:-$HOME/.Xauthority}:/home/appuser/.Xauthority:ro
+    
+    # Network mode for X11 communication
+    network_mode: host
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 128M
+        reservations:
+          cpus: '0.10'
+          memory: 32M
+    
+    # Restart policy
+    restart: "no"
+    
+    # Labels
+    labels:
+      - "app.name=house-gui"
+      - "app.version=0.1.0"
+      - "app.description=House GUI - NASM + SDL2 Assembly Demo"

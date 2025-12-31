@@ -1,0 +1,24 @@
+# =============================================================================
+# Kubernetes Service for calculator-asm
+# Note: This is a CLI application without network ports
+# Service is provided for Kubernetes ecosystem consistency
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: calculator-asm
+  namespace: default
+  labels:
+    app: calculator-asm
+    version: "0.2.0"
+    app.kubernetes.io/name: calculator-asm
+    app.kubernetes.io/version: "0.2.0"
+spec:
+  # ClusterIP None (headless) since this is a CLI application
+  # Allows direct pod addressing for kubectl exec
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: calculator-asm
+  # No ports exposed - this is an interactive CLI application
+  # Access via: kubectl exec -it <pod-name> -- /app/calculator_asm

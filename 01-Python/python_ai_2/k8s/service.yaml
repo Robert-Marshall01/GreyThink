@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: MIT
+# Kubernetes Service for python_ai_2 - Flan-T5 Chatbot
+# Note: This is a CLI application without HTTP endpoints.
+# The Service is provided for potential future API extensions or internal DNS resolution.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: flan-t5-chatbot
+  labels:
+    app: flan-t5-chatbot
+    app.kubernetes.io/name: flan-t5-chatbot
+    app.kubernetes.io/component: chatbot
+    app.kubernetes.io/part-of: python-ai-2
+spec:
+  # ClusterIP for internal cluster communication
+  # Change to LoadBalancer or NodePort if external access is needed
+  type: ClusterIP
+  
+  selector:
+    app: flan-t5-chatbot
+  
+  # Placeholder port - update if/when HTTP API is added
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP

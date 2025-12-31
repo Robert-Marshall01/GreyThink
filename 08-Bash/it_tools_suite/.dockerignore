@@ -1,0 +1,37 @@
+# Docker ignore file for IT Tools Suite
+
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+*.md
+LICENSE
+
+# Docker files (don't include in context)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Kubernetes manifests
+k8s/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.bak
+*.backup
+backup_*.tar.gz
+
+# Logs
+*.log

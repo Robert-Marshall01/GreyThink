@@ -1,0 +1,21 @@
+# Note: This console application does not expose network services.
+# This Service is provided for completeness and potential future enhancements
+# (e.g., if the app is modified to include a web API).
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: unit-converter
+  labels:
+    app: unit-converter
+spec:
+  type: ClusterIP
+  selector:
+    app: unit-converter
+  ports: []
+  # Uncomment and configure if network ports are added in the future:
+  # ports:
+  #   - name: http
+  #     port: 80
+  #     targetPort: 8080
+  #     protocol: TCP

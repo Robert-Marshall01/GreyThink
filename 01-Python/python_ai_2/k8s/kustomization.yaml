@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: MIT
+# Kubernetes Kustomization file for python_ai_2 - Flan-T5 Chatbot
+# Use with: kubectl apply -k k8s/
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: flan-t5-chatbot
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: flan-t5-chatbot
+  app.kubernetes.io/part-of: python-ai-2
+  app.kubernetes.io/managed-by: kustomize
+
+# Resources to include
+resources:
+  - configmap.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+
+# Optional: Set namespace (uncomment to use)
+# namespace: ai-workloads
+
+# Optional: Set common annotations
+# commonAnnotations:
+#   owner: greythink

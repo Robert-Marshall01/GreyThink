@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: MIT
+# Kubernetes PersistentVolumeClaim for Hugging Face model cache
+# Ensures models are downloaded once and persisted across pod restarts
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: huggingface-cache-pvc
+  labels:
+    app: flan-t5-chatbot
+    app.kubernetes.io/name: flan-t5-chatbot
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: python-ai-2
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      # Flan-T5-base model is ~1GB, allocating 5Gi for safety
+      storage: 5Gi
+  # Uncomment and specify a storage class if needed
+  # storageClassName: standard

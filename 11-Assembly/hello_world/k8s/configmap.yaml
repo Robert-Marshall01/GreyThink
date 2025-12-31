@@ -1,0 +1,23 @@
+# =============================================================================
+# Kubernetes ConfigMap for Hello World Assembly Application
+# =============================================================================
+# This ConfigMap contains application configuration.
+# For this simple CLI app, it mainly serves as documentation and
+# can be extended if environment-specific configuration is needed.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hello-world-asm-config
+  labels:
+    app: hello-world-asm
+data:
+  # Application metadata
+  APP_NAME: "hello-world-asm"
+  APP_VERSION: "1.0.0"
+  APP_LANGUAGE: "x86-assembly"
+  APP_ASSEMBLER: "nasm"
+  
+  # Build information
+  BUILD_ARCH: "i386"
+  BUILD_FORMAT: "elf32"

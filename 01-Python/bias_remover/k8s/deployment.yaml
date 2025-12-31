@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bias-remover
+  labels:
+    app: bias-remover
+    version: v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bias-remover
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: bias-remover
+        version: v1
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: bias-remover
+          image: bias-remover:1.0.0
+          imagePullPolicy: IfNotPresent
+          # Interactive CLI - keep container running
+          stdin: true
+          tty: true
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "32Mi"
+              ephemeral-storage: "10Mi"
+            limits:
+              cpu: "500m"
+              memory: "128Mi"
+              ephemeral-storage: "50Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          # Liveness probe - check if process is running
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "pgrep -f 'python bias_remover.py' || exit 1"
+            initialDelaySeconds: 5
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Readiness probe
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "pgrep -f 'python bias_remover.py' || exit 1"
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      restartPolicy: Always

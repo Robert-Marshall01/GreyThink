@@ -1,0 +1,13 @@
+# =============================================================================
+# Kubernetes Namespace for Hello World Assembly Application (Optional)
+# =============================================================================
+# Provides isolation for the application resources.
+# Apply this first if you want to use a dedicated namespace.
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: hello-world-asm
+  labels:
+    app: hello-world-asm
+    environment: production

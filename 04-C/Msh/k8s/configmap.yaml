@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: MIT
+# Kubernetes ConfigMap for Msh (Marshall Shell)
+# Contains environment configuration for the shell
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: msh-config
+  namespace: default
+  labels:
+    app: msh
+    app.kubernetes.io/name: msh
+    app.kubernetes.io/instance: msh-prod
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: msh-project
+    app.kubernetes.io/managed-by: kubectl
+data:
+  # MSH environment configuration
+  
+  # Forward Linux commands to WSL (0 = disabled in container context)
+  MSH_FORWARD_LINUX_CMDS: "0"
+  
+  # Terminal type for proper display
+  TERM: "xterm-256color"
+  
+  # Home directory
+  HOME: "/home/msh"
+  
+  # Shell prompt customization (if supported)
+  PS1: "\\u@\\h:\\w\\$ "
+  
+  # Path configuration
+  PATH: "/app:/usr/local/bin:/usr/bin:/bin"
+  
+  # Language and locale settings
+  LANG: "en_US.UTF-8"
+  LC_ALL: "en_US.UTF-8"
+  
+  # Shell history configuration
+  HISTSIZE: "1000"
+  HISTFILESIZE: "2000"

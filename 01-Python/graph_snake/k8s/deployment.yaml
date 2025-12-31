@@ -1,0 +1,124 @@
+# =============================================================================
+# Kubernetes Deployment for graph-plotter
+# Runs the graph-plotter as a Job-like workload (batch processing)
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graph-plotter
+  labels:
+    app: graph-plotter
+    app.kubernetes.io/name: graph-plotter
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: cli-tool
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: graph-plotter
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: graph-plotter
+        app.kubernetes.io/name: graph-plotter
+        app.kubernetes.io/version: "0.1.0"
+    spec:
+      # Disable automounted service account token (not needed for this app)
+      automountServiceAccountToken: false
+      
+      # Security context for the pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      
+      containers:
+        - name: graph-plotter
+          image: graph-plotter:0.1.0
+          imagePullPolicy: IfNotPresent
+          
+          # Override entrypoint to keep container running for job submissions
+          # In production, consider using Kubernetes Jobs instead
+          command: ["sleep"]
+          args: ["infinity"]
+          
+          # Environment variables from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: graph-plotter-config
+          
+          # Resource requests and limits
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+              ephemeral-storage: "50Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+              ephemeral-storage: "200Mi"
+          
+          # Security context for container
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          
+          # Volume mounts
+          volumeMounts:
+            - name: output-volume
+              mountPath: /app/output
+            - name: tmp-volume
+              mountPath: /tmp
+            - name: cache-volume
+              mountPath: /home/appuser/.cache
+          
+          # Liveness probe - check if Python is responsive
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "print('alive')"
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # Readiness probe - check if the application module loads
+          readinessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "from graph_plotter import parse_numbers; parse_numbers('1 2 3')"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      
+      # Volumes
+      volumes:
+        - name: output-volume
+          emptyDir:
+            sizeLimit: 100Mi
+        - name: tmp-volume
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: cache-volume
+          emptyDir:
+            sizeLimit: 32Mi
+      
+      # Restart policy
+      restartPolicy: Always
+      
+      # Termination grace period
+      terminationGracePeriodSeconds: 30

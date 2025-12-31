@@ -1,0 +1,12 @@
+# ============================================
+# Namespace for Age Verification Application
+# ============================================
+# Use this to isolate the application in its own namespace
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: age-verification
+  labels:
+    app: age-verification
+    environment: production

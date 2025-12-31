@@ -1,0 +1,19 @@
+# =============================================================================
+# Kubernetes ConfigMap for house-gui Application
+# =============================================================================
+# Contains environment configuration for SDL2 display settings
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: house-gui-config
+  namespace: house-gui
+  labels:
+    app.kubernetes.io/name: house-gui
+    app.kubernetes.io/component: config
+    app.kubernetes.io/version: "0.1.0"
+data:
+  # Application configuration
+  # Note: DISPLAY and SDL_VIDEODRIVER are set directly in deployment env
+  # for flexibility across different runtime environments
+  LOG_LEVEL: "info"

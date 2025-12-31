@@ -1,0 +1,30 @@
+# docker-compose.yml for keypress_asm
+# Note: This is an interactive terminal application requiring TTY support
+
+version: "3.9"
+
+services:
+  keypress_asm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: keypress_asm:latest
+    container_name: keypress_asm
+    # Enable interactive mode for stdin/stdout
+    stdin_open: true
+    tty: true
+    # Security settings
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    # Resource constraints
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 32M
+        reservations:
+          cpus: "0.1"
+          memory: 8M
+    # Restart policy
+    restart: "no"

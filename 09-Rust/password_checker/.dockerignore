@@ -1,0 +1,53 @@
+# =============================================================================
+# .dockerignore - Exclude files from Docker build context
+# =============================================================================
+
+# Build artifacts
+target/
+debug/
+release/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Documentation (not needed in image)
+*.md
+!README.md
+LICENSE
+THIRD-PARTY-*.md
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Rust specific
+**/*.rs.bk
+
+# Docker files (prevent recursive builds)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Kubernetes manifests
+k8s/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Test files
+tests/
+*_test.rs
+
+# Misc
+*.log
+*.tmp

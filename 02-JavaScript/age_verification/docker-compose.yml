@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  age-verification:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: age-verification:latest
+    container_name: age-verification-cli
+    # Interactive mode required for CLI input
+    stdin_open: true
+    tty: true
+    # Restart policy
+    restart: "no"
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    # Read-only root filesystem for security
+    read_only: true
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    # Environment variables
+    environment:
+      - NODE_ENV=production

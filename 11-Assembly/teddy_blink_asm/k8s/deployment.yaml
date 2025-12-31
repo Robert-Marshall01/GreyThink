@@ -1,0 +1,101 @@
+# Kubernetes Deployment for teddy-blink-asm
+# This is an interactive console application - runs as a Job for one-time execution
+# or as a Deployment if continuous animation is desired
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: teddy-blink-asm
+  labels:
+    app: teddy-blink-asm
+    version: "1.0.0"
+    component: animation
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: teddy-blink-asm
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: teddy-blink-asm
+        version: "1.0.0"
+        component: animation
+    spec:
+      # Disable automounted service account token (not needed)
+      automountServiceAccountToken: false
+      
+      # Security context at pod level
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        runAsNonRoot: true
+
+      containers:
+        - name: teddy-blink-asm
+          image: teddy-blink-asm:1.0.0
+          imagePullPolicy: IfNotPresent
+          
+          # Environment variables from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: teddy-blink-config
+          
+          # Container security context
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          
+          # Resource requests and limits
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "8Mi"
+              ephemeral-storage: "10Mi"
+            limits:
+              cpu: "100m"
+              memory: "32Mi"
+              ephemeral-storage: "50Mi"
+          
+          # TTY required for terminal animation
+          tty: true
+          stdin: true
+          
+          # Liveness probe - check if process is running
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "pgrep teddy_blink_asm || exit 1"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # Readiness probe - same as liveness for this simple app
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "pgrep teddy_blink_asm || exit 1"
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+      # Graceful termination
+      terminationGracePeriodSeconds: 10
+      
+      # Restart policy
+      restartPolicy: Always

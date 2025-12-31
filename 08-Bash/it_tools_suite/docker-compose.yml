@@ -1,0 +1,60 @@
+# Docker Compose for IT Tools Suite
+# Run with: docker-compose run --rm it-tools
+
+version: "3.8"
+
+services:
+  it-tools:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: it-tools-suite:latest
+    container_name: it-tools-suite
+    hostname: it-tools-container
+    
+    # Interactive mode for CLI tool
+    stdin_open: true
+    tty: true
+    
+    # Run as root for full system access (required for some IT operations)
+    # Remove this line to run as non-root user with limited functionality
+    user: root
+    
+    # Volumes for persistent data
+    volumes:
+      - backups:/data/backups
+      - logs:/data/logs
+      # Mount host logs for viewing (read-only)
+      - /var/log:/host/log:ro
+    
+    # Environment variables
+    environment:
+      - TERM=xterm-256color
+      - BACKUP_DIR=/data/backups
+      - TZ=UTC
+    
+    # Network mode for network tools to work properly
+    network_mode: host
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    # Restart policy
+    restart: "no"
+
+volumes:
+  backups:
+    driver: local
+  logs:
+    driver: local

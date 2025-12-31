@@ -1,0 +1,99 @@
+# Kubernetes Deployment for keypress_asm
+# Note: This is an interactive CLI application; Kubernetes deployment
+# is provided for completeness but the app is best run interactively.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keypress-asm
+  labels:
+    app: keypress-asm
+    app.kubernetes.io/name: keypress-asm
+    app.kubernetes.io/component: cli
+    app.kubernetes.io/part-of: keypress-asm
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keypress-asm
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: keypress-asm
+        app.kubernetes.io/name: keypress-asm
+        app.kubernetes.io/component: cli
+    spec:
+      # Disable service account token automounting (not needed for this app)
+      automountServiceAccountToken: false
+      
+      # Security context at pod level
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      
+      containers:
+        - name: keypress-asm
+          image: keypress_asm:1.0.0
+          imagePullPolicy: IfNotPresent
+          
+          # Enable TTY for interactive input
+          stdin: true
+          tty: true
+          
+          # Resource management
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "8Mi"
+              ephemeral-storage: "10Mi"
+            limits:
+              cpu: "100m"
+              memory: "32Mi"
+              ephemeral-storage: "50Mi"
+          
+          # Container security context
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          
+          # Liveness probe - check if process exists
+          # Note: For CLI apps, this is a basic check
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "test -f /app/keypress_asm"
+            initialDelaySeconds: 5
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # Readiness probe
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "test -x /app/keypress_asm"
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+      
+      # Restart policy
+      restartPolicy: Always
+      
+      # Termination grace period
+      terminationGracePeriodSeconds: 10

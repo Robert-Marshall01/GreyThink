@@ -1,0 +1,24 @@
+# =============================================================================
+# Kubernetes Service for Hello World Assembly Application
+# =============================================================================
+# Note: This is a CLI application without network services.
+# This Service is included for completeness and can be used if the
+# application is extended to include network functionality.
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-world-asm
+  labels:
+    app: hello-world-asm
+spec:
+  # ClusterIP type - internal cluster access only
+  type: ClusterIP
+  selector:
+    app: hello-world-asm
+  ports:
+    # Placeholder port - update if application exposes a port
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP

@@ -1,0 +1,21 @@
+# =============================================================================
+# Kubernetes ConfigMap for Math RPG
+# =============================================================================
+# This ConfigMap stores application configuration that can be modified
+# without rebuilding the container image.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: math-rpg-config
+  namespace: math-rpg
+  labels:
+    app.kubernetes.io/name: math-rpg
+    app.kubernetes.io/component: config
+data:
+  # Default seed for sample/demo mode (deterministic output)
+  SAMPLE_SEED: "12345"
+  # Default number of questions in sample mode
+  SAMPLE_COUNT: "10"
+  # Application mode: "interactive" or "sample"
+  APP_MODE: "sample"

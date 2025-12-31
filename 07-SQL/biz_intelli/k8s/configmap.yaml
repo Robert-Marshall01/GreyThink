@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config
+  namespace: biz-intelli
+  labels:
+    app: biz-intelli
+    component: database
+data:
+  MYSQL_DATABASE: "biz_intelli_db"
+  MYSQL_USER: "bi_user"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-init-scripts
+  namespace: biz-intelli
+  labels:
+    app: biz-intelli
+    component: database
+data:
+  01-init.sql: |
+    -- 1. Create and switch to your database
+    CREATE DATABASE IF NOT EXISTS biz_intelli_db;
+    USE biz_intelli_db;
+
+    -- 2. Create a sales table (only if it doesn't exist)
+    CREATE TABLE IF NOT EXISTS Sales (
+        id INT PRIMARY KEY,
+        product VARCHAR(50),
+        amount DECIMAL(10,2)
+    );
+
+    -- 3. Reset table so inserts don't duplicate
+    TRUNCATE TABLE Sales;
+
+    -- 4. Insert some sample data
+    INSERT INTO Sales VALUES
+    (1, 'Bike', 500.00),
+    (2, 'Weights', 50.00),
+    (3, 'Bottle', 10.00),
+    (4, 'Pants', 20.00),
+    (5, 'Shirt', 10.00),
+    (6, 'Monitor', 300.00),
+    (7, 'Bread', 3.00),
+    (8, 'Laptop', 1500.00),
+    (9, 'Plushy', 20.00),
+    (10, 'Helmet', 55.00);
