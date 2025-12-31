@@ -1,0 +1,21 @@
+# =============================================================================
+# Kubernetes ConfigMap for clock_asm
+# =============================================================================
+# Note: This application requires no configuration, but the ConfigMap is 
+# included for extensibility and as a template for future enhancements
+# (e.g., timezone configuration if the app is extended)
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clock-asm-config
+  namespace: clock-asm
+  labels:
+    app.kubernetes.io/name: clock-asm
+    app.kubernetes.io/component: config
+data:
+  # Placeholder configuration
+  # The current implementation uses UTC (CLOCK_REALTIME)
+  # Future: could add timezone offset support
+  TZ: "UTC"
+  LOG_LEVEL: "info"

@@ -1,0 +1,19 @@
+# =============================================================================
+# Kubernetes Service for input_asm
+# Note: This is a CLI application without network services.
+# Service is provided for completeness and potential future extensions.
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: input-asm
+  labels:
+    app: input-asm
+    version: "0.2.0"
+    component: cli
+spec:
+  # ClusterIP with no ports - headless service for pod discovery
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: input-asm

@@ -1,0 +1,24 @@
+{
+  "name": "age-verification",
+  "version": "1.0.0",
+  "description": "Age verification CLI application for media content access control",
+  "main": "age_verification.js",
+  "scripts": {
+    "start": "node age_verification.js",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "keywords": [
+    "age-verification",
+    "cli",
+    "media",
+    "content-rating"
+  ],
+  "author": "Robert Marshall",
+  "license": "SEE LICENSE FILE",
+  "dependencies": {
+    "prompt-sync": "^4.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

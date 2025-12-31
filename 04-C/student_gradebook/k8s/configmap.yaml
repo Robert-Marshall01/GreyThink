@@ -1,0 +1,27 @@
+# =============================================================================
+# Student Gradebook - Kubernetes ConfigMap
+# =============================================================================
+# Configuration values for the gradebook application
+# Can be extended to externalize application settings
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: student-gradebook-config
+  labels:
+    app: student-gradebook
+    app.kubernetes.io/name: student-gradebook
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: gradebook-system
+data:
+  # Application metadata
+  APP_NAME: "Student Gradebook System"
+  APP_VERSION: "1.0.0"
+  APP_ENVIRONMENT: "production"
+  
+  # Logging configuration (for future enhancements)
+  LOG_LEVEL: "INFO"
+  
+  # Display settings
+  MAX_NAME_LENGTH: "10"
+  MAX_STUDENTS: "20"

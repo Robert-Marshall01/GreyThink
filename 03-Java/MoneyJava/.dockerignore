@@ -1,0 +1,56 @@
+# =============================================================================
+# MoneyJava - Docker Ignore File
+# =============================================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE and editor files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+
+# Build artifacts
+*.class
+target/
+build/
+out/
+bin/
+
+# Documentation
+README.md
+LICENSE
+*.md
+docs/
+
+# Kubernetes manifests (not needed in image)
+k8s/
+
+# Docker files (not needed in image)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*~
+
+# User data (should be mounted as volume)
+users.dat

@@ -1,0 +1,37 @@
+# =============================================================================
+# Docker Ignore File - house_gui
+# =============================================================================
+
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+LICENSE
+VERSION
+
+# Build artifacts (will be created in container)
+*.o
+house_gui
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Kubernetes manifests (not needed in container image)
+k8s/
+
+# Docker files (avoid recursive inclusion)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Miscellaneous
+*.log
+*.tmp
+.DS_Store
+Thumbs.db

@@ -1,0 +1,102 @@
+# SPDX-License-Identifier: MIT
+# Docker Compose configuration for Msh (Marshall Shell)
+# Minimal setup for local development and testing
+
+version: "3.9"
+
+services:
+  msh:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: msh:latest
+    container_name: msh-shell
+    
+    # Interactive shell requires tty and stdin
+    stdin_open: true
+    tty: true
+    
+    # Environment variables
+    environment:
+      - MSH_FORWARD_LINUX_CMDS=0
+      - TERM=xterm-256color
+    
+    # Mount for persistent shell history/data (optional)
+    volumes:
+      - msh-data:/app/.msh_apt
+    
+    # Security: Run as non-root user
+    user: "1000:1000"
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+        reservations:
+          cpus: "0.1"
+          memory: 32M
+    
+    # Restart policy
+    restart: "no"
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "test", "-f", "/app/msh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    
+    # Network configuration
+    networks:
+      - msh-network
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    # Read-only root filesystem for security (app data in volume)
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M,mode=1777
+
+  # Development target with source mounted
+  msh-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    image: msh:dev
+    container_name: msh-dev
+    profiles:
+      - dev
+    
+    stdin_open: true
+    tty: true
+    
+    volumes:
+      - .:/build:ro
+      - msh-build-cache:/build/obj
+    
+    working_dir: /build
+    
+    environment:
+      - CC=gcc
+      - CXX=g++
+    
+    networks:
+      - msh-network
+
+networks:
+  msh-network:
+    driver: bridge
+    name: msh-network
+
+volumes:
+  msh-data:
+    name: msh-data
+  msh-build-cache:
+    name: msh-build-cache

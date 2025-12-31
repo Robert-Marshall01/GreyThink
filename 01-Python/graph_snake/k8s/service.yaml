@@ -1,0 +1,27 @@
+# =============================================================================
+# Kubernetes Service for graph-plotter
+# Note: This is a CLI tool, so the service is primarily for internal access
+# and pod discovery rather than external traffic
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: graph-plotter
+  labels:
+    app: graph-plotter
+    app.kubernetes.io/name: graph-plotter
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: cli-tool
+spec:
+  type: ClusterIP
+  # Headless service - direct pod access for batch jobs
+  clusterIP: None
+  selector:
+    app: graph-plotter
+  ports:
+    # No ports exposed - this is a CLI tool
+    # Port defined for service completeness and potential future metrics
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+      protocol: TCP

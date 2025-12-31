@@ -1,0 +1,51 @@
+# =============================================================================
+# MoneyJava - Kubernetes Service
+# =============================================================================
+# Note: This is a ClusterIP service for internal access.
+# For a GUI application, direct service exposure is not typical.
+# This service can be used for internal health monitoring or
+# if the app is extended to include a web interface.
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: moneyjava-service
+  namespace: default
+  labels:
+    app: moneyjava
+    tier: frontend
+spec:
+  type: ClusterIP
+  selector:
+    app: moneyjava
+  ports:
+    # Placeholder port - GUI apps don't expose network ports
+    # This can be updated if the app is extended with web capabilities
+    - name: app-port
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+
+---
+# =============================================================================
+# Headless Service for StatefulSet-like DNS resolution (optional)
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: moneyjava-headless
+  namespace: default
+  labels:
+    app: moneyjava
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: moneyjava
+  ports:
+    - name: app-port
+      protocol: TCP
+      port: 8080
+      targetPort: 8080

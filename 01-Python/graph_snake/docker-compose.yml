@@ -1,0 +1,55 @@
+# =============================================================================
+# Docker Compose for graph-plotter
+# Minimal configuration for local development and testing
+# =============================================================================
+
+services:
+  graph-plotter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: graph-plotter:latest
+    container_name: graph-plotter
+    
+    # Mount local output directory for plot files
+    volumes:
+      - ./output:/app/output:rw
+    
+    # Environment variables
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MPLBACKEND=Agg
+    
+    # Resource constraints
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    
+    # Temporary filesystem for matplotlib cache
+    tmpfs:
+      - /tmp:mode=1777,size=64M
+      - /home/appuser/.cache:mode=1777,size=32M
+
+# Example usage:
+# Generate a scatter plot:
+#   docker compose run --rm graph-plotter \
+#     --x "1 2 3 4 5" --y "2 4 1 5 3" --plot-type Scatter --output /app/output/scatter.png
+#
+# Generate a line plot:
+#   docker compose run --rm graph-plotter \
+#     --x "1 2 3 4 5" --y "1 4 9 16 25" --plot-type Line --output /app/output/line.png
+#
+# Generate a histogram:
+#   docker compose run --rm graph-plotter \
+#     --x "1" --y "1 2 2 3 3 3 4 4 5" --plot-type Histogram --output /app/output/hist.png

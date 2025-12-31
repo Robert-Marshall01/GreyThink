@@ -1,0 +1,29 @@
+# =============================================================================
+# Java Search Engine - Kubernetes Service
+# =============================================================================
+# ClusterIP service for internal cluster communication.
+# Note: This application is primarily a CLI tool; this service is provided
+# for potential future HTTP wrapper integration.
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: java-search
+  namespace: default
+  labels:
+    app: java-search
+    component: search-engine
+spec:
+  type: ClusterIP
+  selector:
+    app: java-search
+    component: search-engine
+  ports:
+    # Placeholder port - update when HTTP wrapper is added
+    - name: http
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+  # Session affinity for consistent routing
+  sessionAffinity: None

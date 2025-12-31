@@ -1,0 +1,26 @@
+# =============================================================================
+# Spectastic - ConfigMap
+# =============================================================================
+# Configuration for the spectastic application
+# Note: This is a GUI application; these configs are for build/distribution
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spectastic-config
+  namespace: spectastic
+  labels:
+    app.kubernetes.io/name: spectastic
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: spectastic
+data:
+  # Application configuration
+  APP_NAME: "spectastic"
+  APP_VERSION: "0.1.0"
+  LOG_LEVEL: "info"
+  
+  # Display configuration (for X11 forwarding scenarios)
+  DISPLAY: ":0"
+  
+  # Refresh interval in seconds
+  REFRESH_INTERVAL: "2"

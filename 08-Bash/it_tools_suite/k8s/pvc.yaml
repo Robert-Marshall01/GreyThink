@@ -1,0 +1,17 @@
+# Kubernetes PersistentVolumeClaim for IT Tools Suite backups
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: it-tools-backups-pvc
+  labels:
+    app: it-tools-suite
+    component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  # Uncomment and modify if using a specific storage class
+  # storageClassName: standard

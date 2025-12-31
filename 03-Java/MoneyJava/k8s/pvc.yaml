@@ -1,0 +1,22 @@
+# =============================================================================
+# MoneyJava - Kubernetes Persistent Volume Claim
+# =============================================================================
+# Persistent storage for user data (users.dat file)
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: moneyjava-pvc
+  namespace: default
+  labels:
+    app: moneyjava
+    tier: frontend
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+  # Uncomment and modify if using a specific storage class
+  # storageClassName: standard

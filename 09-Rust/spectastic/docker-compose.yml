@@ -1,0 +1,82 @@
+# =============================================================================
+# Spectastic - Docker Compose Configuration
+# =============================================================================
+# This configuration enables running the GUI application with X11 forwarding.
+# Usage: docker-compose up --build
+# =============================================================================
+
+version: "3.9"
+
+services:
+  spectastic:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    image: spectastic:latest
+    container_name: spectastic
+    
+    # Security context
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 512M
+        reservations:
+          cpus: "0.5"
+          memory: 128M
+    
+    # Environment variables for X11 display
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+      - XDG_RUNTIME_DIR=/tmp/runtime-spectastic
+    
+    # Volume mounts for X11 and system info access
+    volumes:
+      # X11 socket for GUI display
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+      # System information access (read-only)
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      # Temporary directory for runtime
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 64M
+    
+    # Network configuration
+    network_mode: host
+    
+    # Restart policy
+    restart: "no"
+    
+    # Labels
+    labels:
+      - "app.name=spectastic"
+      - "app.version=0.1.0"
+      - "app.description=System Inspector GUI"
+
+  # Build-only service for CI/CD pipelines
+  builder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    image: spectastic:builder
+    container_name: spectastic-builder
+    profiles:
+      - build
+    command: ["cargo", "build", "--release"]
+    volumes:
+      - ./target:/app/target
+      - cargo-cache:/usr/local/cargo/registry
+
+volumes:
+  cargo-cache:
+    name: spectastic-cargo-cache

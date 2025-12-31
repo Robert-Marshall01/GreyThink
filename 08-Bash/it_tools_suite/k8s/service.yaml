@@ -1,0 +1,18 @@
+# Kubernetes Service for IT Tools Suite
+# Note: This is a headless service since the tool is CLI-based
+# Used primarily for DNS resolution within the cluster
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: it-tools-suite
+  labels:
+    app: it-tools-suite
+    component: cli-tools
+spec:
+  # Headless service (no cluster IP) - CLI tool doesn't expose ports
+  clusterIP: None
+  selector:
+    app: it-tools-suite
+  # No ports exposed - this is an interactive CLI tool
+  # Access via: kubectl exec -it <pod-name> -- /app/it_tools_suite.sh

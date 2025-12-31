@@ -1,0 +1,25 @@
+# =============================================================================
+# Kubernetes Service for clock_asm
+# =============================================================================
+# Note: This is a headless service since clock_asm is a console application
+# that doesn't expose any network ports. The service is included for:
+# - Pod discovery within the cluster
+# - Consistent naming/DNS for the application
+# - Future extensibility if network features are added
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: clock-asm
+  namespace: clock-asm
+  labels:
+    app.kubernetes.io/name: clock-asm
+    app.kubernetes.io/component: clock
+spec:
+  # Headless service (no ClusterIP) - suitable for non-network workloads
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: clock-asm
+    app.kubernetes.io/component: clock
+  # No ports - this is a console-only application
+  ports: []

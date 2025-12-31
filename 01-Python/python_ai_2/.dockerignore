@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: MIT
+# Docker ignore file for python_ai_2
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.hypothesis/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Kubernetes manifests (not needed in container)
+k8s/
+
+# Docker files (not needed in container)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# License and legal files (optional, keep if needed for compliance)
+# LICENSE
+# NOTICE
+# CITATION*
+# SPDX
+# THIRD_PARTY*
+
+# Models directory (if local models exist, mount as volume instead)
+models/
+
+# Misc
+*.log
+*.tmp
+.DS_Store
+Thumbs.db

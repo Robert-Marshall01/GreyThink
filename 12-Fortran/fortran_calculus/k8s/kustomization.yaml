@@ -1,0 +1,35 @@
+# =============================================================================
+# Kustomization for Fortran Calculus Demos
+# Apply with: kubectl apply -k k8s/
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: fortran-calculus
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: fortran-calculus
+  app.kubernetes.io/managed-by: kustomize
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - pvc.yaml
+  # Choose ONE of the following based on your use case:
+  # - deployment.yaml  # For long-running workloads
+  - job.yaml          # For one-time batch runs (default)
+  # - cronjob.yaml     # For scheduled runs
+
+# Image customization
+images:
+  - name: fortran-calculus
+    newName: fortran-calculus
+    newTag: minimal
+
+# ConfigMap generator (alternative to static configmap.yaml)
+# configMapGenerator:
+#   - name: fortran-calculus-config
+#     literals:
+#       - DEMO_NAME=rk4_decay
+#       - OMP_NUM_THREADS=4

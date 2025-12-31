@@ -1,0 +1,81 @@
+# =============================================================================
+# Java Search Engine - Docker Compose Configuration
+# =============================================================================
+# This compose file defines services for the Java Search Engine application.
+# Since this is primarily a CLI application, it provides interactive and
+# one-shot search capabilities.
+# =============================================================================
+
+version: "3.9"
+
+services:
+  # ---------------------------------------------------------------------------
+  # Interactive CLI Search Engine
+  # ---------------------------------------------------------------------------
+  # Runs the full interactive search engine with document indexing
+  # Usage: docker compose run --rm search-cli
+  search-cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: java-search:cli
+    container_name: java-search-cli
+    stdin_open: true
+    tty: true
+    restart: "no"
+    # Resource limits for production
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    # Health check
+    healthcheck:
+      test: ["CMD", "java", "-version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Web Search Service
+  # ---------------------------------------------------------------------------
+  # Performs web searches against Wikipedia and StackExchange APIs
+  # Usage: docker compose run --rm web-search "your search query"
+  web-search:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: websearch
+    image: java-search:websearch
+    container_name: java-search-web
+    restart: "no"
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    # Network access for web search
+    networks:
+      - search-network
+
+networks:
+  search-network:
+    driver: bridge
+    name: java-search-network

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: net-util-config
+  labels:
+    app: net-util
+data:
+  # Default targets for network diagnostics
+  PING_COUNT: "3"
+  DNS_SERVER: "8.8.8.8"
+  TRACEROUTE_TARGET: "8.8.8.8"

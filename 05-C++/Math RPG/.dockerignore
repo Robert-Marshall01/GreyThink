@@ -1,0 +1,45 @@
+# =============================================================================
+# Docker ignore file for Math RPG
+# Excludes files not needed in the Docker build context
+# =============================================================================
+
+# Git
+.git
+.gitignore
+.github
+
+# Build artifacts
+*.exe
+*.o
+*.obj
+*.out
+math_rpg
+math_rpg_build
+test_math
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Documentation (copied selectively in Dockerfile)
+CHANGELOG.md
+CONTRIBUTING.md
+SECURITY.md
+THIRD_PARTY_LICENSES.md
+
+# Scripts (not needed for container)
+scripts/
+
+# Kubernetes manifests (not needed for build)
+k8s/
+
+# Docker Compose (not needed inside container)
+docker-compose.yml
+docker-compose*.yml
+
+# Temporary files
+*.tmp
+*.log

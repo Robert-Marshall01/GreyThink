@@ -1,0 +1,53 @@
+# =============================================================================
+# Docker ignore file - exclude unnecessary files from build context
+# =============================================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+!README.md
+LICENSE
+CHANGELOG.md
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+ISSUE_TEMPLATE.md
+PULL_REQUEST_TEMPLATE.md
+SECURITY.md
+
+# Build artifacts
+*.o
+input_asm
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Docker and Kubernetes (don't include in build context)
+Dockerfile
+docker-compose*.yml
+k8s/
+
+# Examples and tests
+examples/
+tests/
+*.txt
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log

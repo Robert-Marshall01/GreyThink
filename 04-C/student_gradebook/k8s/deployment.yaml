@@ -1,0 +1,104 @@
+# =============================================================================
+# Student Gradebook - Kubernetes Deployment
+# =============================================================================
+# Note: This is an interactive CLI application. In Kubernetes, it will run
+# as a Job rather than a long-running deployment. For interactive use,
+# use: kubectl run -it --rm gradebook --image=<image> -- /student_gradebook
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: student-gradebook
+  labels:
+    app: student-gradebook
+    app.kubernetes.io/name: student-gradebook
+    app.kubernetes.io/component: cli
+    app.kubernetes.io/part-of: gradebook-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: student-gradebook
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: student-gradebook
+        app.kubernetes.io/name: student-gradebook
+        app.kubernetes.io/component: cli
+    spec:
+      # Disable automounting service account token
+      automountServiceAccountToken: false
+      
+      # Security context at pod level
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      
+      containers:
+        - name: gradebook
+          image: student-gradebook:1.0.0
+          imagePullPolicy: IfNotPresent
+          
+          # Container security context
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          
+          # Resource management
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "16Mi"
+              ephemeral-storage: "10Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
+              ephemeral-storage: "50Mi"
+          
+          # For CLI apps, we use a simple exec probe
+          # This checks if the binary exists and is executable
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "test -x /app/student_gradebook"
+            initialDelaySeconds: 5
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "test -x /app/student_gradebook"
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # Keep container running for interactive access
+          command: ["/bin/sh", "-c"]
+          args: ["echo 'Gradebook ready. Use kubectl exec to interact.' && sleep infinity"]
+          
+          # Stdin for interactive use
+          stdin: true
+          tty: true
+      
+      # Restart policy
+      restartPolicy: Always
+      
+      # Termination grace period
+      terminationGracePeriodSeconds: 10

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: net-util
+  labels:
+    app: net-util
+spec:
+  # ClusterIP service for internal access only
+  # This is a CLI tool, not a web service
+  type: ClusterIP
+  # Headless service since no ports are exposed
+  clusterIP: None
+  selector:
+    app: net-util
+  # No ports defined - this is a CLI utility
+  # The service enables DNS resolution for the pod

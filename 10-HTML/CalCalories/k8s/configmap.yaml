@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: calcalories-config
+  labels:
+    app: calcalories
+    app.kubernetes.io/name: calcalories
+    app.kubernetes.io/component: config
+data:
+  FLASK_ENV: "production"
+  FLASK_APP: "app.py"

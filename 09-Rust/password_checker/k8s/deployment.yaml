@@ -1,0 +1,104 @@
+# =============================================================================
+# Kubernetes Deployment for password_checker
+# Note: This is a CLI tool, so we use a Job/CronJob pattern rather than
+# a long-running Deployment. A Deployment is provided for interactive use.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: password-checker
+  namespace: default
+  labels:
+    app: password-checker
+    app.kubernetes.io/name: password-checker
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: cli-tool
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: password-checker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: password-checker
+        app.kubernetes.io/name: password-checker
+        app.kubernetes.io/version: "0.1.0"
+    spec:
+      # Disable service account token automounting (not needed for this CLI tool)
+      automountServiceAccountToken: false
+      
+      # Security context for the pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      
+      containers:
+        - name: password-checker
+          image: password-checker:0.1.0
+          imagePullPolicy: IfNotPresent
+          
+          # Keep container running for interactive use (exec into it)
+          command: ["sh", "-c", "echo 'Password checker ready. Use kubectl exec to run checks.' && sleep infinity"]
+          
+          # Resource limits and requests
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "16Mi"
+              ephemeral-storage: "10Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
+              ephemeral-storage: "50Mi"
+          
+          # Security context for container
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          
+          # Liveness probe - check if process is running
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "test -f /app/password_checker"
+            initialDelaySeconds: 5
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # Readiness probe
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "/app/password_checker --help > /dev/null 2>&1"
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # Environment variables from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: password-checker-config
+                optional: true
+      
+      # Restart policy
+      restartPolicy: Always
+      
+      # Termination grace period
+      terminationGracePeriodSeconds: 10

@@ -1,0 +1,26 @@
+# =============================================================================
+# Kubernetes ConfigMap for calculator-asm
+# Application configuration and metadata
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: calculator-asm-config
+  namespace: default
+  labels:
+    app: calculator-asm
+    version: "0.2.0"
+    app.kubernetes.io/name: calculator-asm
+    app.kubernetes.io/version: "0.2.0"
+data:
+  # Application metadata
+  APP_NAME: "calculator-asm"
+  APP_VERSION: "0.2.0"
+  APP_DESCRIPTION: "x86 Assembly Calculator - Interactive CLI"
+  
+  # Runtime configuration
+  # Note: The assembly binary uses direct syscalls and doesn't read
+  # environment variables. These are provided for container orchestration
+  # and potential wrapper scripts.
+  LOG_LEVEL: "info"
+  ENVIRONMENT: "production"

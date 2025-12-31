@@ -1,0 +1,10 @@
+# Kubernetes Namespace for keypress_asm (optional)
+# Use this to isolate the application in its own namespace
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: keypress-asm
+  labels:
+    app.kubernetes.io/name: keypress-asm
+    app.kubernetes.io/part-of: keypress-asm

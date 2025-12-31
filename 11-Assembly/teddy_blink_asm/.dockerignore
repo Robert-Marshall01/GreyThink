@@ -1,0 +1,32 @@
+# .dockerignore for teddy_blink_asm
+# Exclude unnecessary files from Docker build context
+
+# Git files
+.git
+.gitignore
+
+# Documentation
+README.md
+LICENSE
+*.md
+
+# Build artifacts (will be regenerated in container)
+*.o
+teddy_blink_asm
+
+# Kubernetes and Docker files (not needed in image)
+k8s/
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

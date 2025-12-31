@@ -1,0 +1,13 @@
+# =============================================================================
+# Student Gradebook - Kubernetes Namespace
+# =============================================================================
+# Optional: Create a dedicated namespace for the gradebook application
+# Apply first: kubectl apply -f namespace.yaml
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gradebook
+  labels:
+    app.kubernetes.io/name: student-gradebook
+    app.kubernetes.io/part-of: gradebook-system

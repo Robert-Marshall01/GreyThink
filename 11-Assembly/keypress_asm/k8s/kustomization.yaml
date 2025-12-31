@@ -1,0 +1,23 @@
+# Kustomization file for Kubernetes manifests
+# Use with: kubectl apply -k k8s/
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: keypress-asm
+
+labels:
+  - includeSelectors: true
+    pairs:
+      app: keypress-asm
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+
+commonLabels:
+  app.kubernetes.io/name: keypress-asm
+  app.kubernetes.io/version: "1.0.0"

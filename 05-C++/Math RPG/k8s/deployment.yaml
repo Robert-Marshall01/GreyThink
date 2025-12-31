@@ -1,0 +1,91 @@
+# =============================================================================
+# Kubernetes Deployment for Math RPG
+# =============================================================================
+# Note: Math RPG is an interactive CLI application. In Kubernetes, it runs
+# in "sample" mode by default (non-interactive, deterministic output).
+# For interactive use, consider running locally with Docker.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: math-rpg
+  namespace: math-rpg
+  labels:
+    app.kubernetes.io/name: math-rpg
+    app.kubernetes.io/component: application
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: math-rpg
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: math-rpg
+        app.kubernetes.io/component: application
+        app.kubernetes.io/version: "1.0.0"
+    spec:
+      # Disable automounting of service account token
+      automountServiceAccountToken: false
+      
+      # Security context for the pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+
+      containers:
+        - name: math-rpg
+          image: math-rpg:1.0.0
+          imagePullPolicy: IfNotPresent
+          
+          # Run in sample mode for Kubernetes (non-interactive)
+          args:
+            - "--sample"
+            - "$(SAMPLE_SEED)"
+            - "$(SAMPLE_COUNT)"
+          
+          # Environment variables from ConfigMap
+          env:
+            - name: SAMPLE_SEED
+              valueFrom:
+                configMapKeyRef:
+                  name: math-rpg-config
+                  key: SAMPLE_SEED
+            - name: SAMPLE_COUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: math-rpg-config
+                  key: SAMPLE_COUNT
+          
+          # Resource requests and limits
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+              ephemeral-storage: "10Mi"
+            limits:
+              cpu: "250m"
+              memory: "128Mi"
+              ephemeral-storage: "50Mi"
+          
+          # Security context for the container
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+      # Restart policy
+      restartPolicy: Always
+      
+      # Termination grace period
+      terminationGracePeriodSeconds: 10

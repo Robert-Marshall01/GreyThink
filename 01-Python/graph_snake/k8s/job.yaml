@@ -1,0 +1,120 @@
+# =============================================================================
+# Kubernetes Job for graph-plotter
+# Use this manifest to run one-off plot generation tasks
+# =============================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: graph-plotter-job
+  labels:
+    app: graph-plotter
+    app.kubernetes.io/name: graph-plotter
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: batch-job
+spec:
+  # Number of retries before marking job as failed
+  backoffLimit: 3
+  # Time to live after completion (auto-cleanup)
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: graph-plotter
+        app.kubernetes.io/name: graph-plotter
+    spec:
+      # Disable automounted service account token
+      automountServiceAccountToken: false
+      
+      # Security context for the pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      
+      containers:
+        - name: graph-plotter
+          image: graph-plotter:0.1.0
+          imagePullPolicy: IfNotPresent
+          
+          # Example: Generate a scatter plot
+          # Override these args when creating the job
+          args:
+            - "--x"
+            - "1 2 3 4 5"
+            - "--y"
+            - "2 4 1 5 3"
+            - "--plot-type"
+            - "Scatter"
+            - "--output"
+            - "/app/output/plot.png"
+          
+          # Environment variables from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: graph-plotter-config
+          
+          # Resource requests and limits
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+              ephemeral-storage: "50Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+              ephemeral-storage: "200Mi"
+          
+          # Security context for container
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          
+          # Volume mounts
+          volumeMounts:
+            - name: output-volume
+              mountPath: /app/output
+            - name: tmp-volume
+              mountPath: /tmp
+            - name: cache-volume
+              mountPath: /home/appuser/.cache
+      
+      # Job should not restart on completion
+      restartPolicy: Never
+      
+      # Volumes
+      volumes:
+        - name: output-volume
+          # For production, use a PersistentVolumeClaim instead
+          emptyDir:
+            sizeLimit: 100Mi
+        - name: tmp-volume
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: cache-volume
+          emptyDir:
+            sizeLimit: 32Mi
+      
+      # Termination grace period
+      terminationGracePeriodSeconds: 30
+
+# =============================================================================
+# Usage Examples:
+# =============================================================================
+# 
+# Create a job with custom parameters:
+#   kubectl create job my-scatter-plot --from=job/graph-plotter-job \
+#     -- --x "1 2 3 4 5" --y "1 4 9 16 25" --plot-type Scatter --output /app/output/scatter.png
+#
+# Or apply this manifest directly:
+#   kubectl apply -f job.yaml
+#
+# Check job status:
+#   kubectl get jobs
+#   kubectl describe job graph-plotter-job
+#
+# View logs:
+#   kubectl logs job/graph-plotter-job

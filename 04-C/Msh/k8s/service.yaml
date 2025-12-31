@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: MIT
+# Kubernetes Service for Msh (Marshall Shell)
+# Note: Msh is a CLI application and doesn't expose network ports.
+# This service is included for completeness and potential future extensions.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: msh
+  namespace: default
+  labels:
+    app: msh
+    app.kubernetes.io/name: msh
+    app.kubernetes.io/instance: msh-prod
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/component: shell
+    app.kubernetes.io/part-of: msh-project
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  # ClusterIP type for internal access only
+  type: ClusterIP
+  
+  # Selector matches deployment labels
+  selector:
+    app: msh
+    app.kubernetes.io/name: msh
+  
+  # No ports exposed - Msh is a CLI application
+  # If future versions expose an API or shell server, add ports here:
+  # ports:
+  #   - name: shell
+  #     protocol: TCP
+  #     port: 8080
+  #     targetPort: 8080
+  
+  # Session affinity for stateful connections
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+
+---
+# Headless service for StatefulSet-like DNS resolution (optional)
+apiVersion: v1
+kind: Service
+metadata:
+  name: msh-headless
+  namespace: default
+  labels:
+    app: msh
+    app.kubernetes.io/name: msh
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: msh
+    app.kubernetes.io/name: msh

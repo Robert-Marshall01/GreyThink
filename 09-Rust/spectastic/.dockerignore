@@ -1,0 +1,45 @@
+# =============================================================================
+# Docker Build Ignore File
+# =============================================================================
+
+# Build artifacts
+target/
+debug/
+release/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Docker files (don't need to copy these into context recursively)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Documentation (not needed in build)
+*.md
+!README.md
+LICENSE
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Rust specific
+**/*.rs.bk
+Cargo.lock.bak
+
+# Kubernetes manifests (not needed in Docker build)
+k8s/
+
+# Local environment files
+.env
+.env.*
+!.env.example

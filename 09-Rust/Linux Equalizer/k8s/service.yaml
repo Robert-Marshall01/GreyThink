@@ -1,0 +1,69 @@
+# =============================================================================
+# Linux Equalizer - Kubernetes Service
+# =============================================================================
+# NOTE: This is a headless service for the audio equalizer.
+# The equalizer doesn't expose network ports - it processes audio locally.
+# This service is mainly for:
+# - Service discovery within the cluster
+# - Potential future API endpoints
+# - Monitoring and metrics collection
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: linux-equalizer
+  namespace: linux-equalizer
+  labels:
+    app.kubernetes.io/name: linux-equalizer
+    app.kubernetes.io/instance: linux-equalizer
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/component: audio-processor
+    app.kubernetes.io/part-of: audio-tools
+  annotations:
+    # Prometheus scraping (if metrics endpoint added in future)
+    prometheus.io/scrape: "false"
+    prometheus.io/port: "9090"
+    prometheus.io/path: "/metrics"
+spec:
+  # Headless service (no cluster IP needed for audio processing)
+  type: ClusterIP
+  clusterIP: None
+  
+  selector:
+    app.kubernetes.io/name: linux-equalizer
+    app.kubernetes.io/instance: linux-equalizer
+  
+  # No ports exposed - this is a local audio processor
+  # Uncomment if metrics/API endpoint is added:
+  # ports:
+  #   - name: metrics
+  #     port: 9090
+  #     targetPort: 9090
+  #     protocol: TCP
+
+---
+# =============================================================================
+# Optional: NodePort Service for future API access
+# =============================================================================
+# Uncomment if you add a control API to the equalizer
+
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: linux-equalizer-api
+#   namespace: linux-equalizer
+#   labels:
+#     app.kubernetes.io/name: linux-equalizer
+#     app.kubernetes.io/component: api
+# spec:
+#   type: NodePort
+#   selector:
+#     app.kubernetes.io/name: linux-equalizer
+#     app.kubernetes.io/instance: linux-equalizer
+#   ports:
+#     - name: http
+#       port: 8080
+#       targetPort: 8080
+#       nodePort: 30080
+#       protocol: TCP

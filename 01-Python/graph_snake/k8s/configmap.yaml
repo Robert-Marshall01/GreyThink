@@ -1,0 +1,21 @@
+# =============================================================================
+# Kubernetes ConfigMap for graph-plotter
+# Contains environment configuration for the application
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: graph-plotter-config
+  labels:
+    app: graph-plotter
+    app.kubernetes.io/name: graph-plotter
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: configuration
+data:
+  # Python environment settings
+  PYTHONUNBUFFERED: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+  # Matplotlib backend for headless operation
+  MPLBACKEND: "Agg"
+  # Default plot output directory
+  OUTPUT_DIR: "/app/output"

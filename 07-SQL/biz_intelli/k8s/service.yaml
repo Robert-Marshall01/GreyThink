@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  namespace: biz-intelli
+  labels:
+    app: biz-intelli
+    component: database
+spec:
+  type: ClusterIP
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: 3306
+      protocol: TCP
+  selector:
+    app: biz-intelli
+    component: database
+---
+# Optional: NodePort service for external access (development only)
+# Uncomment if you need to access MySQL from outside the cluster
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: mysql-external
+#   namespace: biz-intelli
+#   labels:
+#     app: biz-intelli
+#     component: database
+# spec:
+#   type: NodePort
+#   ports:
+#     - name: mysql
+#       port: 3306
+#       targetPort: 3306
+#       nodePort: 30306
+#       protocol: TCP
+#   selector:
+#     app: biz-intelli
+#     component: database

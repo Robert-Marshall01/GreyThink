@@ -1,0 +1,68 @@
+# =============================================================================
+# Docker Compose for Math RPG
+# =============================================================================
+# Usage:
+#   Interactive mode: docker compose run --rm math-rpg
+#   Sample mode:      docker compose run --rm math-rpg-sample
+#   Run tests:        docker compose run --rm math-rpg-test
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Main interactive game service
+  # ---------------------------------------------------------------------------
+  math-rpg:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: math-rpg:latest
+    container_name: math-rpg
+    stdin_open: true     # -i flag: Keep STDIN open for interactive input
+    tty: true            # -t flag: Allocate a pseudo-TTY for terminal colors
+    restart: "no"
+    # Resource limits for the container
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 32M
+
+  # ---------------------------------------------------------------------------
+  # Sample/demo mode (non-interactive, deterministic output)
+  # ---------------------------------------------------------------------------
+  math-rpg-sample:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: math-rpg:latest
+    container_name: math-rpg-sample
+    command: ["--sample", "12345", "10"]
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M
+
+  # ---------------------------------------------------------------------------
+  # Test runner service
+  # ---------------------------------------------------------------------------
+  math-rpg-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: math-rpg:latest
+    container_name: math-rpg-test
+    entrypoint: ["./test_math"]
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M

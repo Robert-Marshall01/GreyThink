@@ -1,0 +1,135 @@
+# =============================================================================
+# MoneyJava - Kubernetes Deployment
+# =============================================================================
+# Note: This deployment is configured for a Java Swing GUI application.
+# Running GUI apps in Kubernetes requires additional setup (VNC/X11 forwarding).
+# This manifest is provided for completeness and can be adapted for headless
+# operations or VNC-based access.
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: moneyjava
+  namespace: default
+  labels:
+    app: moneyjava
+    version: v1
+    tier: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: moneyjava
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: moneyjava
+        version: v1
+        tier: frontend
+    spec:
+      # Disable service account token auto-mounting (not needed for this app)
+      automountServiceAccountToken: false
+      
+      # Security context for pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      
+      containers:
+        - name: moneyjava
+          image: moneyjava:v1.0
+          imagePullPolicy: IfNotPresent
+          
+          # Environment variables
+          env:
+            - name: JAVA_OPTS
+              valueFrom:
+                configMapKeyRef:
+                  name: moneyjava-config
+                  key: java-opts
+            - name: DISPLAY
+              valueFrom:
+                configMapKeyRef:
+                  name: moneyjava-config
+                  key: display
+                  optional: true
+          
+          # Resource requests and limits
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+              ephemeral-storage: "100Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+              ephemeral-storage: "500Mi"
+          
+          # Security context for container
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+          
+          # Volume mounts
+          volumeMounts:
+            - name: data-volume
+              mountPath: /app/data
+          
+          # Liveness probe - checks if process is running
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "pgrep -f 'java.*LoginSignupGUI' || exit 1"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          
+          # Readiness probe - checks if app is ready
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "pgrep -f 'java.*LoginSignupGUI' || exit 1"
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # Startup probe - allows time for JVM startup
+          startupProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "pgrep -f 'java.*LoginSignupGUI' || exit 1"
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 12
+      
+      # Volumes
+      volumes:
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: moneyjava-pvc
+      
+      # Termination grace period
+      terminationGracePeriodSeconds: 30
+      
+      # Restart policy
+      restartPolicy: Always

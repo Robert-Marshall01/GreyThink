@@ -1,0 +1,63 @@
+# =============================================================================
+# Docker Build Ignore File
+# =============================================================================
+
+# Build artifacts
+target/
+debug/
+*.rlib
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation (not needed in container)
+*.md
+!README.md
+docs/
+
+# Test files
+test-*.sh
+test-*.rs
+**/tests/
+**/test/
+
+# Shell scripts (not needed in container)
+*.sh
+
+# Desktop/service files
+*.desktop
+*.service
+
+# Local configuration
+.env
+.env.*
+!.env.example
+
+# Kubernetes manifests (not needed in container)
+k8s/
+kubernetes/
+*.yaml
+!docker-compose.yaml
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+
+# Misc
+Makefile
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+LICENSE
+Cargo.lock

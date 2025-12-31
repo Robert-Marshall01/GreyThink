@@ -1,0 +1,10 @@
+# =============================================================================
+# Kubernetes Namespace for house-gui Application
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: house-gui
+  labels:
+    app.kubernetes.io/name: house-gui
+    app.kubernetes.io/version: "0.1.0"

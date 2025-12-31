@@ -1,0 +1,29 @@
+# Docker ignore file for net_util
+
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+LICENSE
+*.md
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Docker files (prevent recursive builds)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Kubernetes manifests
+k8s/
+
+# OS files
+.DS_Store
+Thumbs.db

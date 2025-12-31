@@ -1,0 +1,59 @@
+# =============================================================================
+# Kubernetes Job for Math RPG Tests
+# =============================================================================
+# This Job runs the test suite for Math RPG.
+# =============================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: math-rpg-test-job
+  namespace: math-rpg
+  labels:
+    app.kubernetes.io/name: math-rpg
+    app.kubernetes.io/component: test
+spec:
+  ttlSecondsAfterFinished: 300  # Clean up after 5 minutes
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: math-rpg
+        app.kubernetes.io/component: test
+    spec:
+      # Disable automounting of service account token
+      automountServiceAccountToken: false
+      
+      # Security context for the pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+
+      containers:
+        - name: math-rpg-test
+          image: math-rpg:1.0.0
+          imagePullPolicy: IfNotPresent
+          
+          # Override entrypoint to run tests
+          command: ["./test_math"]
+          
+          # Resource requests and limits
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+              ephemeral-storage: "10Mi"
+            limits:
+              cpu: "250m"
+              memory: "64Mi"
+              ephemeral-storage: "50Mi"
+          
+          # Security context for the container
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+      restartPolicy: Never

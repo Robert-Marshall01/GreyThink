@@ -1,0 +1,29 @@
+# =============================================================================
+# Kubernetes Service for house-gui Application
+# =============================================================================
+# Note: This GUI application doesn't expose network services.
+# This Service is provided for completeness and potential future extensions
+# (e.g., VNC server, health endpoints, metrics).
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: house-gui
+  namespace: house-gui
+  labels:
+    app.kubernetes.io/name: house-gui
+    app.kubernetes.io/component: gui
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  type: ClusterIP
+  
+  selector:
+    app.kubernetes.io/name: house-gui
+  
+  # No ports exposed - GUI application renders to local display
+  # Uncomment below if adding VNC or other network services
+  # ports:
+  #   - name: vnc
+  #     port: 5900
+  #     targetPort: 5900
+  #     protocol: TCP

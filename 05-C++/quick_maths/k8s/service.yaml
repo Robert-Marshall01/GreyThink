@@ -1,0 +1,32 @@
+# ==============================================================================
+# Quick Maths - Kubernetes Service
+# Service configuration for the C++ console application
+# ==============================================================================
+#
+# NOTE: This service is included for completeness, but since Quick Maths is
+# an interactive console application (not a network service), this ClusterIP
+# service with no ports is primarily useful for:
+# - Service discovery within the cluster
+# - Potential future enhancements (e.g., adding a web interface or API)
+# - Consistent Kubernetes resource patterns
+#
+# ==============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: quick-maths
+  labels:
+    app: quick-maths
+    version: v1
+spec:
+  type: ClusterIP
+  selector:
+    app: quick-maths
+  # No ports exposed - this is an interactive console application
+  # Uncomment and modify below if the application is extended to serve network traffic
+  # ports:
+  #   - name: http
+  #     port: 8080
+  #     targetPort: 8080
+  #     protocol: TCP

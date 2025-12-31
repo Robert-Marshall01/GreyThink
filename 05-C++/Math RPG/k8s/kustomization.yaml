@@ -1,0 +1,32 @@
+# =============================================================================
+# Kustomization file for Math RPG Kubernetes resources
+# =============================================================================
+# Usage:
+#   kubectl apply -k k8s/
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: math-rpg
+
+namespace: math-rpg
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: math-rpg
+  app.kubernetes.io/managed-by: kustomize
+
+# Resources to include
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  # Uncomment to include job manifests:
+  # - job.yaml
+  # - test-job.yaml
+
+# Image configuration (override in overlays)
+images:
+  - name: math-rpg
+    newTag: "1.0.0"

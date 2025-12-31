@@ -1,0 +1,50 @@
+# =============================================================================
+# Linux Equalizer - Kustomization Configuration
+# =============================================================================
+# Use: kubectl apply -k k8s/
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: linux-equalizer
+
+namespace: linux-equalizer
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: linux-equalizer
+  app.kubernetes.io/part-of: audio-tools
+  app.kubernetes.io/managed-by: kustomize
+
+# Common annotations
+commonAnnotations:
+  app.kubernetes.io/version: "1.0.0"
+
+# Resources to include
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+
+# Container images
+images:
+  - name: linux-equalizer
+    newName: linux-equalizer
+    newTag: "1.0.0"
+
+# ConfigMap generator (alternative to static configmap.yaml)
+# Uncomment to generate from files:
+# configMapGenerator:
+#   - name: linux-equalizer-config
+#     files:
+#       - presets/current.json
+#       - presets/rock.json
+#       - presets/bass-boost.json
+
+# Replicas override
+replicas:
+  - name: linux-equalizer
+    count: 1

@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  bias-remover:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bias-remover:latest
+    container_name: bias-remover
+    # Interactive mode for CLI input
+    stdin_open: true
+    tty: true
+    # Security settings
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+        reservations:
+          cpus: "0.1"
+          memory: 32M

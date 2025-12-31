@@ -1,0 +1,70 @@
+# =============================================================================
+# Student Gradebook - Kubernetes Job
+# =============================================================================
+# Alternative to Deployment for running the CLI app as a one-time job
+# Use this if you want to run the gradebook non-interactively
+# =============================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: student-gradebook-job
+  labels:
+    app: student-gradebook
+    app.kubernetes.io/name: student-gradebook
+    app.kubernetes.io/component: job
+    app.kubernetes.io/part-of: gradebook-system
+spec:
+  # Don't retry failed jobs
+  backoffLimit: 0
+  
+  # Clean up after completion (in seconds)
+  ttlSecondsAfterFinished: 300
+  
+  template:
+    metadata:
+      labels:
+        app: student-gradebook
+        job-name: student-gradebook-job
+    spec:
+      # Disable automounting service account token
+      automountServiceAccountToken: false
+      
+      # Security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      
+      containers:
+        - name: gradebook
+          image: student-gradebook:1.0.0
+          imagePullPolicy: IfNotPresent
+          
+          # Container security
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          
+          # Resources
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "16Mi"
+              ephemeral-storage: "10Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
+              ephemeral-storage: "50Mi"
+          
+          # For non-interactive demo, print help and exit
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "Running Student Gradebook Demo..."
+              echo "p" | timeout 5 /app/student_gradebook || true
+              echo "Demo completed."
+      
+      restartPolicy: Never

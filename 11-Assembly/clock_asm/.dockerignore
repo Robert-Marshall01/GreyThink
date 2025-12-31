@@ -1,0 +1,45 @@
+# =============================================================================
+# .dockerignore - Exclude files from Docker build context
+# =============================================================================
+
+# Build artifacts
+*.o
+clock_asm
+!clock_asm.asm
+
+# Git
+.git
+.gitignore
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation (not needed in container)
+*.md
+!README.md
+LICENSE
+docs/
+
+# Build scripts (build happens in container)
+build.ps1
+Makefile
+
+# Kubernetes manifests
+k8s/
+
+# Docker files (prevent recursive issues)
+docker-compose*.yml
+.dockerignore
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml

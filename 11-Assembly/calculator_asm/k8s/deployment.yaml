@@ -1,0 +1,112 @@
+# =============================================================================
+# Kubernetes Deployment for calculator-asm
+# Interactive CLI Application (Job-based execution)
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: calculator-asm
+  namespace: default
+  labels:
+    app: calculator-asm
+    version: "0.2.0"
+    app.kubernetes.io/name: calculator-asm
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/component: cli
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: calculator-asm
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: calculator-asm
+        version: "0.2.0"
+        app.kubernetes.io/name: calculator-asm
+        app.kubernetes.io/version: "0.2.0"
+      annotations:
+        prometheus.io/scrape: "false"
+    spec:
+      # Disable service account token automounting (not needed)
+      automountServiceAccountToken: false
+      
+      # Security context at pod level
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      
+      containers:
+        - name: calculator
+          image: calculator-asm:0.2.0
+          imagePullPolicy: IfNotPresent
+          
+          # Keep container running for interactive access
+          # Use: kubectl exec -it <pod-name> -- /app/calculator_asm
+          command: ["/bin/sh", "-c"]
+          args: ["echo 'Calculator ready. Use kubectl exec -it to interact.' && sleep infinity"]
+          
+          # Container-level security
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          
+          # Resource requests and limits (minimal for assembly binary)
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "8Mi"
+              ephemeral-storage: "10Mi"
+            limits:
+              cpu: "100m"
+              memory: "32Mi"
+              ephemeral-storage: "50Mi"
+          
+          # Liveness probe - check if process is responsive
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "test -x /app/calculator_asm"
+            initialDelaySeconds: 5
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # Readiness probe - check if binary is available
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "test -x /app/calculator_asm"
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # Environment variables from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: calculator-asm-config
+                optional: true
+      
+      # Restart policy
+      restartPolicy: Always
+      
+      # Termination grace period
+      terminationGracePeriodSeconds: 10
+      
+      # DNS policy
+      dnsPolicy: ClusterFirst

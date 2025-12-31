@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: age-verification
+  labels:
+    app: age-verification
+    version: v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: age-verification
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: age-verification
+        version: v1
+    spec:
+      # Disable service account token auto-mounting (not needed for this app)
+      automountServiceAccountToken: false
+      # Security context at pod level
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      containers:
+        - name: age-verification
+          image: age-verification:1.0.0
+          imagePullPolicy: IfNotPresent
+          # Interactive CLI requires TTY
+          stdin: true
+          tty: true
+          # Security context at container level
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          # Resource management
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+              ephemeral-storage: "50Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+              ephemeral-storage: "100Mi"
+          # Environment variables from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: age-verification-config
+          # Note: This is a CLI app, so no liveness/readiness probes
+          # are applicable since it doesn't expose HTTP endpoints
+      # Graceful termination
+      terminationGracePeriodSeconds: 10
+      # Restart policy
+      restartPolicy: Always

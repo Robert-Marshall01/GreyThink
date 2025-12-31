@@ -1,0 +1,17 @@
+# Kubernetes ConfigMap for teddy-blink-asm
+# Contains environment variables for the application
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: teddy-blink-config
+  labels:
+    app: teddy-blink-asm
+    version: "1.0.0"
+data:
+  # Terminal configuration for ANSI escape codes
+  TERM: "xterm-256color"
+  
+  # Application metadata (for logging/debugging)
+  APP_NAME: "teddy-blink-asm"
+  APP_VERSION: "1.0.0"

@@ -1,0 +1,19 @@
+# =============================================================================
+# PersistentVolumeClaim for output data (CSVs and PNGs)
+# =============================================================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fortran-calculus-output
+  namespace: fortran-calculus
+  labels:
+    app.kubernetes.io/name: fortran-calculus
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  # Uncomment and set storageClassName for your cluster
+  # storageClassName: standard

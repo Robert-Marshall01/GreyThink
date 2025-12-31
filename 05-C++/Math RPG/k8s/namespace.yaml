@@ -1,0 +1,10 @@
+# =============================================================================
+# Kubernetes Namespace for Math RPG
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: math-rpg
+  labels:
+    app.kubernetes.io/name: math-rpg
+    app.kubernetes.io/component: namespace

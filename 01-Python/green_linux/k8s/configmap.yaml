@@ -1,0 +1,77 @@
+# =============================================================================
+# PowerApp - Kubernetes ConfigMap
+# =============================================================================
+# Environment variables and configuration for PowerApp deployment.
+# Modify these values based on your deployment requirements.
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: powerapp-config
+  labels:
+    app: powerapp
+    app.kubernetes.io/name: powerapp
+    app.kubernetes.io/component: config
+data:
+  # -----------------------------------------------------------------------------
+  # Power Sampling Configuration
+  # -----------------------------------------------------------------------------
+  
+  # Use mock power values (set to "1" for containerized environments without
+  # access to real hardware power sensors)
+  POWERAPP_MOCK_POWER: "1"
+  
+  # Enable dialog debugging logs (optional)
+  POWERAPP_LOG_DIALOGS: "0"
+
+  # -----------------------------------------------------------------------------
+  # XDG Base Directory Configuration
+  # -----------------------------------------------------------------------------
+  
+  # Config home for settings persistence
+  XDG_CONFIG_HOME: "/home/powerapp/.config"
+  
+  # State home for runtime data
+  XDG_STATE_HOME: "/home/powerapp/.local/state"
+
+  # -----------------------------------------------------------------------------
+  # Carbon Emissions Provider Configuration
+  # -----------------------------------------------------------------------------
+  
+  # Emissions data provider: 'mock' or 'electricitymap'
+  POWERAPP_PROVIDER: "mock"
+  
+  # Geographic zone for carbon intensity data (e.g., 'DE', 'US-CAL-CISO')
+  # Leave empty for auto-detection or mock mode
+  POWERAPP_ZONE: ""
+  
+  # Electricity Map API token (if using electricitymap provider)
+  # For production, use a Kubernetes Secret instead
+  # POWERAPP_TOKEN: ""
+
+  # -----------------------------------------------------------------------------
+  # Forecast Settings
+  # -----------------------------------------------------------------------------
+  
+  # Hours to forecast carbon intensity
+  POWERAPP_FORECAST_HOURS: "48"
+  
+  # Forecast cache TTL in seconds
+  POWERAPP_FORECAST_CACHE_TTL: "900"
+  
+  # Minimum seconds between forecast refreshes
+  POWERAPP_FORECAST_REFRESH_COOLDOWN: "5"
+
+  # -----------------------------------------------------------------------------
+  # Application Behavior
+  # -----------------------------------------------------------------------------
+  
+  # Python optimization level (0=none, 1=basic, 2=remove docstrings)
+  PYTHONOPTIMIZE: "0"
+  
+  # Unbuffered output for better logging
+  PYTHONUNBUFFERED: "1"
+  
+  # Enable fault handler for debugging
+  PYTHONFAULTHANDLER: "1"

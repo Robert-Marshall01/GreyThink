@@ -1,0 +1,73 @@
+# =============================================================================
+# Kubernetes Job for calculator-asm
+# Alternative deployment for batch/one-time execution
+# =============================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: calculator-asm-job
+  namespace: default
+  labels:
+    app: calculator-asm
+    version: "0.2.0"
+    app.kubernetes.io/name: calculator-asm
+    app.kubernetes.io/version: "0.2.0"
+spec:
+  # Job configuration
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  activeDeadlineSeconds: 300
+  
+  template:
+    metadata:
+      labels:
+        app: calculator-asm
+        version: "0.2.0"
+    spec:
+      # Disable service account token automounting (not needed)
+      automountServiceAccountToken: false
+      
+      # Security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      
+      containers:
+        - name: calculator
+          image: calculator-asm:0.2.0
+          imagePullPolicy: IfNotPresent
+          
+          # For batch execution, provide input via stdin or args
+          # This example shows the calculator ready for input
+          stdin: true
+          tty: true
+          
+          # Container-level security
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          
+          # Resource limits
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "8Mi"
+              ephemeral-storage: "10Mi"
+            limits:
+              cpu: "100m"
+              memory: "32Mi"
+              ephemeral-storage: "50Mi"
+          
+          # Environment from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: calculator-asm-config
+                optional: true
+      
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 10

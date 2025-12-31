@@ -1,0 +1,44 @@
+# =============================================================================
+# Kustomization for graph-plotter Kubernetes resources
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: graph-plotter
+
+# Common labels applied to all resources
+commonLabels:
+  app: graph-plotter
+  app.kubernetes.io/name: graph-plotter
+  app.kubernetes.io/version: "0.1.0"
+  app.kubernetes.io/managed-by: kustomize
+
+# Resources to include
+resources:
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  # Uncomment to include the Job template
+  # - job.yaml
+
+# Namespace (uncomment and set to deploy to specific namespace)
+# namespace: graph-plotter
+
+# Image configuration (override for different environments)
+images:
+  - name: graph-plotter
+    newTag: "0.1.0"
+
+# =============================================================================
+# Usage:
+# =============================================================================
+#
+# Preview the rendered manifests:
+#   kubectl kustomize k8s/
+#
+# Apply to cluster:
+#   kubectl apply -k k8s/
+#
+# Delete resources:
+#   kubectl delete -k k8s/

@@ -1,0 +1,112 @@
+# =============================================================================
+# Linux Equalizer - ConfigMap
+# =============================================================================
+# Configuration for the Linux Equalizer application
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: linux-equalizer-config
+  namespace: linux-equalizer
+  labels:
+    app.kubernetes.io/name: linux-equalizer
+    app.kubernetes.io/component: configuration
+    app.kubernetes.io/part-of: audio-tools
+data:
+  # Default equalizer preset (JSON format)
+  current.json: |
+    {
+      "band_32hz": 0.0,
+      "band_64hz": 0.0,
+      "band_125hz": 0.0,
+      "band_250hz": 0.0,
+      "band_500hz": 0.0,
+      "band_1khz": 0.0,
+      "band_2khz": 0.0,
+      "band_4khz": 0.0,
+      "band_8khz": 0.0,
+      "band_16khz": 0.0,
+      "enabled": true,
+      "preamp": 0.0
+    }
+
+  # Rock preset example
+  rock.json: |
+    {
+      "band_32hz": 4.0,
+      "band_64hz": 3.0,
+      "band_125hz": 2.0,
+      "band_250hz": 0.0,
+      "band_500hz": -1.0,
+      "band_1khz": 0.0,
+      "band_2khz": 1.0,
+      "band_4khz": 3.0,
+      "band_8khz": 4.0,
+      "band_16khz": 4.0,
+      "enabled": true,
+      "preamp": -2.0
+    }
+
+  # Bass boost preset example
+  bass-boost.json: |
+    {
+      "band_32hz": 6.0,
+      "band_64hz": 5.0,
+      "band_125hz": 4.0,
+      "band_250hz": 2.0,
+      "band_500hz": 0.0,
+      "band_1khz": 0.0,
+      "band_2khz": 0.0,
+      "band_4khz": 0.0,
+      "band_8khz": 0.0,
+      "band_16khz": 0.0,
+      "enabled": true,
+      "preamp": -3.0
+    }
+
+  # Vocal enhancement preset
+  vocal.json: |
+    {
+      "band_32hz": -2.0,
+      "band_64hz": -1.0,
+      "band_125hz": 0.0,
+      "band_250hz": 1.0,
+      "band_500hz": 2.0,
+      "band_1khz": 3.0,
+      "band_2khz": 3.0,
+      "band_4khz": 2.0,
+      "band_8khz": 1.0,
+      "band_16khz": 0.0,
+      "enabled": true,
+      "preamp": -1.0
+    }
+
+---
+# =============================================================================
+# Environment-specific ConfigMap
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: linux-equalizer-env
+  namespace: linux-equalizer
+  labels:
+    app.kubernetes.io/name: linux-equalizer
+    app.kubernetes.io/component: environment
+    app.kubernetes.io/part-of: audio-tools
+data:
+  # PulseAudio configuration
+  PULSE_SERVER: "unix:/run/user/1000/pulse/native"
+  XDG_RUNTIME_DIR: "/run/user/1000"
+  XDG_CONFIG_HOME: "/home/equalizer/.config"
+  
+  # GTK configuration
+  GTK_THEME: "Adwaita"
+  
+  # Application mode
+  EQUALIZER_MODE: "headless"
+  
+  # Logging level
+  RUST_LOG: "info"

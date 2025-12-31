@@ -1,0 +1,36 @@
+# docker-compose.yml for teddy_blink_asm
+# Run with: docker-compose run --rm teddy-blink
+
+services:
+  teddy-blink:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: teddy-blink-asm:latest
+    container_name: teddy-blink-asm
+    # Interactive mode required for terminal animation
+    stdin_open: true
+    tty: true
+    # Read-only filesystem for security
+    read_only: true
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 32M
+        reservations:
+          cpus: '0.1'
+          memory: 8M
+    # Environment variables
+    environment:
+      - TERM=xterm-256color
+    # Restart policy
+    restart: "no"
+    # Labels
+    labels:
+      - "app=teddy-blink-asm"
+      - "version=1.0.0"

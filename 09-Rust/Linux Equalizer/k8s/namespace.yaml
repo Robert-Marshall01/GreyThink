@@ -1,0 +1,18 @@
+# =============================================================================
+# Linux Equalizer - Kubernetes Namespace
+# =============================================================================
+# NOTE: This is a desktop audio application. Kubernetes deployment is primarily
+# useful for:
+# - CI/CD build environments
+# - Containerized audio processing nodes
+# - Development/testing infrastructure
+# =============================================================================
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: linux-equalizer
+  labels:
+    app.kubernetes.io/name: linux-equalizer
+    app.kubernetes.io/component: audio-processing
+    app.kubernetes.io/part-of: audio-tools

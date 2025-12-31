@@ -1,0 +1,43 @@
+# =============================================================================
+# Docker Ignore File
+# =============================================================================
+# Exclude files not needed in the Docker build context
+# =============================================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+LICENSE
+*.md
+
+# Build artifacts (will be rebuilt in container)
+*.o
+hello_world
+hello_linux
+hello_linux.o
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Docker files (no need to copy into build context)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Kubernetes manifests
+k8s/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

@@ -1,0 +1,36 @@
+# =============================================================================
+# Spectastic - Kustomization
+# =============================================================================
+# Kustomize configuration for managing all Kubernetes resources
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: spectastic
+
+namespace: spectastic
+
+# Labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: spectastic
+  app.kubernetes.io/part-of: spectastic
+
+# Resources to include
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+
+# Image customization (override in overlays)
+images:
+  - name: spectastic
+    newTag: latest
+
+# ConfigMap generator (alternative to static configmap.yaml)
+# configMapGenerator:
+#   - name: spectastic-config
+#     literals:
+#       - APP_NAME=spectastic
+#       - APP_VERSION=0.1.0

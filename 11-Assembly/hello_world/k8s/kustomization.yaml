@@ -1,0 +1,25 @@
+# =============================================================================
+# Kustomization file for Hello World Assembly Application
+# =============================================================================
+# Use with: kubectl apply -k k8s/
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: hello-world-asm
+
+# Common labels applied to all resources
+commonLabels:
+  app: hello-world-asm
+  managed-by: kustomize
+
+# Resources to include
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+
+# Namespace for all resources (optional - uncomment to use dedicated namespace)
+# namespace: hello-world-asm

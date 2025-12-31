@@ -1,0 +1,30 @@
+# =============================================================================
+# Student Gradebook - Kubernetes Service
+# =============================================================================
+# Note: This CLI application doesn't expose network ports.
+# This service is included for completeness and potential future extensions.
+# It provides cluster-internal service discovery if the app is extended.
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: student-gradebook
+  labels:
+    app: student-gradebook
+    app.kubernetes.io/name: student-gradebook
+    app.kubernetes.io/component: cli
+    app.kubernetes.io/part-of: gradebook-system
+spec:
+  # ClusterIP None creates a headless service
+  # Useful for service discovery without load balancing
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: student-gradebook
+  # No ports exposed - this is a CLI application
+  # If extended to include an API, add ports here:
+  # ports:
+  #   - name: http
+  #     port: 8080
+  #     targetPort: 8080
+  #     protocol: TCP

@@ -1,0 +1,36 @@
+# ==============================================================================
+# Docker Ignore File
+# Excludes unnecessary files from the Docker build context
+# ==============================================================================
+
+# Build artifacts
+*.o
+*.obj
+*.exe
+quick_maths
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+LICENSE
+
+# Docker files (not needed in build context)
+docker-compose.yml
+Dockerfile.dev
+
+# Kubernetes manifests
+k8s/
+
+# OS files
+.DS_Store
+Thumbs.db

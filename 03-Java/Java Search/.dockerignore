@@ -1,0 +1,76 @@
+# =============================================================================
+# Docker Ignore File - Java Search Engine
+# =============================================================================
+# Excludes unnecessary files from the Docker build context to reduce
+# image size and improve build performance.
+# =============================================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# Build outputs (we build fresh in container)
+out/
+target/
+build/
+*.class
+*.jar
+*.war
+
+# Documentation (optional to exclude)
+*.md
+!README.md
+
+# Desktop and installer files (not needed in container)
+*.desktop
+install.sh
+uninstall.sh
+run-gui.sh
+Install*.desktop
+Uninstall*.desktop
+
+# Kubernetes and Docker files (not needed inside container)
+k8s/
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs and temp files
+*.log
+*.tmp
+*.temp
+
+# Test files (if any)
+**/test/
+**/tests/
+**/*_test.java
+**/*Test.java
+
+# GUI-related source (JavaFX not available in alpine JRE)
+# Uncomment if you want to exclude GUI classes from CLI image:
+# src/main/java/searchengine/*GUI*.java
+
+# License (kept for compliance, but can exclude if needed)
+# LICENSE
+
+# Icon files
+*.svg
+*.png
+*.ico
+*.icns

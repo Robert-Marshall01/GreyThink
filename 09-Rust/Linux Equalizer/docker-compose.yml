@@ -1,0 +1,199 @@
+# =============================================================================
+# Linux Equalizer - Docker Compose Configuration
+# =============================================================================
+# NOTE: This application requires access to the host's audio system.
+# The configuration below mounts the necessary PulseAudio sockets.
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Production: Headless/Daemon Mode
+  # ---------------------------------------------------------------------------
+  linux-equalizer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: linux-equalizer:latest
+    container_name: linux-equalizer
+    restart: unless-stopped
+    
+    # Run in headless mode by default
+    command: ["--headless"]
+    
+    # Security: Run as non-root
+    user: "1000:1000"
+    
+    # Audio system access
+    environment:
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+      - XDG_RUNTIME_DIR=/run/user/1000
+      - HOME=/home/equalizer
+    
+    volumes:
+      # PulseAudio socket for audio access
+      - /run/user/1000/pulse:/run/user/1000/pulse:rw
+      # Persistent configuration storage
+      - equalizer-config:/home/equalizer/.config/linux-equalizer
+      # PulseAudio cookie for authentication
+      - ${HOME}/.config/pulse/cookie:/home/equalizer/.config/pulse/cookie:ro
+    
+    # Device access for audio
+    devices:
+      - /dev/snd:/dev/snd
+    
+    # Required for audio group access
+    group_add:
+      - audio
+    
+    # Network not required for audio processing
+    network_mode: none
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    
+    # Health check - verify PulseAudio connection
+    healthcheck:
+      test: ["CMD", "pactl", "info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  # ---------------------------------------------------------------------------
+  # GUI Mode (requires X11/Wayland forwarding)
+  # ---------------------------------------------------------------------------
+  linux-equalizer-gui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: linux-equalizer:latest
+    container_name: linux-equalizer-gui
+    
+    # Override to run with GUI
+    command: []
+    
+    # Security
+    user: "1000:1000"
+    
+    # Display and audio environment
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+      - WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}
+      - XDG_RUNTIME_DIR=/run/user/1000
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+      - GTK_THEME=Adwaita
+      - HOME=/home/equalizer
+    
+    volumes:
+      # X11 socket for display
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # Wayland socket (if using Wayland)
+      - ${XDG_RUNTIME_DIR:-/run/user/1000}/${WAYLAND_DISPLAY:-wayland-0}:/run/user/1000/${WAYLAND_DISPLAY:-wayland-0}:rw
+      # PulseAudio socket
+      - /run/user/1000/pulse:/run/user/1000/pulse:rw
+      # Persistent configuration
+      - equalizer-config:/home/equalizer/.config/linux-equalizer
+      # PulseAudio cookie
+      - ${HOME}/.config/pulse/cookie:/home/equalizer/.config/pulse/cookie:ro
+    
+    devices:
+      - /dev/snd:/dev/snd
+      - /dev/dri:/dev/dri  # GPU access for GTK rendering
+    
+    group_add:
+      - audio
+      - video
+    
+    # Network not required
+    network_mode: none
+    
+    # Resource limits for GUI
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    
+    profiles:
+      - gui
+
+  # ---------------------------------------------------------------------------
+  # Development Environment
+  # ---------------------------------------------------------------------------
+  linux-equalizer-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    image: linux-equalizer:dev
+    container_name: linux-equalizer-dev
+    
+    # Interactive development
+    stdin_open: true
+    tty: true
+    
+    # Mount source code
+    volumes:
+      - .:/home/developer/app:rw
+      - cargo-cache:/home/developer/.cargo/registry
+      - cargo-git:/home/developer/.cargo/git
+      - target-cache:/home/developer/app/target
+      # Audio access for testing
+      - /run/user/1000/pulse:/run/user/1000/pulse:rw
+      - ${HOME}/.config/pulse/cookie:/home/developer/.config/pulse/cookie:ro
+      # Display for GUI testing
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+      - XDG_RUNTIME_DIR=/run/user/1000
+      - CARGO_HOME=/home/developer/.cargo
+      - GTK_THEME=Adwaita
+    
+    devices:
+      - /dev/snd:/dev/snd
+      - /dev/dri:/dev/dri
+    
+    group_add:
+      - audio
+      - video
+    
+    # Development doesn't need network restrictions
+    network_mode: bridge
+    
+    working_dir: /home/developer/app
+    
+    # Keep container running for development
+    command: ["tail", "-f", "/dev/null"]
+    
+    profiles:
+      - dev
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  # Persistent equalizer configuration
+  equalizer-config:
+    driver: local
+  
+  # Development caches
+  cargo-cache:
+    driver: local
+  cargo-git:
+    driver: local
+  target-cache:
+    driver: local

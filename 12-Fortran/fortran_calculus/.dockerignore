@@ -1,0 +1,73 @@
+# =============================================================================
+# Docker Build Context Exclusions
+# =============================================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+!README.md
+docs/
+LICENSE
+CODEOWNERS
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+SECURITY.md
+THIRD_PARTY_NOTICES.md
+CHANGELOG.md
+
+# Build artifacts
+*.exe
+*.o
+*.mod
+*.out
+
+# Python virtual environments
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Container/orchestration files (not needed in image)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+k8s/
+
+# Test files (not needed in production)
+tests/
+test_*.f90
+*.bak*
+
+# Windows build scripts
+*.ps1
+
+# Generated output (will be mounted at runtime)
+PNGs/
+# Keep CSVs for runtime-full target
+# CSVs/
+
+# Gnuplot files
+*.gnu
+
+# Tools directory
+tools/
+
+# Examples (optional - uncomment to include)
+# examples/

@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: age-verification-config
+  labels:
+    app: age-verification
+data:
+  # Application-specific configuration
+  # These can be customized based on deployment needs
+  
+  # Example: Default media configuration (optional)
+  # These would need application code changes to read from env
+  # MEDIA_NAME: "Default Media"
+  # MEDIA_TYPE: "Movie"
+  # MEDIA_AGE_RATING: "13"
+  # MEDIA_YEAR: "2000"
+  # MEDIA_GENRE: "General"
+  
+  # Placeholder entry (ConfigMaps require at least one data entry)
+  APP_NAME: "age-verification"

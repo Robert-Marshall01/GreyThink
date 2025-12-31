@@ -1,0 +1,13 @@
+# =============================================================================
+# Spectastic - Kubernetes Namespace
+# =============================================================================
+# Creates a dedicated namespace for the spectastic application
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: spectastic
+  labels:
+    app.kubernetes.io/name: spectastic
+    app.kubernetes.io/part-of: spectastic
+    app.kubernetes.io/managed-by: kubectl
