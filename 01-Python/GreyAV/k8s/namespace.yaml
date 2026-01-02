@@ -1,0 +1,12 @@
+# ============================================================================
+# GreyAV Kubernetes Namespace
+# Isolates GreyAV resources in dedicated namespace
+# ============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: greyav
+  labels:
+    app.kubernetes.io/name: greyav
+    app.kubernetes.io/part-of: greyav-system
+    app.kubernetes.io/managed-by: kubectl

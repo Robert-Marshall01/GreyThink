@@ -1,0 +1,92 @@
+# ============================================================================
+# GreyAV Docker Ignore File
+# Exclude unnecessary files from Docker build context
+# ============================================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Test files
+tests/
+test_*.py
+*_test.py
+coverage.xml
+.coverage
+htmlcov/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+scan_log.txt
+behavioral_events.log
+
+# Quarantine contents (not the directory)
+quarantine/*
+!quarantine/.gitkeep
+
+# Local configuration (sensitive)
+config.json
+*.local.json
+
+# Scan history and reports
+scan_history.json
+reports/
+
+# Kubernetes manifests (not needed in image)
+k8s/
+*.yaml
+!docker-compose.yml
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+Jenkinsfile
+
+# Installation scripts (not needed in container)
+install_av.sh
+uninstall_av.sh
+
+# Firewall rules exports
+firewall_rules_*.json
+
+# Miscellaneous
+*.bak
+*.backup
+.DS_Store
+Thumbs.db

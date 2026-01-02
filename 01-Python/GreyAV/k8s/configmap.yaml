@@ -1,0 +1,62 @@
+# ============================================================================
+# GreyAV ConfigMaps
+# Application configuration and environment settings
+# ============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: greyav-config
+  namespace: greyav
+  labels:
+    app.kubernetes.io/name: greyav
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: greyav-system
+data:
+  # Application settings
+  GREYAV_LOG_LEVEL: "info"
+  GREYAV_HEURISTIC_THRESHOLD: "50"
+  GREYAV_AUTO_QUARANTINE: "false"
+  GREYAV_AUTO_RESPONSE: "false"
+  GREYAV_RESPONSE_LEVEL: "moderate"
+  GREYAV_SCAN_ARCHIVES: "true"
+  GREYAV_MAX_FILE_SIZE_MB: "100"
+  GREYAV_PARALLEL_SCANS: "4"
+  TZ: "UTC"
+  
+  # Paths configuration
+  GREYAV_HOME: "/app"
+  GREYAV_DATA: "/app/data"
+  GREYAV_QUARANTINE: "/app/quarantine"
+  GREYAV_LOGS: "/app/logs"
+
+---
+# ============================================================================
+# GreyAV Monitor ConfigMap (DaemonSet)
+# Configuration for the node-level file system monitor
+# ============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: greyav-monitor-config
+  namespace: greyav
+  labels:
+    app.kubernetes.io/name: greyav
+    app.kubernetes.io/component: monitor-config
+    app.kubernetes.io/part-of: greyav-system
+data:
+  # Monitor-specific settings (prefixed to avoid cross-file duplication warnings)
+  GREYAV_MONITOR_LOG_LEVEL: "info"
+  GREYAV_MONITOR_HEURISTIC_THRESHOLD: "50"
+  GREYAV_MONITOR_AUTO_QUARANTINE: "false"
+  GREYAV_MONITOR_AUTO_RESPONSE: "false"
+  GREYAV_MONITOR_RESPONSE_LEVEL: "moderate"
+  GREYAV_MONITOR_SCAN_ARCHIVES: "false"
+  GREYAV_MONITOR_MAX_FILE_SIZE_MB: "50"
+  GREYAV_MONITOR_PARALLEL_SCANS: "2"
+  MONITOR_TZ: "UTC"
+  
+  # Paths configuration (monitor uses host paths)
+  GREYAV_MONITOR_HOME: "/app"
+  GREYAV_MONITOR_DATA: "/app/data"
+  GREYAV_MONITOR_QUARANTINE: "/app/quarantine"
+  GREYAV_MONITOR_LOGS: "/app/logs"

@@ -1,0 +1,30 @@
+# GreyAV - Required Dependencies
+# ================================
+# Core functionality works without any dependencies (Python 3.6+ only)
+# These packages enable enhanced features
+
+# Process and system monitoring (recommended)
+psutil>=5.9.0
+
+# Real-time file system monitoring (recommended)
+watchdog>=3.0.0
+
+# Optional: Enhanced cryptography for quarantine encryption
+# cryptography>=41.0.0
+
+# Optional: YARA rule support
+# yara-python>=4.3.0
+
+# Optional: Network packet inspection
+# scapy>=2.5.0
+
+# Optional: Machine learning threat detection
+# scikit-learn>=1.3.0
+# numpy>=1.24.0
+
+# Development dependencies (install with: pip install -r requirements-dev.txt)
+# pytest>=7.4.0
+# pytest-cov>=4.1.0
+# black>=23.0.0
+# flake8>=6.1.0
+# mypy>=1.5.0

@@ -1,0 +1,155 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "greyav"
+version = "5.0.0"
+description = "Advanced Antivirus/EDR System with Asymmetric Brute Force Resilience"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+authors = [
+    {name = "GreyAV Project"}
+]
+maintainers = [
+    {name = "GreyAV Project"}
+]
+keywords = [
+    "antivirus",
+    "security",
+    "malware",
+    "edr",
+    "threat-detection",
+    "cybersecurity",
+    "linux-security",
+    "real-time-protection",
+    "heuristic-analysis",
+    "behavioral-analysis"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: System :: Monitoring",
+    "Topic :: System :: Systems Administration",
+    "Typing :: Typed"
+]
+
+dependencies = []
+
+[project.optional-dependencies]
+recommended = [
+    "psutil>=5.9.0",
+    "watchdog>=3.0.0"
+]
+full = [
+    "psutil>=5.9.0",
+    "watchdog>=3.0.0",
+    "cryptography>=41.0.0"
+]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "flake8>=6.1.0",
+    "mypy>=1.5.0",
+    "isort>=5.12.0"
+]
+
+[project.scripts]
+greyav = "greyav:main"
+
+[project.urls]
+Homepage = "https://github.com/greyav/greyav"
+Documentation = "https://github.com/greyav/greyav#readme"
+Repository = "https://github.com/greyav/greyav.git"
+Issues = "https://github.com/greyav/greyav/issues"
+Changelog = "https://github.com/greyav/greyav/blob/main/CHANGELOG.md"
+
+[tool.setuptools]
+packages = ["greyav"]
+py-modules = [
+    "greyav",
+    "auto_threat_manager",
+    "behavioral_engine",
+    "port_manager",
+    "socket_intake",
+    "av_immune_system",
+    "attack_graph",
+    "chaos_immunization_layer",
+    "cognitive_threat_twin",
+    "collective_mesh",
+    "deception_engine",
+    "deception_manager",
+    "energy_defense",
+    "mesh_node",
+    "neural_adaptation",
+    "policy_orchestrator",
+    "process_lineage",
+    "replay_engine",
+    "resilience_manager",
+    "semantic_reasoner",
+    "threat_dna",
+    "threat_dreamscape_engine",
+    "threat_economy",
+    "threat_knowledge_graph",
+    "threat_sandbox",
+    "threat_simulator",
+    "trust_fabric"
+]
+
+[tool.setuptools.package-data]
+"*" = ["signatures.json", "exclusions.json"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+  | quarantine
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+skip = [".venv", "venv", "quarantine"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+exclude = ["quarantine", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning"
+]

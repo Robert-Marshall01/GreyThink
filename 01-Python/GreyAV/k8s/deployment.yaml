@@ -1,0 +1,296 @@
+# ============================================================================
+# GreyAV Deployment
+# Main application deployment with rolling updates and health checks
+# ============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: greyav
+  namespace: greyav
+  labels:
+    app.kubernetes.io/name: greyav
+    app.kubernetes.io/component: core
+    app.kubernetes.io/part-of: greyav-system
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  
+  # Rolling update strategy for zero-downtime deployments
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: greyav
+      app.kubernetes.io/component: core
+  
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: greyav
+        app.kubernetes.io/component: core
+        app.kubernetes.io/part-of: greyav-system
+        app.kubernetes.io/version: "1.0.0"
+      annotations:
+        # Force rolling update when configmap changes
+        checksum/config: "{{ include (print $.Template.BasePath \"/configmap.yaml\") . | sha256sum }}"
+    
+    spec:
+      # Service account for RBAC
+      serviceAccountName: greyav-sa
+      
+      # Security context for the pod
+      securityContext:
+        runAsNonRoot: false  # May need root for some scanning operations
+        fsGroup: 1000
+      
+      # Graceful termination
+      terminationGracePeriodSeconds: 30
+      
+      # Container specification
+      containers:
+        - name: greyav
+          image: greyav:1.0.0
+          imagePullPolicy: IfNotPresent
+          
+          # Container security context
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - SYS_PTRACE      # Process scanning
+                - DAC_READ_SEARCH # File access
+                - NET_ADMIN       # Network scanning
+          
+          # Command to run
+          command: ["python", "greyav.py"]
+          args: ["interactive"]
+          
+          # Environment from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: greyav-config
+          
+          # Additional environment variables
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          
+          # Resource requests and limits
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+              ephemeral-storage: "100Mi"
+            limits:
+              cpu: "2000m"
+              memory: "1Gi"
+              ephemeral-storage: "1Gi"
+          
+          # Volume mounts
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: quarantine
+              mountPath: /app/quarantine
+            - name: logs
+              mountPath: /app/logs
+            - name: reports
+              mountPath: /app/reports
+            - name: scan-target
+              mountPath: /scan
+              readOnly: true
+          
+          # Liveness probe - is the container alive?
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import greyav; print('alive')"
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
+          
+          # Readiness probe - is the container ready to serve?
+          readinessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import greyav; print('ready')"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+          
+          # Startup probe - for slow-starting containers
+          startupProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import greyav; print('starting')"
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 10
+            failureThreshold: 30
+            successThreshold: 1
+      
+      # Volumes
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: greyav-data-pvc
+        - name: quarantine
+          persistentVolumeClaim:
+            claimName: greyav-quarantine-pvc
+        - name: logs
+          persistentVolumeClaim:
+            claimName: greyav-logs-pvc
+        - name: reports
+          emptyDir: {}
+        - name: scan-target
+          hostPath:
+            path: /tmp
+            type: Directory
+      
+      # Node affinity and tolerations
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: greyav
+                topologyKey: kubernetes.io/hostname
+
+---
+# ============================================================================
+# GreyAV Monitor DaemonSet
+# Runs on each node for real-time filesystem monitoring
+# ============================================================================
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: greyav-monitor
+  namespace: greyav
+  labels:
+    app.kubernetes.io/name: greyav
+    app.kubernetes.io/component: monitor
+    app.kubernetes.io/part-of: greyav-system
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: greyav
+      app.kubernetes.io/component: monitor
+  
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: greyav
+        app.kubernetes.io/component: monitor
+        app.kubernetes.io/part-of: greyav-system
+    
+    spec:
+      serviceAccountName: greyav-sa
+      
+      # Allow scheduling on all nodes including master (optional)
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          effect: NoSchedule
+          operator: Exists
+        - key: node-role.kubernetes.io/control-plane
+          effect: NoSchedule
+          operator: Exists
+      
+      containers:
+        - name: greyav-monitor
+          image: greyav:1.0.0
+          imagePullPolicy: IfNotPresent
+          
+          command: ["python", "greyav.py"]
+          args: ["monitor", "/host-root", "--no-recursive"]
+          
+          securityContext:
+            privileged: false
+            capabilities:
+              add:
+                - SYS_PTRACE
+                - DAC_READ_SEARCH
+          
+          envFrom:
+            - configMapRef:
+                name: greyav-monitor-config
+          
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+              ephemeral-storage: "50Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+              ephemeral-storage: "500Mi"
+          
+          volumeMounts:
+            - name: host-root
+              mountPath: /host-root
+              readOnly: true
+            - name: data
+              mountPath: /app/data
+            - name: quarantine
+              mountPath: /app/quarantine
+          
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import greyav; print('alive')"
+            initialDelaySeconds: 15
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+      
+      volumes:
+        - name: host-root
+          hostPath:
+            path: /
+            type: Directory
+        - name: data
+          hostPath:
+            path: /var/lib/greyav/data
+            type: DirectoryOrCreate
+        - name: quarantine
+          hostPath:
+            path: /var/lib/greyav/quarantine
+            type: DirectoryOrCreate
