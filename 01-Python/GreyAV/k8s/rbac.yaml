@@ -1,0 +1,108 @@
+# ============================================================================
+# GreyAV RBAC Configuration
+# Service Account and Role-Based Access Control
+# ============================================================================
+
+---
+# Service Account
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: greyav-sa
+  namespace: greyav
+  labels:
+    app.kubernetes.io/name: greyav
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: greyav-system
+
+---
+# Role - namespace-scoped permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: greyav-role
+  namespace: greyav
+  labels:
+    app.kubernetes.io/name: greyav
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: greyav-system
+rules:
+  # Allow reading ConfigMaps for configuration
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  
+  # Allow reading Secrets (if needed for encrypted quarantine keys)
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+  
+  # Allow reading own pod info
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  
+  # Allow reading events for debugging
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+
+---
+# RoleBinding - bind role to service account
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: greyav-rolebinding
+  namespace: greyav
+  labels:
+    app.kubernetes.io/name: greyav
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: greyav-system
+subjects:
+  - kind: ServiceAccount
+    name: greyav-sa
+    namespace: greyav
+roleRef:
+  kind: Role
+  name: greyav-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# ClusterRole - cluster-wide permissions (for node monitoring)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: greyav-cluster-role
+  labels:
+    app.kubernetes.io/name: greyav
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: greyav-system
+rules:
+  # Allow reading node information
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  
+  # Allow reading namespaces
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: greyav-cluster-rolebinding
+  labels:
+    app.kubernetes.io/name: greyav
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: greyav-system
+subjects:
+  - kind: ServiceAccount
+    name: greyav-sa
+    namespace: greyav
+roleRef:
+  kind: ClusterRole
+  name: greyav-cluster-role
+  apiGroup: rbac.authorization.k8s.io

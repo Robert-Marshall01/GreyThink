@@ -1,0 +1,44 @@
+# ============================================================================
+# GreyAV Kustomization
+# Declarative configuration management for Kubernetes resources
+# ============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: greyav
+
+# Namespace for all resources
+namespace: greyav
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: greyav
+  app.kubernetes.io/part-of: greyav-system
+  app.kubernetes.io/managed-by: kustomize
+
+# Common annotations
+commonAnnotations:
+  app.kubernetes.io/description: "GreyAV Advanced Antivirus/EDR System"
+
+# Resources to include
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - rbac.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+
+# Image customization
+images:
+  - name: greyav
+    newName: greyav
+    newTag: latest
+
+# ConfigMap generator (alternative to static configmap.yaml)
+# configMapGenerator:
+#   - name: greyav-config
+#     literals:
+#       - GREYAV_LOG_LEVEL=info
+#       - GREYAV_HEURISTIC_THRESHOLD=50

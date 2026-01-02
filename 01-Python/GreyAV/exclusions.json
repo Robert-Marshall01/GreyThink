@@ -1,0 +1,10 @@
+{
+  "paths": [
+    "/tmp"
+  ],
+  "extensions": [
+    ".pyc",
+    ".json"
+  ],
+  "patterns": []
+}

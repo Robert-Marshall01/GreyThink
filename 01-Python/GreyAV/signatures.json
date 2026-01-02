@@ -1,0 +1,22 @@
+{
+  "eicar_test": {
+    "hash": "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f",
+    "name": "EICAR-Test-File",
+    "severity": "test"
+  },
+  "wannacry_sample": {
+    "hash": "24d004a104d4d54034dbcffc2a4b19a11f39008a575aa614ea04703480b1022c",
+    "name": "WannaCry-Ransomware",
+    "severity": "critical"
+  },
+  "petya_sample": {
+    "hash": "027cc450ef5f8c5f653329641ec1fed91f694e0d229928963b30f6b0d7d3a745",
+    "name": "Petya-Ransomware",
+    "severity": "critical"
+  },
+  "locky_sample": {
+    "hash": "5e945c1d27c9ad77a2b63ae10af46aee7d29a6a43605a9bfbf35cecc4ea13a39",
+    "name": "Locky-Ransomware",
+    "severity": "critical"
+  }
+}

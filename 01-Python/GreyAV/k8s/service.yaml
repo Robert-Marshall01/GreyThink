@@ -1,0 +1,56 @@
+# ============================================================================
+# GreyAV Service
+# Internal service for pod communication (if needed)
+# ============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: greyav
+  namespace: greyav
+  labels:
+    app.kubernetes.io/name: greyav
+    app.kubernetes.io/component: core
+    app.kubernetes.io/part-of: greyav-system
+spec:
+  # ClusterIP for internal access only (CLI application)
+  type: ClusterIP
+  
+  selector:
+    app.kubernetes.io/name: greyav
+    app.kubernetes.io/component: core
+  
+  ports:
+    # Placeholder port - GreyAV is CLI-based, but service is useful for:
+    # - Future API endpoints
+    # - Health check endpoints
+    # - Metrics exposition
+    - name: health
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+
+---
+# ============================================================================
+# GreyAV Headless Service
+# For StatefulSet-like DNS resolution (pod-specific addressing)
+# ============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: greyav-headless
+  namespace: greyav
+  labels:
+    app.kubernetes.io/name: greyav
+    app.kubernetes.io/component: core
+    app.kubernetes.io/part-of: greyav-system
+spec:
+  clusterIP: None
+  
+  selector:
+    app.kubernetes.io/name: greyav
+    app.kubernetes.io/component: core
+  
+  ports:
+    - name: health
+      port: 8080
+      targetPort: 8080

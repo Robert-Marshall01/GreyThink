@@ -1,0 +1,64 @@
+# ============================================================================
+# GreyAV Persistent Volume Claims
+# Storage for application data, quarantine, and logs
+# ============================================================================
+
+---
+# Data PVC - Stores signatures, configuration, scan history
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: greyav-data-pvc
+  namespace: greyav
+  labels:
+    app.kubernetes.io/name: greyav
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: greyav-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  # Uncomment and set storage class if needed
+  # storageClassName: standard
+
+---
+# Quarantine PVC - Isolated storage for quarantined files
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: greyav-quarantine-pvc
+  namespace: greyav
+  labels:
+    app.kubernetes.io/name: greyav
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: greyav-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  # Uncomment and set storage class if needed
+  # storageClassName: standard
+
+---
+# Logs PVC - Persistent logging storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: greyav-logs-pvc
+  namespace: greyav
+  labels:
+    app.kubernetes.io/name: greyav
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: greyav-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  # Uncomment and set storage class if needed
+  # storageClassName: standard

@@ -1,0 +1,174 @@
+# ============================================================================
+# GreyAV - Docker Compose Configuration
+# Production-aligned container orchestration
+# ============================================================================
+
+version: "3.9"
+
+services:
+  # ---------------------------------------------------------------------------
+  # GreyAV Core Service
+  # ---------------------------------------------------------------------------
+  greyav:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: greyav:latest
+    container_name: greyav-core
+    
+    # Security configuration
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # Required for process scanning and monitoring
+      - SYS_PTRACE
+      - DAC_READ_SEARCH
+      # Required for network scanning
+      - NET_ADMIN
+      - NET_RAW
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+    
+    # Environment variables
+    environment:
+      - TZ=${TZ:-UTC}
+      - GREYAV_LOG_LEVEL=${GREYAV_LOG_LEVEL:-info}
+      - GREYAV_AUTO_QUARANTINE=${GREYAV_AUTO_QUARANTINE:-false}
+      - GREYAV_HEURISTIC_THRESHOLD=${GREYAV_HEURISTIC_THRESHOLD:-50}
+    
+    # Persistent volumes
+    volumes:
+      # Application data persistence
+      - greyav-data:/app/data
+      # Quarantine storage
+      - greyav-quarantine:/app/quarantine
+      # Log persistence
+      - greyav-logs:/app/logs
+      # Reports output
+      - greyav-reports:/app/reports
+      # Host filesystem access for scanning (read-only)
+      - ${SCAN_TARGET:-/tmp}:/scan:ro
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Logging configuration
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import greyav; print('OK')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    # Default command - interactive mode or scan
+    command: ["interactive"]
+
+  # ---------------------------------------------------------------------------
+  # GreyAV Real-Time Monitor Service
+  # ---------------------------------------------------------------------------
+  greyav-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: greyav:latest
+    container_name: greyav-monitor
+    
+    # Security configuration
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_PTRACE
+      - DAC_READ_SEARCH
+      - NET_ADMIN
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    
+    # Environment variables
+    environment:
+      - TZ=${TZ:-UTC}
+      - GREYAV_LOG_LEVEL=${GREYAV_LOG_LEVEL:-info}
+      - GREYAV_AUTO_RESPONSE=${GREYAV_AUTO_RESPONSE:-false}
+      - GREYAV_RESPONSE_LEVEL=${GREYAV_RESPONSE_LEVEL:-moderate}
+    
+    # Volumes
+    volumes:
+      - greyav-data:/app/data
+      - greyav-quarantine:/app/quarantine
+      - greyav-logs:/app/logs
+      # Directory to monitor (configurable)
+      - ${MONITOR_TARGET:-/tmp}:/monitor:ro
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Logging
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Real-time monitoring command
+    command: ["monitor", "/monitor", "--auto-response"]
+    
+    # Depends on core service for shared data
+    depends_on:
+      greyav:
+        condition: service_healthy
+
+# -----------------------------------------------------------------------------
+# Named Volumes
+# -----------------------------------------------------------------------------
+volumes:
+  greyav-data:
+    driver: local
+    name: greyav-data
+  
+  greyav-quarantine:
+    driver: local
+    name: greyav-quarantine
+  
+  greyav-logs:
+    driver: local
+    name: greyav-logs
+  
+  greyav-reports:
+    driver: local
+    name: greyav-reports
+
+# -----------------------------------------------------------------------------
+# Networks
+# -----------------------------------------------------------------------------
+networks:
+  default:
+    name: greyav-network
+    driver: bridge
