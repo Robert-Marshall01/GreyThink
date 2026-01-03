@@ -1,5 +1,19 @@
 # GreyAV: Extreme Brute Force Resilience
 
+## Test 2
+Defender (1 CPU, 2 GB RAM)
+<img width="1279" height="1448" alt="Screenshot from 2026-01-01 23-55-39" src="https://github.com/user-attachments/assets/1138839a-fc6e-4482-a8a1-27dae4c5441c" />
+
+Attacker (16 CPU, 16 GB RAM)
+<img width="1097" height="1276" alt="image" src="https://github.com/user-attachments/assets/3411a781-cb9a-442b-a65b-9f78b458d507" />
+
+## Test 1
+Defender (2 CPU, 4 GB RAM)
+<img width="1279" height="1448" alt="Screenshot from 2026-01-01 23-14-53" src="https://github.com/user-attachments/assets/cad8d01d-6b07-495e-88c9-43a0ad2479d0" />
+
+Attacker (16 CPU, 8 GB RAM)
+<img width="1097" height="1276" alt="image" src="https://github.com/user-attachments/assets/a9d14909-236c-41f8-ac17-09dbfafe7b62" />
+
 GreyAV isn't just another antivirus. It's a breakthrough in **asymmetric defense** — a system that flips the economics of brute force attacks and forces attackers into exponential overcommitment.
 
 ## 🚀 Key Breakthroughs
