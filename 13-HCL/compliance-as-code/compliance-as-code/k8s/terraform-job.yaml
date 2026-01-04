@@ -1,0 +1,166 @@
+#--------------------------------------------------------------
+# Terraform Job for Digital Organism
+# compliance-as-code | digital organism metaphor
+#
+# Runs Terraform to initialize the organism's structure
+# (creates schema, tables, seeds data)
+#--------------------------------------------------------------
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: terraform-apply
+  namespace: compliance-system
+  labels:
+    app.kubernetes.io/name: compliance-as-code
+    app.kubernetes.io/component: terraform
+    # digital organism metaphor: organism genesis
+    organism.compliance/type: genesis
+spec:
+  ttlSecondsAfterFinished: 300  # Clean up after 5 minutes
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: terraform
+        app.kubernetes.io/name: compliance-as-code
+    spec:
+      restartPolicy: OnFailure
+      
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      
+      # Wait for PostgreSQL to be ready
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for PostgreSQL to be ready..."
+              until pg_isready -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER; do
+                echo "PostgreSQL not ready, waiting..."
+                sleep 2
+              done
+              echo "PostgreSQL is ready!"
+          env:
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: compliance-config
+                  key: POSTGRES_HOST
+            - name: POSTGRES_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: compliance-config
+                  key: POSTGRES_PORT
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: username
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+      
+      containers:
+        - name: terraform
+          image: compliance-terraform:latest  # Build from Dockerfile
+          imagePullPolicy: IfNotPresent
+          
+          command:
+            - sh
+            - -c
+            - |
+              echo "=== 🧬 Initializing Digital Organism ==="
+              terraform init
+              
+              echo "=== 🔍 Planning organism structure ==="
+              terraform plan -out=tfplan
+              
+              echo "=== 🚀 Birthing the digital organism ==="
+              terraform apply -auto-approve tfplan
+              
+              echo "=== ✅ Digital organism is alive! ==="
+              terraform output
+          
+          env:
+            # Terraform variables from ConfigMap
+            - name: TF_VAR_postgres_host
+              valueFrom:
+                configMapKeyRef:
+                  name: compliance-config
+                  key: POSTGRES_HOST
+            - name: TF_VAR_postgres_port
+              valueFrom:
+                configMapKeyRef:
+                  name: compliance-config
+                  key: POSTGRES_PORT
+            - name: TF_VAR_postgres_database
+              valueFrom:
+                configMapKeyRef:
+                  name: compliance-config
+                  key: POSTGRES_DATABASE
+            - name: TF_VAR_postgres_sslmode
+              valueFrom:
+                configMapKeyRef:
+                  name: compliance-config
+                  key: POSTGRES_SSLMODE
+            - name: TF_VAR_schema_name
+              valueFrom:
+                configMapKeyRef:
+                  name: compliance-config
+                  key: SCHEMA_NAME
+            - name: TF_VAR_compliance_user
+              valueFrom:
+                configMapKeyRef:
+                  name: compliance-config
+                  key: COMPLIANCE_USER
+            
+            # Terraform variables from Secrets
+            - name: TF_VAR_postgres_username
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: username
+            - name: TF_VAR_postgres_password
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: password
+            - name: TF_VAR_compliance_user_password
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: compliance-password
+            
+            # Terraform settings
+            - name: TF_IN_AUTOMATION
+              value: "true"
+            - name: TF_LOG
+              valueFrom:
+                configMapKeyRef:
+                  name: compliance-config
+                  key: TF_LOG
+          
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+          
+          volumeMounts:
+            - name: terraform-state
+              mountPath: /workspace/.terraform
+      
+      volumes:
+        - name: terraform-state
+          emptyDir: {}

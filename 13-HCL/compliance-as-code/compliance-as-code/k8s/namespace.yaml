@@ -1,0 +1,15 @@
+#--------------------------------------------------------------
+# Kubernetes Namespace for Digital Organism
+# compliance-as-code | digital organism metaphor
+#
+# Creates isolated environment for the compliance organism
+#--------------------------------------------------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: compliance-system
+  labels:
+    app.kubernetes.io/name: compliance-as-code
+    app.kubernetes.io/component: namespace
+    # digital organism metaphor: organism boundary
+    organism.compliance/type: boundary

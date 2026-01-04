@@ -1,0 +1,142 @@
+#--------------------------------------------------------------
+# Terraform CronJob for Digital Organism
+# compliance-as-code | digital organism metaphor
+#
+# Periodically runs compliance checks (immune system scan)
+# Default: Every hour at minute 0
+#--------------------------------------------------------------
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: compliance-scan
+  namespace: compliance-system
+  labels:
+    app.kubernetes.io/name: compliance-as-code
+    app.kubernetes.io/component: scanner
+    # digital organism metaphor: immune system patrol
+    organism.compliance/type: immune-patrol
+spec:
+  schedule: "0 * * * *"  # Every hour
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: compliance-scanner
+        spec:
+          restartPolicy: OnFailure
+          
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+          
+          containers:
+            - name: scanner
+              image: compliance-terraform:latest
+              imagePullPolicy: IfNotPresent
+              
+              command:
+                - sh
+                - -c
+                - |
+                  echo "=== 🛡️ Starting Immune System Scan ==="
+                  echo "Time: $(date -Iseconds)"
+                  
+                  # Run Terraform plan to detect drift
+                  terraform init
+                  terraform plan -detailed-exitcode
+                  EXIT_CODE=$?
+                  
+                  if [ $EXIT_CODE -eq 0 ]; then
+                    echo "✅ Organism healthy - no drift detected"
+                  elif [ $EXIT_CODE -eq 2 ]; then
+                    echo "⚠️ Drift detected - organism mutation found!"
+                    echo "Run 'terraform apply' to remediate"
+                  else
+                    echo "❌ Scan failed - check organism health"
+                    exit 1
+                  fi
+                  
+                  # Query compliance status
+                  echo ""
+                  echo "=== 📊 Compliance Status ==="
+                  PGPASSWORD=$TF_VAR_postgres_password psql \
+                    -h $TF_VAR_postgres_host \
+                    -p $TF_VAR_postgres_port \
+                    -U $TF_VAR_postgres_username \
+                    -d $TF_VAR_postgres_database \
+                    -c "SELECT compliance_status, COUNT(*) FROM compliance.resource_audit GROUP BY compliance_status;"
+                  
+                  echo ""
+                  echo "=== 🧬 Active Antibodies ==="
+                  PGPASSWORD=$TF_VAR_postgres_password psql \
+                    -h $TF_VAR_postgres_host \
+                    -p $TF_VAR_postgres_port \
+                    -U $TF_VAR_postgres_username \
+                    -d $TF_VAR_postgres_database \
+                    -c "SELECT COUNT(*) as active_antibodies FROM compliance.immune_rules WHERE active = true;"
+              
+              env:
+                - name: TF_VAR_postgres_host
+                  valueFrom:
+                    configMapKeyRef:
+                      name: compliance-config
+                      key: POSTGRES_HOST
+                - name: TF_VAR_postgres_port
+                  valueFrom:
+                    configMapKeyRef:
+                      name: compliance-config
+                      key: POSTGRES_PORT
+                - name: TF_VAR_postgres_database
+                  valueFrom:
+                    configMapKeyRef:
+                      name: compliance-config
+                      key: POSTGRES_DATABASE
+                - name: TF_VAR_postgres_username
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-credentials
+                      key: username
+                - name: TF_VAR_postgres_password
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-credentials
+                      key: password
+                - name: TF_VAR_compliance_user_password
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-credentials
+                      key: compliance-password
+                - name: TF_VAR_schema_name
+                  valueFrom:
+                    configMapKeyRef:
+                      name: compliance-config
+                      key: SCHEMA_NAME
+                - name: TF_VAR_compliance_user
+                  valueFrom:
+                    configMapKeyRef:
+                      name: compliance-config
+                      key: COMPLIANCE_USER
+                - name: TF_VAR_postgres_sslmode
+                  valueFrom:
+                    configMapKeyRef:
+                      name: compliance-config
+                      key: POSTGRES_SSLMODE
+                - name: TF_IN_AUTOMATION
+                  value: "true"
+              
+              resources:
+                requests:
+                  memory: "128Mi"
+                  cpu: "50m"
+                limits:
+                  memory: "256Mi"
+                  cpu: "200m"
+              
+              securityContext:
+                allowPrivilegeEscalation: false

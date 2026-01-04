@@ -1,0 +1,34 @@
+#--------------------------------------------------------------
+# Kubernetes ConfigMap for Digital Organism
+# compliance-as-code | digital organism metaphor
+#
+# Non-sensitive configuration for the compliance system
+#--------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: compliance-config
+  namespace: compliance-system
+  labels:
+    app.kubernetes.io/name: compliance-as-code
+    app.kubernetes.io/component: config
+    # digital organism metaphor: organism DNA (non-sensitive)
+    organism.compliance/type: dna-config
+data:
+  # PostgreSQL Configuration
+  POSTGRES_HOST: "postgres-service"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DATABASE: "compliance_db"
+  POSTGRES_SSLMODE: "disable"
+  
+  # Compliance Schema Configuration
+  SCHEMA_NAME: "compliance"
+  COMPLIANCE_USER: "compliance_user"
+  
+  # Terraform Configuration
+  TF_LOG: "INFO"
+  TF_IN_AUTOMATION: "true"
+  
+  # Metadata
+  ENVIRONMENT: "kubernetes"
+  MANAGED_BY: "terraform"
