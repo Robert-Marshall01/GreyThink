@@ -1,0 +1,149 @@
+#--------------------------------------------------------------
+# PostgreSQL Deployment for Digital Organism
+# compliance-as-code | digital organism metaphor
+#
+# Deploys PostgreSQL as the organism's brain/memory storage
+#--------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: compliance-system
+  labels:
+    app.kubernetes.io/name: compliance-as-code
+    app.kubernetes.io/component: database
+    # digital organism metaphor: organism brain
+    organism.compliance/type: brain
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  strategy:
+    type: Recreate  # Required for persistent volumes
+  template:
+    metadata:
+      labels:
+        app: postgres
+        app.kubernetes.io/name: compliance-as-code
+        app.kubernetes.io/component: database
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+      
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          
+          ports:
+            - containerPort: 5432
+              name: postgres
+          
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: compliance-config
+                  key: POSTGRES_DATABASE
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - admin
+                - -d
+                - compliance_db
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - admin
+                - -d
+                - compliance_db
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+      
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+
+---
+#--------------------------------------------------------------
+# PostgreSQL Service
+# digital organism metaphor: Neural network interface
+#--------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: compliance-system
+  labels:
+    app.kubernetes.io/name: compliance-as-code
+    app.kubernetes.io/component: database
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+
+---
+#--------------------------------------------------------------
+# PostgreSQL PersistentVolumeClaim
+# digital organism metaphor: Long-term memory storage
+#--------------------------------------------------------------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: compliance-system
+  labels:
+    app.kubernetes.io/name: compliance-as-code
+    app.kubernetes.io/component: database
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  # Uncomment and set your storage class
+  # storageClassName: standard

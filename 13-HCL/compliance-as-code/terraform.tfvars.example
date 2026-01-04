@@ -1,0 +1,86 @@
+#--------------------------------------------------------------
+# Example Terraform Variables File
+# 
+# Copy this file to terraform.tfvars and customize the values
+# for your environment.
+#
+# IMPORTANT: Never commit terraform.tfvars to version control
+# if it contains sensitive values like passwords.
+#--------------------------------------------------------------
+
+#--------------------------------------------------------------
+# Resource Naming & Location
+#--------------------------------------------------------------
+
+resource_group_name    = "rg-compliance-audit-prod"
+location               = "eastus"
+environment            = "prod"
+
+#--------------------------------------------------------------
+# PostgreSQL Server Configuration
+#--------------------------------------------------------------
+
+postgresql_server_name = "psql-compliance"
+database_name          = "compliance_db"
+
+# SENSITIVE: Set these via environment variables or secrets manager
+# administrator_login    = "complianceadmin"
+# administrator_password = "YourSecurePassword123!"
+
+#--------------------------------------------------------------
+# Instance Sizing
+# 
+# Available SKUs:
+# - Burstable: B_Standard_B1ms, B_Standard_B2s
+# - General Purpose: GP_Standard_D2s_v3, GP_Standard_D4s_v3
+# - Memory Optimized: MO_Standard_E2s_v3, MO_Standard_E4s_v3
+#--------------------------------------------------------------
+
+sku_name               = "GP_Standard_D2s_v3"
+storage_mb             = 65536  # 64 GB
+postgresql_version     = "16"
+
+#--------------------------------------------------------------
+# Backup Configuration
+#--------------------------------------------------------------
+
+backup_retention_days        = 35
+geo_redundant_backup_enabled = true
+
+#--------------------------------------------------------------
+# Security Configuration
+#--------------------------------------------------------------
+
+ssl_enforcement_enabled       = true
+public_network_access_enabled = false  # Recommended for production
+
+# Example: Allow specific IP ranges
+allowed_ip_ranges = [
+  {
+    name             = "DevOps-Team"
+    start_ip_address = "203.0.113.0"
+    end_ip_address   = "203.0.113.255"
+  },
+  {
+    name             = "Office-VPN"
+    start_ip_address = "198.51.100.1"
+    end_ip_address   = "198.51.100.50"
+  }
+]
+
+#--------------------------------------------------------------
+# Tagging
+#--------------------------------------------------------------
+
+additional_tags = {
+  project     = "infrastructure-compliance"
+  cost_center = "security-ops"
+  team        = "platform-engineering"
+}
+
+#--------------------------------------------------------------
+# SQL Script Configuration
+#--------------------------------------------------------------
+
+run_sql_scripts = true
+sql_script_path = "./sql/seed.sql"

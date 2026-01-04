@@ -1,0 +1,142 @@
+#--------------------------------------------------------------
+# Docker Compose for Digital Organism: Compliance-as-Code
+# compliance-as-code | digital organism metaphor
+#
+# SETUP: Set environment variables before running:
+#   export TF_VAR_postgres_username="admin"
+#   export TF_VAR_postgres_password="<YOUR_PASSWORD>"
+#   export TF_VAR_compliance_user_password="<YOUR_COMPLIANCE_PASSWORD>"
+#
+# Run all:    docker compose up -d
+# Run DB only: docker compose up -d postgres
+# Apply TF:   docker compose run --rm terraform apply -auto-approve
+# Stop:       docker compose down
+# Remove:     docker compose down -v
+#--------------------------------------------------------------
+
+services:
+  #--------------------------------------------------------------
+  # PostgreSQL Database
+  # digital organism metaphor: The organism's brain/memory
+  #--------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: compliance-postgres
+    restart: unless-stopped
+    
+    environment:
+      POSTGRES_DB: compliance_db
+      POSTGRES_USER: "${TF_VAR_postgres_username:-admin}"
+      POSTGRES_PASSWORD: "${TF_VAR_postgres_password:?Set TF_VAR_postgres_password}"
+    
+    ports:
+      - "5432:5432"
+    
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TF_VAR_postgres_username:-admin} -d compliance_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    
+    networks:
+      - compliance-network
+
+  #--------------------------------------------------------------
+  # Terraform Runner
+  # digital organism metaphor: The organism's nervous system
+  #--------------------------------------------------------------
+  terraform:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: compliance-terraform
+    
+    environment:
+      # Connection settings
+      TF_VAR_postgres_host: postgres
+      TF_VAR_postgres_port: "5432"
+      TF_VAR_postgres_database: compliance_db
+      TF_VAR_postgres_sslmode: disable
+      TF_VAR_schema_name: compliance
+      TF_VAR_compliance_user: compliance_user
+      # Credentials from environment
+      TF_VAR_postgres_username: "${TF_VAR_postgres_username:-admin}"
+      TF_VAR_postgres_password: "${TF_VAR_postgres_password:?Set TF_VAR_postgres_password}"
+      TF_VAR_compliance_user_password: "${TF_VAR_compliance_user_password:?Set TF_VAR_compliance_user_password}"
+      # Terraform settings
+      TF_IN_AUTOMATION: "true"
+    
+    depends_on:
+      postgres:
+        condition: service_healthy
+    
+    networks:
+      - compliance-network
+    
+    # Default: show help. Override with: docker compose run terraform <command>
+    command: ["--help"]
+
+  #--------------------------------------------------------------
+  # Compliance Scanner (one-shot)
+  # digital organism metaphor: Immune system scan
+  #--------------------------------------------------------------
+  scanner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: compliance-scanner
+    
+    environment:
+      TF_VAR_postgres_host: postgres
+      TF_VAR_postgres_port: "5432"
+      TF_VAR_postgres_database: compliance_db
+      TF_VAR_postgres_sslmode: disable
+      TF_VAR_schema_name: compliance
+      TF_VAR_compliance_user: compliance_user
+      TF_VAR_postgres_username: "${TF_VAR_postgres_username:-admin}"
+      TF_VAR_postgres_password: "${TF_VAR_postgres_password:?Set TF_VAR_postgres_password}"
+      TF_VAR_compliance_user_password: "${TF_VAR_compliance_user_password:?Set TF_VAR_compliance_user_password}"
+    
+    depends_on:
+      postgres:
+        condition: service_healthy
+    
+    networks:
+      - compliance-network
+    
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "=== 🛡️ Starting Immune System Scan ==="
+        terraform init
+        terraform plan -detailed-exitcode
+        EXIT_CODE=$$?
+        if [ $$EXIT_CODE -eq 0 ]; then
+          echo "✅ Organism healthy - no drift detected"
+        elif [ $$EXIT_CODE -eq 2 ]; then
+          echo "⚠️ Drift detected - run 'docker compose run terraform apply'"
+        fi
+        echo ""
+        echo "=== 📊 Compliance Status ==="
+        PGPASSWORD=$$TF_VAR_postgres_password psql \
+          -h postgres -p 5432 -U $$TF_VAR_postgres_username -d compliance_db \
+          -c "SELECT compliance_status, COUNT(*) FROM compliance.resource_audit GROUP BY compliance_status;" 2>/dev/null || echo "No audit data yet"
+    
+    profiles:
+      - scan  # Only runs with: docker compose --profile scan up scanner
+
+networks:
+  compliance-network:
+    name: compliance-organism-network
+
+volumes:
+  postgres_data:
+    name: compliance-postgres-data

@@ -1,0 +1,37 @@
+#--------------------------------------------------------------
+# Kustomization for Digital Organism
+# compliance-as-code | digital organism metaphor
+#
+# Deploy all resources with: kubectl apply -k k8s/
+#--------------------------------------------------------------
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: compliance-as-code
+
+namespace: compliance-system
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: compliance-as-code
+  app.kubernetes.io/part-of: digital-organism
+  app.kubernetes.io/managed-by: kustomize
+
+# Resources to include
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secrets.yaml
+  - postgres-deployment.yaml
+  - terraform-job.yaml
+  - cronjob.yaml
+
+# Image configuration (update for your registry)
+images:
+  - name: compliance-terraform
+    newName: compliance-terraform
+    newTag: latest
+  - name: postgres
+    newName: postgres
+    newTag: 16-alpine
