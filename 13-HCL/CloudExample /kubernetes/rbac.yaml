@@ -1,0 +1,76 @@
+# =============================================================================
+# SERVICE ACCOUNT
+# =============================================================================
+# SECURITY: Create a dedicated service account with minimal permissions
+# Best Practice: Never use the default service account for workloads
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sample-app-sa                 # Unique name for this service account
+  namespace: sample-app               # Must match the application namespace
+  labels:
+    app.kubernetes.io/name: sample-app
+    app.kubernetes.io/component: service-account
+  annotations:
+    # SECURITY: Azure Workload Identity annotation (if using Azure AD integration)
+    # azure.workload.identity/client-id: "<your-managed-identity-client-id>"
+    description: "Service account for sample-app workloads"
+
+# SECURITY: Disable automatic token mounting at SA level (can be overridden per pod)
+automountServiceAccountToken: false
+
+---
+# =============================================================================
+# ROLE - NAMESPACE SCOPED PERMISSIONS
+# =============================================================================
+# SECURITY: Define least-privilege permissions for the application
+# Roles are namespace-scoped (use ClusterRole for cluster-wide permissions)
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sample-app-role               # Name of this Role
+  namespace: sample-app               # Scope to the application namespace
+  labels:
+    app.kubernetes.io/name: sample-app
+    app.kubernetes.io/component: rbac
+rules:
+  # SECURITY: Grant read-only access to ConfigMaps (for app configuration)
+  - apiGroups: [""]                   # "" = core API group
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]   # Read-only verbs
+    
+  # SECURITY: Grant read-only access to Secrets (for credentials)
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+    
+  # SECURITY: Allow pods to read their own status
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+
+---
+# =============================================================================
+# ROLE BINDING
+# =============================================================================
+# SECURITY: Bind the Role to the ServiceAccount
+# This grants the service account the permissions defined in the Role
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sample-app-rolebinding        # Name of this RoleBinding
+  namespace: sample-app               # Must match Role and ServiceAccount namespace
+  labels:
+    app.kubernetes.io/name: sample-app
+    app.kubernetes.io/component: rbac
+subjects:
+  - kind: ServiceAccount              # The entity receiving permissions
+    name: sample-app-sa               # Name of the ServiceAccount
+    namespace: sample-app             # Namespace of the ServiceAccount
+roleRef:
+  kind: Role                          # Reference to a Role (or ClusterRole)
+  name: sample-app-role               # Name of the Role to bind
+  apiGroup: rbac.authorization.k8s.io # API group for RBAC resources

@@ -1,0 +1,17 @@
+# =============================================================================
+# KUBERNETES NAMESPACE
+# =============================================================================
+# MAINTAINABILITY: Use namespaces to organize and isolate resources
+# SECURITY: Enables namespace-level RBAC policies
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sample-app                    # Dedicated namespace for the application
+  labels:
+    app.kubernetes.io/name: sample-app
+    app.kubernetes.io/part-of: cloud-example
+    environment: development          # Change per environment (dev/staging/prod)
+  annotations:
+    # MAINTAINABILITY: Add descriptive metadata
+    description: "Namespace for sample application workloads"

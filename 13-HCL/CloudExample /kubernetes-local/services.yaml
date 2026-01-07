@@ -1,0 +1,152 @@
+# =============================================================================
+# KUBERNETES SERVICES - Local Development
+# =============================================================================
+# Services provide stable network endpoints for accessing pods
+# Enables service discovery and load balancing within the cluster
+#
+# Apply: kubectl apply -f services.yaml
+# Check: kubectl get services -n local-dev
+
+---
+# =============================================================================
+# APPLICATION SERVICE
+# =============================================================================
+# ClusterIP service for the sample application
+# Routes traffic to app pods and load balances across replicas
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: sample-app-service                # Service name (DNS: sample-app-service.local-dev.svc.cluster.local)
+  namespace: local-dev                    # Target namespace
+  labels:
+    app: sample-app                       # Application identifier
+    tier: frontend                        # Application tier
+  annotations:
+    description: "Service exposing the sample application within the cluster"
+spec:
+  # Service type: ClusterIP for internal access (Ingress handles external)
+  type: ClusterIP                         # Internal cluster service
+  
+  # Pod selector - routes traffic to pods with matching labels
+  selector:
+    app: sample-app                       # Match pods with app=sample-app label
+  
+  # Port configuration
+  ports:
+    - name: http                          # Port name for reference
+      protocol: TCP                       # Protocol (TCP/UDP)
+      port: 80                            # Service port (what clients connect to)
+      targetPort: http                    # Container port (named port reference)
+      # targetPort: 80                    # Alternative: use port number directly
+  
+  # Session affinity (None = round-robin load balancing)
+  sessionAffinity: None
+
+---
+# =============================================================================
+# POSTGRESQL DATABASE SERVICE
+# =============================================================================
+# ClusterIP service for PostgreSQL database
+# Provides stable DNS endpoint for database connections
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service                  # Service name (DNS: postgres-service.local-dev.svc.cluster.local)
+  namespace: local-dev                    # Target namespace
+  labels:
+    app: postgres                         # Application identifier
+    tier: database                        # Application tier
+  annotations:
+    description: "Service exposing PostgreSQL database within the cluster"
+spec:
+  # Service type: ClusterIP for internal access only
+  # Database should not be exposed externally in production
+  type: ClusterIP                         # Internal cluster service
+  
+  # Pod selector - routes traffic to postgres pods
+  selector:
+    app: postgres                         # Match pods with app=postgres label
+  
+  # Port configuration
+  ports:
+    - name: postgres                      # Port name
+      protocol: TCP                       # Protocol
+      port: 5432                          # Service port (PostgreSQL default)
+      targetPort: postgres                # Container port (named port reference)
+      # targetPort: 5432                  # Alternative: use port number directly
+  
+  # Session affinity: None for database connections
+  # Note: For connection pooling, consider using PgBouncer
+  sessionAffinity: None
+
+---
+# =============================================================================
+# NODEPORT SERVICE FOR LOCAL ACCESS (OPTIONAL)
+# =============================================================================
+# NodePort service exposes the application on a static port on each node
+# Use this for local development access without Ingress
+# Access via: http://localhost:<nodePort> (after port-forwarding in kind)
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: sample-app-nodeport               # Service name
+  namespace: local-dev                    # Target namespace
+  labels:
+    app: sample-app
+    tier: frontend
+  annotations:
+    description: "NodePort service for direct local access to the application"
+spec:
+  # NodePort type exposes on each node's IP at a static port
+  type: NodePort                          # External access via node port
+  
+  # Pod selector
+  selector:
+    app: sample-app                       # Match app pods
+  
+  # Port configuration with explicit NodePort
+  ports:
+    - name: http                          # Port name
+      protocol: TCP                       # Protocol
+      port: 80                            # Service port
+      targetPort: http                    # Container port
+      nodePort: 30080                     # Node port (30000-32767 range)
+                                          # Access: http://<node-ip>:30080
+  
+  sessionAffinity: None
+
+---
+# =============================================================================
+# HEADLESS SERVICE FOR POSTGRESQL (OPTIONAL)
+# =============================================================================
+# Headless service for direct pod DNS resolution
+# Useful for StatefulSets or when you need to connect to specific pods
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-headless                 # Service name
+  namespace: local-dev
+  labels:
+    app: postgres
+    tier: database
+  annotations:
+    description: "Headless service for direct PostgreSQL pod access"
+spec:
+  # Headless service: set clusterIP to None
+  type: ClusterIP
+  clusterIP: None                         # Headless - no cluster IP assigned
+  
+  # Pod selector
+  selector:
+    app: postgres
+  
+  # Port configuration
+  ports:
+    - name: postgres
+      protocol: TCP
+      port: 5432                          # PostgreSQL port
+      targetPort: postgres

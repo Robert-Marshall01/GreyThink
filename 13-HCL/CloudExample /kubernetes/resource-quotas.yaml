@@ -1,0 +1,76 @@
+# =============================================================================
+# RESOURCE QUOTA
+# =============================================================================
+# SCALABILITY: Limit total resource consumption in the namespace
+# Prevents runaway resource usage and ensures fair sharing
+
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: sample-app-quota              # Name of the ResourceQuota
+  namespace: sample-app               # Scope to application namespace
+  labels:
+    app.kubernetes.io/name: sample-app
+    app.kubernetes.io/component: quota
+spec:
+  hard:
+    # SCALABILITY: Compute resource limits
+    requests.cpu: "10"                # Total CPU requests across all pods
+    requests.memory: "20Gi"           # Total memory requests
+    limits.cpu: "20"                  # Total CPU limits
+    limits.memory: "40Gi"             # Total memory limits
+    
+    # SCALABILITY: Object count limits
+    pods: "50"                        # Maximum number of pods
+    services: "10"                    # Maximum number of services
+    secrets: "20"                     # Maximum number of secrets
+    configmaps: "20"                  # Maximum number of configmaps
+    persistentvolumeclaims: "10"      # Maximum number of PVCs
+    
+    # SCALABILITY: Storage limits
+    requests.storage: "100Gi"         # Total storage requests
+
+---
+# =============================================================================
+# LIMIT RANGE
+# =============================================================================
+# SCALABILITY: Default resource limits for containers without explicit limits
+# SECURITY: Prevents resource exhaustion attacks
+
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: sample-app-limits             # Name of the LimitRange
+  namespace: sample-app               # Scope to application namespace
+  labels:
+    app.kubernetes.io/name: sample-app
+    app.kubernetes.io/component: limits
+spec:
+  limits:
+    # Default limits for containers
+    - type: Container
+      default:                        # Default limits (if not specified)
+        cpu: "500m"
+        memory: "512Mi"
+      defaultRequest:                 # Default requests (if not specified)
+        cpu: "100m"
+        memory: "128Mi"
+      max:                            # Maximum allowed limits
+        cpu: "2"
+        memory: "4Gi"
+      min:                            # Minimum allowed requests
+        cpu: "50m"
+        memory: "64Mi"
+    
+    # Limits for pods (aggregate of all containers)
+    - type: Pod
+      max:
+        cpu: "4"
+        memory: "8Gi"
+    
+    # Limits for PersistentVolumeClaims
+    - type: PersistentVolumeClaim
+      max:
+        storage: "50Gi"
+      min:
+        storage: "1Gi"

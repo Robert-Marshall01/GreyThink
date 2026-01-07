@@ -1,0 +1,130 @@
+# =============================================================================
+# DOCKER COMPOSE - Local Development Stack
+# =============================================================================
+# Complete local development environment with app and database
+#
+# Usage:
+#   Start:   docker-compose up -d
+#   Stop:    docker-compose down
+#   Logs:    docker-compose logs -f
+#   Rebuild: docker-compose up -d --build
+#
+# Networks:
+#   - app-network: Internal network for service communication
+
+version: '3.9'
+
+services:
+  # ---------------------------------------------------------------------------
+  # Application Service
+  # ---------------------------------------------------------------------------
+  app:
+    build:
+      context: .                          # Build context directory
+      dockerfile: Dockerfile              # Dockerfile location
+    container_name: sample-app            # Container name for easy reference
+    image: sample-app:latest              # Image tag
+    
+    # Port mapping: HOST:CONTAINER
+    ports:
+      - "8080:80"                         # Access app at http://localhost:8080
+    
+    # Environment variables for the application
+    environment:
+      - NODE_ENV=development
+      - DATABASE_HOST=postgres            # Reference postgres service by name
+      - DATABASE_PORT=5432                # PostgreSQL default port
+      - DATABASE_NAME=appdb               # Database name
+      - DATABASE_USER=appuser             # Database user
+      - DATABASE_PASSWORD=localdevpassword  # Local dev password (use secrets in prod)
+    
+    # Service dependencies - wait for postgres to be ready
+    depends_on:
+      postgres:
+        condition: service_healthy        # Wait for postgres health check
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Connect to internal network
+    networks:
+      - app-network
+    
+    # Health check configuration
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Database Service
+  # ---------------------------------------------------------------------------
+  postgres:
+    # SECURITY: Use specific version tag
+    image: postgres:15.4-alpine           # Official PostgreSQL Alpine image
+    container_name: postgres-db           # Container name
+    
+    # Port mapping: HOST:CONTAINER
+    # SECURITY: Bind to localhost only to prevent external access
+    # Port 5433 used to avoid conflict with local PostgreSQL on 5432
+    ports:
+      - "127.0.0.1:5433:5432"             # PostgreSQL (localhost only, mapped to 5433)
+    
+    # Database configuration via environment variables
+    environment:
+      - POSTGRES_DB=appdb                 # Default database name
+      - POSTGRES_USER=appuser             # Database admin user
+      - POSTGRES_PASSWORD=localdevpassword  # Database password
+      - PGDATA=/var/lib/postgresql/data/pgdata  # Data directory
+    
+    # Persistent volume for database data
+    volumes:
+      - postgres-data:/var/lib/postgresql/data  # Named volume for persistence
+      - ./init-scripts:/docker-entrypoint-initdb.d  # SQL scripts run on init
+    
+    # Connect to internal network
+    networks:
+      - app-network
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Health check to verify PostgreSQL is ready
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appuser -d appdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    
+    # SECURITY: Resource limits to prevent DoS
+    # NOTE: deploy.resources requires docker-compose v2+ (docker compose) 
+    # or Docker Swarm mode. For standalone docker-compose v1, use mem_limit/cpus
+    mem_limit: 512m
+    memswap_limit: 512m
+    
+    # SECURITY: Drop unnecessary capabilities
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  app-network:
+    driver: bridge                        # Default bridge network driver
+    name: local-app-network               # Network name
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  postgres-data:
+    driver: local                         # Local volume driver
+    name: postgres-local-data             # Volume name for easy identification

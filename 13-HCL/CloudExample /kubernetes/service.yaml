@@ -1,0 +1,49 @@
+# =============================================================================
+# KUBERNETES SERVICE MANIFEST
+# =============================================================================
+# A Service provides a stable network endpoint to access a set of Pods.
+# It load-balances traffic across all matching Pods and provides service discovery.
+#
+# SECURITY: Internal ClusterIP for internal traffic, explicit port configuration
+# SCALABILITY: Session affinity options, health checks
+# MAINTAINABILITY: Consistent labels, clear annotations
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: sample-app-service            # Unique name for this Service
+  namespace: sample-app               # MAINTAINABILITY: Same namespace as Deployment
+  labels:
+    # MAINTAINABILITY: Consistent labeling scheme
+    app.kubernetes.io/name: sample-app
+    app.kubernetes.io/component: service
+    app.kubernetes.io/part-of: cloud-example
+    # Legacy labels
+    app: sample-app
+  annotations:
+    # MAINTAINABILITY: Service metadata
+    description: "Exposes sample-app deployment to the cluster"
+    # SECURITY: Azure-specific annotations for internal load balancer
+    # service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+spec:
+  # SECURITY: Use ClusterIP for internal services (Ingress handles external traffic)
+  type: ClusterIP                     # Internal-only service
+  
+  # Select pods to route traffic to
+  selector:
+    app: sample-app                   # Must match Deployment pod labels
+  
+  # SCALABILITY: Port configuration
+  ports:
+    - name: http                      # Named port for reference
+      protocol: TCP                   # Network protocol
+      port: 80                        # Service port (what clients connect to)
+      targetPort: http                # Pod port (using named port reference)
+  
+  # SCALABILITY: Session affinity configuration
+  sessionAffinity: None               # None = round-robin load balancing
+  # For sticky sessions, use:
+  # sessionAffinity: ClientIP
+  # sessionAffinityConfig:
+  #   clientIP:
+  #     timeoutSeconds: 3600          # Session timeout

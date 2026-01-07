@@ -1,0 +1,19 @@
+# =============================================================================
+# KUBERNETES NAMESPACE - Local Development
+# =============================================================================
+# Namespace isolates resources and provides logical separation
+# All application resources will be deployed in this namespace
+#
+# Apply: kubectl apply -f namespace.yaml
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: local-dev                         # Namespace name for local development
+  labels:
+    # Standard Kubernetes labels
+    app.kubernetes.io/name: local-dev
+    app.kubernetes.io/part-of: cloud-example
+    environment: development              # Environment identifier
+  annotations:
+    description: "Local development namespace for cloud-native application"
