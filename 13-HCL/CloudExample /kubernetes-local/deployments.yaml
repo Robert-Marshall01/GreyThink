@@ -1,0 +1,457 @@
+# =============================================================================
+# KUBERNETES DEPLOYMENTS - Local Development
+# =============================================================================
+# Deployments manage the lifecycle of application pods
+# Includes: Application Deployment and PostgreSQL Database Deployment
+#
+# Apply: kubectl apply -f deployments.yaml
+# Check: kubectl get deployments -n local-dev
+
+---
+# =============================================================================
+# APPLICATION DEPLOYMENT
+# =============================================================================
+# Main application deployment running the containerized app
+# Configured for local development with kind/minikube
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sample-app                        # Deployment name
+  namespace: local-dev                    # Target namespace
+  labels:
+    app: sample-app                       # Application identifier
+    tier: frontend                        # Application tier
+    environment: development              # Environment label
+  annotations:
+    description: "Sample application deployment for local development"
+spec:
+  # Number of pod replicas to maintain
+  replicas: 2                             # Run 2 replicas for local HA testing
+  
+  # Selector to match pods managed by this deployment
+  selector:
+    matchLabels:
+      app: sample-app                     # Must match template labels
+  
+  # Rolling update strategy for zero-downtime deployments
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1                         # Max pods above desired during update
+      maxUnavailable: 0                   # Zero downtime during updates
+  
+  # Pod template specification
+  template:
+    metadata:
+      labels:
+        app: sample-app                   # Pod label for service selector
+        tier: frontend
+    spec:
+      # SECURITY: Disable automatic service account token mounting
+      automountServiceAccountToken: false
+      
+      # SECURITY: Pod-level security context
+      securityContext:
+        runAsNonRoot: true                # Require non-root user
+        runAsUser: 101                    # nginx user UID
+        runAsGroup: 101                   # nginx group GID
+        fsGroup: 101                      # File system group
+        seccompProfile:
+          type: RuntimeDefault            # Use default seccomp profile
+      
+      # Container specification
+      containers:
+        - name: sample-app                # Container name
+          
+          # Image configuration
+          # For local development: use locally built image
+          # With kind: kind load docker-image sample-app:latest
+          # With minikube: eval $(minikube docker-env) && docker build
+          # SECURITY: In production, use specific version tag or digest
+          image: sample-app:1.0.0         # Image name with specific version
+          imagePullPolicy: IfNotPresent   # Don't pull if image exists locally
+          
+          # Port configuration
+          ports:
+            - name: http                  # Named port for service reference
+              containerPort: 80           # Container listens on port 80
+              protocol: TCP               # TCP protocol
+          
+          # Environment variables for the application
+          env:
+            # Database connection configuration
+            - name: DATABASE_HOST
+              value: "postgres-service"   # Reference to postgres service DNS
+            - name: DATABASE_PORT
+              value: "5432"               # PostgreSQL default port
+            - name: DATABASE_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config        # Reference ConfigMap
+                  key: database-name
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials    # Reference Secret
+                  key: username
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials    # Reference Secret
+                  key: password
+            # Application environment
+            - name: NODE_ENV
+              value: "development"
+          
+          # Resource requests and limits
+          # Adjust based on local machine capacity
+          resources:
+            requests:
+              cpu: "50m"                  # Minimum CPU (50 millicores)
+              memory: "64Mi"              # Minimum memory
+              ephemeral-storage: "100Mi"  # SECURITY: Storage request
+            limits:
+              cpu: "200m"                 # Maximum CPU (200 millicores)
+              memory: "256Mi"             # Maximum memory
+              ephemeral-storage: "500Mi"  # SECURITY: Limit ephemeral storage
+          
+          # Liveness probe - restart container if unhealthy
+          livenessProbe:
+            httpGet:
+              path: /                     # Health check endpoint
+              port: http                  # Use named port
+            initialDelaySeconds: 10       # Wait before first check
+            periodSeconds: 10             # Check every 10 seconds
+            timeoutSeconds: 5             # Timeout for each check
+            failureThreshold: 3           # Restart after 3 failures
+          
+          # Readiness probe - remove from service if not ready
+          readinessProbe:
+            httpGet:
+              path: /                     # Readiness endpoint
+              port: http                  # Use named port
+            initialDelaySeconds: 5        # Wait before first check
+            periodSeconds: 5              # Check every 5 seconds
+            timeoutSeconds: 3             # Timeout for each check
+            successThreshold: 1           # Ready after 1 success
+            failureThreshold: 3           # Not ready after 3 failures
+          
+          # SECURITY: Container-level security context
+          securityContext:
+            allowPrivilegeEscalation: false  # Prevent privilege escalation
+            readOnlyRootFilesystem: true     # Read-only root filesystem
+            capabilities:
+              drop:
+                - ALL                     # Drop all Linux capabilities
+            privileged: false             # Not privileged
+          
+          # SECURITY: Mount writable directories for nginx
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: var-cache-nginx
+              mountPath: /var/cache/nginx
+            - name: var-run
+              mountPath: /var/run
+      
+      # SECURITY: EmptyDir volumes for writable directories
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: var-cache-nginx
+          emptyDir: {}
+        - name: var-run
+          emptyDir: {}
+      
+      # Graceful shutdown timeout
+      terminationGracePeriodSeconds: 30
+      
+      # Restart policy for pods
+      restartPolicy: Always
+
+---
+# =============================================================================
+# POSTGRESQL DATABASE DEPLOYMENT
+# =============================================================================
+# PostgreSQL database deployment for local development
+# Uses official PostgreSQL image with persistent storage
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres                          # Deployment name
+  namespace: local-dev                    # Target namespace
+  labels:
+    app: postgres                         # Application identifier
+    tier: database                        # Application tier
+    environment: development
+  annotations:
+    description: "PostgreSQL database deployment for local development"
+spec:
+  # Single replica for database (no HA in local dev)
+  replicas: 1                             # Only 1 replica for stateful database
+  
+  # Selector to match pods
+  selector:
+    matchLabels:
+      app: postgres
+  
+  # Recreate strategy for database (safer than rolling update)
+  strategy:
+    type: Recreate                        # Stop old pod before starting new
+  
+  # Pod template specification
+  template:
+    metadata:
+      labels:
+        app: postgres
+        tier: database
+    spec:
+      # SECURITY: Disable automatic service account token mounting
+      automountServiceAccountToken: false
+      
+      # SECURITY: Pod-level security context for PostgreSQL
+      securityContext:
+        runAsNonRoot: true                # Require non-root user
+        runAsUser: 999                    # postgres user UID
+        runAsGroup: 999                   # postgres group GID
+        fsGroup: 999                      # File system group for volume
+        seccompProfile:
+          type: RuntimeDefault            # Use default seccomp profile
+      
+      containers:
+        - name: postgres                  # Container name
+          
+          # Official PostgreSQL Alpine image
+          # SECURITY: Use specific version tag
+          image: postgres:15.4-alpine     # PostgreSQL 15.4 on Alpine Linux
+          imagePullPolicy: IfNotPresent   # Use cached image if available
+          
+          # Port configuration
+          ports:
+            - name: postgres              # Named port
+              containerPort: 5432         # PostgreSQL default port
+              protocol: TCP
+          
+          # Database configuration via environment variables
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: database-name
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: password
+            # Data directory location
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          
+          # Resource requests and limits
+          resources:
+            requests:
+              cpu: "100m"                 # Minimum CPU
+              memory: "256Mi"             # Minimum memory
+              ephemeral-storage: "100Mi"  # SECURITY: Storage request
+            limits:
+              cpu: "500m"                 # Maximum CPU
+              memory: "512Mi"             # Maximum memory
+              ephemeral-storage: "1Gi"    # SECURITY: Limit ephemeral storage
+          
+          # Liveness probe - check if postgres is accepting connections
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 30       # Wait for postgres to start
+            periodSeconds: 10             # Check every 10 seconds
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # Readiness probe - postgres ready to accept queries
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+          
+          # SECURITY: Container-level security context
+          securityContext:
+            allowPrivilegeEscalation: false  # Prevent privilege escalation
+            capabilities:
+              drop:
+                - ALL                     # Drop all Linux capabilities
+            privileged: false             # Not privileged
+          
+          # Volume mounts for persistent data
+          volumeMounts:
+            - name: postgres-storage      # Volume name
+              mountPath: /var/lib/postgresql/data  # Mount path in container
+      
+      # Volumes configuration
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-pvc       # Reference to PVC
+
+---
+# =============================================================================
+# PERSISTENT VOLUME CLAIM FOR POSTGRESQL
+# =============================================================================
+# PVC requests storage from the cluster for database persistence
+# In kind/minikube, uses the default storage class
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc                      # PVC name (referenced by deployment)
+  namespace: local-dev
+  labels:
+    app: postgres
+    tier: database
+spec:
+  accessModes:
+    - ReadWriteOnce                       # Single node read/write access
+  resources:
+    requests:
+      storage: 1Gi                        # Request 1GB storage for local dev
+  # storageClassName: standard           # Uncomment to specify storage class
+  # For minikube: storageClassName: standard
+  # For kind: uses default provisioner
+
+---
+# =============================================================================
+# CONFIGMAP FOR APPLICATION CONFIGURATION
+# =============================================================================
+# Non-sensitive configuration data
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config                        # ConfigMap name
+  namespace: local-dev
+  labels:
+    app: sample-app
+data:
+  database-name: "appdb"                  # Database name
+  log-level: "debug"                      # Logging level for development
+  app-port: "80"                          # Application port
+
+---
+# =============================================================================
+# SECRET FOR DATABASE CREDENTIALS
+# =============================================================================
+# Sensitive data stored as secrets (base64 encoded)
+# SECURITY WARNING: In production, use external secret management like:
+#   - Kubernetes External Secrets Operator
+#   - HashiCorp Vault
+#   - Sealed Secrets
+# SECURITY: These are LOCAL DEV credentials only - never use in production!
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-credentials                    # Secret name
+  namespace: local-dev
+  labels:
+    app: postgres
+  annotations:
+    # SECURITY: Mark as local-dev only
+    environment: "local-development-only"
+    warning: "Do not use these credentials in production"
+type: Opaque
+# Values must be base64 encoded
+# Generate secure password: openssl rand -base64 32 | base64
+data:
+  username: YXBwdXNlcg==                  # 'appuser' base64 encoded
+  # SECURITY: Use stronger password - this is for local dev only
+  # In production: use randomly generated 32+ char password
+  password: bG9jYWxkZXZwYXNzd29yZA==      # 'localdevpassword' base64 encoded
+
+---
+# =============================================================================
+# NETWORK POLICY - Restrict Database Access
+# =============================================================================
+# SECURITY: Only allow app pods to connect to PostgreSQL
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-network-policy
+  namespace: local-dev
+  labels:
+    app: postgres
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    # Only allow connections from sample-app pods
+    - from:
+        - podSelector:
+            matchLabels:
+              app: sample-app
+      ports:
+        - protocol: TCP
+          port: 5432
+
+---
+# =============================================================================
+# NETWORK POLICY - Restrict App Egress
+# =============================================================================
+# SECURITY: Limit app egress to only necessary destinations
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sample-app-network-policy
+  namespace: local-dev
+  labels:
+    app: sample-app
+spec:
+  podSelector:
+    matchLabels:
+      app: sample-app
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow ingress from any source (handled by ingress controller)
+    - from: []
+      ports:
+        - protocol: TCP
+          port: 80
+  egress:
+    # Allow DNS resolution
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow connection to PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - protocol: TCP
+          port: 5432

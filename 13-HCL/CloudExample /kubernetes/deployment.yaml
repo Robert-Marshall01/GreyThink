@@ -1,0 +1,184 @@
+# =============================================================================
+# KUBERNETES DEPLOYMENT MANIFEST
+# =============================================================================
+# A Deployment manages a set of replicated Pods, ensuring the desired number
+# of instances are running and handling updates/rollbacks.
+#
+# SECURITY: Uses dedicated service account, security contexts, read-only filesystem
+# SCALABILITY: Resource limits, probes, rolling updates
+# MAINTAINABILITY: Structured labels, annotations, clear organization
+
+apiVersion: apps/v1                   # API version for Deployment resources
+kind: Deployment                      # Resource type - Deployment manages ReplicaSets and Pods
+metadata:
+  name: sample-app                    # Unique name for this Deployment within the namespace
+  namespace: sample-app               # MAINTAINABILITY: Deploy to dedicated namespace
+  labels:
+    # MAINTAINABILITY: Use recommended Kubernetes labels for consistency
+    app.kubernetes.io/name: sample-app
+    app.kubernetes.io/instance: sample-app-prod
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/component: web
+    app.kubernetes.io/part-of: cloud-example
+    app.kubernetes.io/managed-by: kubectl
+    # Legacy labels for backward compatibility
+    app: sample-app
+    tier: frontend
+  annotations:
+    # MAINTAINABILITY: Add metadata for documentation and tooling
+    description: "Sample application deployment"
+    owner: "platform-team"
+    runbook: "https://wiki.example.com/sample-app"
+spec:
+  replicas: 3                         # Initial replicas (HPA will manage scaling)
+  
+  # MAINTAINABILITY: Revision history for rollbacks
+  revisionHistoryLimit: 5             # Keep 5 old ReplicaSets for rollback
+  
+  selector:
+    matchLabels:
+      app: sample-app                 # Pods with this label will be managed
+  
+  strategy:
+    type: RollingUpdate               # Gradually replace old Pods with new ones
+    rollingUpdate:
+      maxSurge: 1                     # Max Pods above desired count during update
+      maxUnavailable: 0               # Zero downtime - always have all pods available
+  
+  template:
+    metadata:
+      labels:
+        app: sample-app
+        app.kubernetes.io/name: sample-app
+        app.kubernetes.io/version: "1.0.0"
+      annotations:
+        # MAINTAINABILITY: Force redeployment when ConfigMap changes
+        # checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "80"
+        prometheus.io/path: "/metrics"
+    spec:
+      # SECURITY: Use dedicated service account with minimal permissions
+      serviceAccountName: sample-app-sa
+      automountServiceAccountToken: false  # Don't mount SA token unless needed
+      
+      # SECURITY: Pod-level security context
+      securityContext:
+        runAsNonRoot: true            # SECURITY: Require non-root user
+        runAsUser: 101                # nginx user UID
+        runAsGroup: 101               # nginx group GID
+        fsGroup: 101                  # File system group
+        seccompProfile:
+          type: RuntimeDefault        # SECURITY: Use default seccomp profile
+      
+      # SCALABILITY: Spread pods across nodes for HA
+      topologySpreadConstraints:
+        - maxSkew: 1                  # Max difference in pod count between zones
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: sample-app
+      
+      # SCALABILITY: Pod anti-affinity - don't schedule on same node
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: sample-app
+                topologyKey: kubernetes.io/hostname
+      
+      containers:
+        - name: sample-app
+          # SECURITY: Use specific image digest in production
+          image: nginx:1.25-alpine
+          imagePullPolicy: IfNotPresent
+          
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          
+          # MAINTAINABILITY: Environment from ConfigMap and Secrets
+          envFrom:
+            - configMapRef:
+                name: sample-app-config
+            - secretRef:
+                name: sample-app-secrets
+          
+          # SCALABILITY: Resource management
+          resources:
+            requests:
+              cpu: "100m"             # Guaranteed CPU
+              memory: "128Mi"         # Guaranteed memory
+            limits:
+              cpu: "500m"             # Maximum CPU
+              memory: "512Mi"         # Maximum memory (prevents OOM on node)
+          
+          # SCALABILITY: Liveness probe - restart if unhealthy
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # SCALABILITY: Readiness probe - remove from service if not ready
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+          
+          # SCALABILITY: Startup probe - for slow-starting containers
+          startupProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 0
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30      # Allow 150 seconds for startup
+          
+          # SECURITY: Container-level security context
+          securityContext:
+            allowPrivilegeEscalation: false  # Prevent privilege escalation
+            readOnlyRootFilesystem: true     # SECURITY: Read-only root filesystem
+            capabilities:
+              drop:
+                - ALL                 # SECURITY: Drop all Linux capabilities
+            privileged: false         # SECURITY: Not privileged
+          
+          # SECURITY: Mount writable directories for nginx
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: var-cache-nginx
+              mountPath: /var/cache/nginx
+            - name: var-run
+              mountPath: /var/run
+      
+      # SECURITY: EmptyDir volumes for writable directories
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: var-cache-nginx
+          emptyDir: {}
+        - name: var-run
+          emptyDir: {}
+      
+      # Graceful shutdown
+      terminationGracePeriodSeconds: 30
+      restartPolicy: Always
+      
+      # MAINTAINABILITY: DNS configuration
+      dnsPolicy: ClusterFirst

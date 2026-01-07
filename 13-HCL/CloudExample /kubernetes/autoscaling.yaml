@@ -1,0 +1,100 @@
+# =============================================================================
+# POD DISRUPTION BUDGET (PDB)
+# =============================================================================
+# SCALABILITY: Ensure high availability during voluntary disruptions
+# Protects against: node drains, cluster upgrades, deployments
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sample-app-pdb                # Name of the PDB
+  namespace: sample-app               # Must match application namespace
+  labels:
+    app.kubernetes.io/name: sample-app
+    app.kubernetes.io/component: pdb
+spec:
+  # SCALABILITY: Minimum available pods during disruption
+  minAvailable: 2                     # At least 2 pods must always be running
+  # Alternative: use maxUnavailable
+  # maxUnavailable: 1                 # At most 1 pod can be unavailable
+  
+  # Select pods to protect
+  selector:
+    matchLabels:
+      app: sample-app                 # Must match Deployment pod labels
+
+---
+# =============================================================================
+# HORIZONTAL POD AUTOSCALER (HPA)
+# =============================================================================
+# SCALABILITY: Automatically scale pods based on resource utilization
+# Requires metrics-server to be installed in the cluster
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: sample-app-hpa                # Name of the HPA
+  namespace: sample-app               # Must match application namespace
+  labels:
+    app.kubernetes.io/name: sample-app
+    app.kubernetes.io/component: autoscaler
+spec:
+  # Reference to the Deployment to scale
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: sample-app                  # Must match Deployment name
+  
+  # SCALABILITY: Define replica bounds
+  minReplicas: 3                      # Minimum pods (matches PDB for HA)
+  maxReplicas: 20                     # Maximum pods (prevent runaway scaling)
+  
+  # SCALABILITY: Metrics-based scaling
+  metrics:
+    # Scale based on CPU utilization
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70      # Scale up when CPU > 70%
+    
+    # Scale based on memory utilization
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80      # Scale up when memory > 80%
+    
+    # SCALABILITY: Custom metrics (requires Prometheus adapter)
+    # - type: Pods
+    #   pods:
+    #     metric:
+    #       name: http_requests_per_second
+    #     target:
+    #       type: AverageValue
+    #       averageValue: 1000
+  
+  # SCALABILITY: Scaling behavior (controls scaling speed)
+  behavior:
+    # Scale up behavior
+    scaleUp:
+      stabilizationWindowSeconds: 60  # Wait before scaling up again
+      policies:
+        - type: Percent
+          value: 100                  # Double pods at a time
+          periodSeconds: 60
+        - type: Pods
+          value: 4                    # Or add up to 4 pods
+          periodSeconds: 60
+      selectPolicy: Max               # Use whichever adds more pods
+    
+    # Scale down behavior (more conservative to prevent flapping)
+    scaleDown:
+      stabilizationWindowSeconds: 300 # Wait 5 minutes before scaling down
+      policies:
+        - type: Percent
+          value: 25                   # Remove 25% of pods at a time
+          periodSeconds: 120
+      selectPolicy: Min               # Use whichever removes fewer pods

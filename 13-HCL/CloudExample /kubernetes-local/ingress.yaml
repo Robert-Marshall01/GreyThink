@@ -1,0 +1,179 @@
+# =============================================================================
+# KUBERNETES INGRESS - Local Development
+# =============================================================================
+# Ingress manages external HTTP/HTTPS access to services in the cluster
+# For local development with kind/minikube, use the appropriate ingress controller
+#
+# SETUP INSTRUCTIONS:
+#
+# For kind:
+#   1. Create cluster with ingress port mapping (see kind-config.yaml)
+#   2. Install NGINX ingress controller:
+#      kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+#   3. Wait for ingress controller to be ready:
+#      kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=90s
+#
+# For minikube:
+#   1. Enable ingress addon:
+#      minikube addons enable ingress
+#   2. Get minikube IP:
+#      minikube ip
+#   3. Add to /etc/hosts:
+#      <minikube-ip> sample-app.local
+#
+# Apply: kubectl apply -f ingress.yaml
+# Check: kubectl get ingress -n local-dev
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sample-app-ingress                # Ingress name
+  namespace: local-dev                    # Target namespace
+  labels:
+    app: sample-app                       # Application identifier
+    tier: frontend
+  annotations:
+    # NGINX Ingress Controller annotations for local development
+    
+    # Specify the ingress controller class
+    kubernetes.io/ingress.class: nginx    # Use NGINX ingress controller
+    
+    # Rewrite target for path-based routing
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    
+    # Enable SSL redirect (optional for local dev)
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"  # Disable for local HTTP
+    
+    # Connection and proxy timeouts
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    
+    # Body size limit for uploads
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    
+    # Enable CORS for local development
+    # SECURITY: In production, restrict cors-allow-origin to specific domains
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "http://localhost,http://sample-app.local"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Content-Type, Authorization"
+    
+    # SECURITY: Add security headers via custom-http-errors and server-snippet alternatives
+    # NOTE: configuration-snippet is disabled by default in NGINX Ingress for security
+    # These headers are set at the ConfigMap level or via the following annotations:
+    nginx.ingress.kubernetes.io/x-frame-options: "SAMEORIGIN"
+    nginx.ingress.kubernetes.io/x-content-type-options: "nosniff"
+
+spec:
+  # Ingress class name (Kubernetes 1.18+)
+  ingressClassName: nginx                 # Use nginx ingress class
+  
+  # TLS configuration (optional for local development)
+  # Uncomment to enable HTTPS with self-signed certificate
+  # tls:
+  #   - hosts:
+  #       - sample-app.local              # Hostname for TLS
+  #     secretName: sample-app-tls        # TLS secret name
+  
+  # Routing rules
+  rules:
+    # Host-based routing for sample-app.local
+    - host: sample-app.local              # Hostname (add to /etc/hosts)
+      http:
+        paths:
+          # Route all traffic to the sample-app service
+          - path: /                       # Match root path
+            pathType: Prefix              # Prefix matching (matches / and /*)
+            backend:
+              service:
+                name: sample-app-service  # Target service name
+                port:
+                  number: 80              # Target service port
+
+    # Alternative: localhost routing (useful for kind)
+    - host: localhost                     # Route localhost traffic
+      http:
+        paths:
+          - path: /                       # Match root path
+            pathType: Prefix              # Prefix matching
+            backend:
+              service:
+                name: sample-app-service  # Target service name
+                port:
+                  number: 80              # Target service port
+
+---
+# =============================================================================
+# INGRESS FOR API ENDPOINTS (EXAMPLE)
+# =============================================================================
+# Separate ingress for API routing with different configuration
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-ingress                       # Ingress name for API
+  namespace: local-dev
+  labels:
+    app: sample-app
+    tier: api
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    
+    # API-specific configuration
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    
+    # Rate limiting for API endpoints
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-connections: "50"
+    
+    # Request/response buffering
+    nginx.ingress.kubernetes.io/proxy-buffering: "on"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "8k"
+
+spec:
+  ingressClassName: nginx
+  
+  rules:
+    - host: api.sample-app.local          # API hostname
+      http:
+        paths:
+          # API v1 routes
+          - path: /api/v1                 # API path prefix
+            pathType: Prefix
+            backend:
+              service:
+                name: sample-app-service  # Same service or separate API service
+                port:
+                  number: 80              # Service port
+
+---
+# =============================================================================
+# KIND CLUSTER CONFIGURATION (REFERENCE)
+# =============================================================================
+# Save this as kind-config.yaml and use: kind create cluster --config kind-config.yaml
+#
+# kind: Cluster
+# apiVersion: kind.x-k8s.io/v1alpha4
+# nodes:
+#   - role: control-plane
+#     kubeadmConfigPatches:
+#       - |
+#         kind: InitConfiguration
+#         nodeRegistration:
+#           kubeletExtraArgs:
+#             node-labels: "ingress-ready=true"
+#     extraPortMappings:
+#       # HTTP port mapping
+#       - containerPort: 80               # Ingress HTTP port
+#         hostPort: 80                    # Local machine port
+#         protocol: TCP
+#       # HTTPS port mapping
+#       - containerPort: 443              # Ingress HTTPS port
+#         hostPort: 443                   # Local machine port
+#         protocol: TCP
+#       # NodePort for direct service access
+#       - containerPort: 30080            # NodePort service port
+#         hostPort: 30080                 # Local machine port
+#         protocol: TCP

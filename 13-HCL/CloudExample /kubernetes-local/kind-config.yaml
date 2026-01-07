@@ -1,0 +1,126 @@
+# =============================================================================
+# KIND CLUSTER CONFIGURATION
+# =============================================================================
+# Configuration file for creating a local Kubernetes cluster with kind
+# Includes ingress port mappings and extra configurations for local development
+#
+# Usage:
+#   Create cluster:  kind create cluster --config kind-config.yaml --name local-dev
+#   Delete cluster:  kind delete cluster --name local-dev
+#   List clusters:   kind get clusters
+#
+# After cluster creation:
+#   1. Install ingress controller (see instructions below)
+#   2. Apply Kubernetes manifests
+
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: local-dev                           # Cluster name
+
+# Node configuration
+nodes:
+  # Control plane node with ingress support
+  - role: control-plane
+    
+    # Kubernetes configuration patches
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            # Label node for ingress controller scheduling
+            node-labels: "ingress-ready=true"
+    
+    # Port mappings from host to container
+    # These allow accessing services from your local machine
+    extraPortMappings:
+      # HTTP traffic (port 80)
+      - containerPort: 80                 # Container port (ingress controller)
+        hostPort: 80                      # Local machine port
+        protocol: TCP
+        listenAddress: "127.0.0.1"        # Listen on localhost only
+      
+      # HTTPS traffic (port 443)
+      - containerPort: 443                # Container port (ingress controller)
+        hostPort: 443                     # Local machine port
+        protocol: TCP
+        listenAddress: "127.0.0.1"        # Listen on localhost only
+      
+      # NodePort for sample-app direct access
+      - containerPort: 30080              # NodePort service port
+        hostPort: 30080                   # Local machine port
+        protocol: TCP
+        listenAddress: "127.0.0.1"        # Listen on localhost only
+      
+      # PostgreSQL NodePort (if needed for external tools)
+      - containerPort: 30432              # NodePort for PostgreSQL
+        hostPort: 30432                   # Local machine port
+        protocol: TCP
+        listenAddress: "127.0.0.1"        # Listen on localhost only
+
+  # Optional: Add worker nodes for more realistic testing
+  # Uncomment to add worker nodes
+  # - role: worker
+  #   extraMounts:
+  #     - hostPath: /path/to/local/storage
+  #       containerPath: /data
+  # - role: worker
+
+# Networking configuration
+networking:
+  # Pod subnet CIDR
+  podSubnet: "10.244.0.0/16"              # Default Flannel/Kindnet subnet
+  
+  # Service subnet CIDR
+  serviceSubnet: "10.96.0.0/16"           # Default service subnet
+  
+  # Disable default CNI (use custom CNI if needed)
+  disableDefaultCNI: false                # Use default kindnetd CNI
+  
+  # API server address
+  apiServerAddress: "127.0.0.1"           # Bind to localhost
+  
+  # API server port
+  apiServerPort: 6443                     # Default Kubernetes API port
+
+# Container runtime configuration
+# containerdConfigPatches:
+#   - |-
+#     [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
+#       endpoint = ["https://registry-1.docker.io"]
+
+# =============================================================================
+# POST-INSTALLATION INSTRUCTIONS
+# =============================================================================
+# After creating the cluster, follow these steps:
+#
+# 1. Install NGINX Ingress Controller:
+#    kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+#
+# 2. Wait for ingress controller to be ready:
+#    kubectl wait --namespace ingress-nginx \
+#      --for=condition=ready pod \
+#      --selector=app.kubernetes.io/component=controller \
+#      --timeout=90s
+#
+# 3. Apply namespace:
+#    kubectl apply -f namespace.yaml
+#
+# 4. Apply deployments and services:
+#    kubectl apply -f deployments.yaml
+#    kubectl apply -f services.yaml
+#
+# 5. Apply ingress:
+#    kubectl apply -f ingress.yaml
+#
+# 6. Add to /etc/hosts (Linux/Mac) or C:\Windows\System32\drivers\etc\hosts (Windows):
+#    127.0.0.1 sample-app.local
+#    127.0.0.1 api.sample-app.local
+#
+# 7. Access the application:
+#    http://sample-app.local
+#    http://localhost:30080 (NodePort)
+#
+# 8. Load local Docker image into kind:
+#    docker build -t sample-app:latest ./docker
+#    kind load docker-image sample-app:latest --name local-dev

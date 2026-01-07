@@ -1,0 +1,92 @@
+# =============================================================================
+# KUBERNETES INGRESS MANIFEST
+# =============================================================================
+# An Ingress manages external access to services in a cluster, typically HTTP/HTTPS.
+# It provides load balancing, SSL termination, and name-based virtual hosting.
+#
+# SECURITY: TLS termination, rate limiting, WAF annotations
+# SCALABILITY: Connection limits, timeouts, backend protocol
+# MAINTAINABILITY: Consistent labels, modular configuration
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sample-app-ingress            # Unique name for this Ingress
+  namespace: sample-app               # MAINTAINABILITY: Same namespace as app
+  labels:
+    app.kubernetes.io/name: sample-app
+    app.kubernetes.io/component: ingress
+    app.kubernetes.io/part-of: cloud-example
+    app: sample-app
+  annotations:
+    # ==========================================================================
+    # NGINX INGRESS CONTROLLER ANNOTATIONS
+    # ==========================================================================
+    # Adjust these for your ingress controller (Traefik, Azure App Gateway, etc.)
+    
+    # SECURITY: Force HTTPS redirect
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    
+    # SECURITY: HSTS (HTTP Strict Transport Security)
+    nginx.ingress.kubernetes.io/hsts: "true"
+    nginx.ingress.kubernetes.io/hsts-max-age: "31536000"
+    nginx.ingress.kubernetes.io/hsts-include-subdomains: "true"
+    nginx.ingress.kubernetes.io/hsts-preload: "true"
+    
+    # SECURITY: Rate limiting to prevent DDoS
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-connections: "50"
+    nginx.ingress.kubernetes.io/limit-rpm: "1000"
+    
+    # SECURITY: Request size limits
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/client-body-buffer-size: "1m"
+    
+    # SECURITY: Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Frame-Options "SAMEORIGIN" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header X-XSS-Protection "1; mode=block" always;
+      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    
+    # SCALABILITY: Connection timeouts
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    
+    # SCALABILITY: Backend protocol and load balancing
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$request_uri"
+    
+    # MAINTAINABILITY: Logging
+    nginx.ingress.kubernetes.io/enable-access-log: "true"
+
+spec:
+  ingressClassName: nginx             # Ingress controller to use
+  
+  # SECURITY: TLS configuration
+  tls:
+    - hosts:
+        - sample-app.example.com
+      secretName: sample-app-tls      # TLS certificate secret
+  
+  # Routing rules
+  rules:
+    - host: sample-app.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sample-app-service
+                port:
+                  number: 80
+  
+  # MAINTAINABILITY: Default backend for unmatched requests
+  # defaultBackend:
+  #   service:
+  #     name: default-backend
+  #     port:
+  #       number: 80

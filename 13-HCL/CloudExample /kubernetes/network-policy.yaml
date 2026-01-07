@@ -1,0 +1,85 @@
+# =============================================================================
+# NETWORK POLICY
+# =============================================================================
+# SECURITY: Control network traffic to/from pods
+# Implements zero-trust networking - deny all by default, allow only what's needed
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sample-app-network-policy     # Name of the NetworkPolicy
+  namespace: sample-app               # Scope to application namespace
+  labels:
+    app.kubernetes.io/name: sample-app
+    app.kubernetes.io/component: network-policy
+spec:
+  # SECURITY: Apply to all pods with this label
+  podSelector:
+    matchLabels:
+      app: sample-app
+  
+  # SECURITY: Define policy types (Ingress, Egress, or both)
+  policyTypes:
+    - Ingress                         # Control incoming traffic
+    - Egress                          # Control outgoing traffic
+  
+  # SECURITY: Ingress rules - who can talk TO these pods
+  ingress:
+    # Allow traffic from the ingress controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx  # NGINX ingress namespace
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 80                    # Only allow HTTP port
+    
+    # Allow traffic from other pods in the same namespace
+    - from:
+        - podSelector: {}             # Any pod in same namespace
+      ports:
+        - protocol: TCP
+          port: 80
+    
+    # Allow Prometheus scraping (if using monitoring)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9090                  # Metrics port
+  
+  # SECURITY: Egress rules - what these pods can talk TO
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector: {}       # Any namespace
+      ports:
+        - protocol: UDP
+          port: 53                    # DNS
+        - protocol: TCP
+          port: 53                    # DNS over TCP
+    
+    # Allow PostgreSQL connections
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0           # External PostgreSQL (Azure PaaS)
+      ports:
+        - protocol: TCP
+          port: 5432                  # PostgreSQL port
+    
+    # Allow HTTPS outbound (for external APIs, Azure services)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8            # Block private ranges
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443                   # HTTPS only
