@@ -1,4 +1,6 @@
 Contact me at RobertCMarshall2007@outlook.com
+
+<b>WARNING: This repository is experimental and may contain unstable or incomplete features. It is intended as an innovative canary project—use at your own risk.</b>
 <h1>Who Am I, and My Specialty 🧑‍💻</h1>
 
 ---
