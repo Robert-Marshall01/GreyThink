@@ -13,6 +13,19 @@ This is a canary build: instability is expected.
 Always validate stability before using in high‑stakes environments.  
 Performance gains may vary across machines and workloads.
 
+## RAM
+
+<img width="1279" height="1448" alt="RAM_stress" src="https://github.com/user-attachments/assets/11cb8261-237d-4885-92a2-3ba2a1132933" />
+<img width="1279" height="1448" alt="RAM_192GB" src="https://github.com/user-attachments/assets/fb8d6b79-7981-431b-8f47-b2b2ba8f1c9a" />
+
+## GPU
+
+### Before
+<img width="1279" height="744" alt="GPU_before" src="https://github.com/user-attachments/assets/bcec4cb5-882f-42de-8972-d0af159c870b" />
+
+### After
+<img width="866" height="629" alt="GPU_after" src="https://github.com/user-attachments/assets/87726713-6839-4317-b966-a1449b0aa444" />
+
 ## Introduction
 
 Grey Optimizer is not a monitoring dashboard or a collection of best-practice suggestions. It is a **spec-driven enforcement system** that reads your GPU hardware specifications, generates an optimization plan, and applies real kernel-level and driver-level controls to extract measurable performance gains.
