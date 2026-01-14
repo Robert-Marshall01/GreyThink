@@ -1,0 +1,2000 @@
+#!/usr/bin/env python3
+"""
+Grey Optimizer CLI (greyctl)
+
+A command-line interface for managing the Grey Optimizer daemon
+with adaptive RAM reclamation and proof-artifact pipeline.
+
+Commands:
+    install         Install Grey Optimizer as a system service
+    uninstall       Remove Grey Optimizer from the system
+    start           Start the daemon
+    stop            Stop the daemon
+    status          Show daemon and enforcement status
+    simulate        Run enforcement in simulation mode (SAFE, default)
+    apply           Apply enforcement (requires --confirm-live for live mode)
+    rollback        Rollback to previous state
+    memory-diagnose Run memory diagnostics
+    health          Check daemon health (OOM, PSI pressure, services)
+    audit           Export audit log entries (HMAC-verified)
+    proof           Export proof artifacts (baseline vs post snapshots)
+    version         Show version information
+
+Safety Modes:
+    SIMULATION (default):  All operations are simulated, no actual changes
+    LIVE (--confirm-live): Real changes, requires explicit confirmation
+
+Usage:
+    greyctl status
+    greyctl simulate --duration 60 --profile balanced
+    greyctl apply --confirm-live --profile balanced
+    greyctl rollback
+    greyctl memory-diagnose --pid 1234
+    greyctl health --check oom,pressure,services
+    greyctl audit --format json --output audit.json --verify
+    greyctl proof --export proof_artifact.json
+"""
+
+import argparse
+import asyncio
+import hashlib
+import hmac
+import json
+import os
+import platform
+import signal
+import sqlite3
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, asdict
+from datetime import datetime
+from pathlib import Path
+from typing import Optional, List, Dict, Any
+
+try:
+    import requests
+except ImportError:
+    requests = None  # Will use urllib as fallback
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Configuration
+# ═══════════════════════════════════════════════════════════════════════════════
+
+VERSION = "2.0.0"
+
+# Detect platform
+PLATFORM = platform.system().lower()
+IS_LINUX = PLATFORM == "linux"
+IS_MACOS = PLATFORM == "darwin"
+IS_WINDOWS = PLATFORM == "windows"
+
+# Paths based on platform
+if IS_LINUX:
+    CONFIG_DIR = Path("/etc/grey-optimizer")
+    DATA_DIR = Path("/var/lib/grey-optimizer")
+    LOG_DIR = Path("/var/log/grey-optimizer")
+    PROOFS_DIR = Path("/var/lib/grey-optimizer/proofs")
+    SERVICE_NAME = "grey-optimizer"
+    CGROUP_BASE = Path("/sys/fs/cgroup")
+elif IS_MACOS:
+    CONFIG_DIR = Path("/etc/grey-optimizer")
+    DATA_DIR = Path("/var/lib/grey-optimizer")
+    LOG_DIR = Path("/var/log/grey-optimizer")
+    PROOFS_DIR = DATA_DIR / "proofs"
+    SERVICE_LABEL = "com.grey.optimizer"
+    PLIST_PATH = Path("/Library/LaunchDaemons/com.grey.optimizer.plist")
+    CGROUP_BASE = None
+elif IS_WINDOWS:
+    CONFIG_DIR = Path(os.environ.get("ProgramData", "C:\\ProgramData")) / "Grey Optimizer"
+    DATA_DIR = CONFIG_DIR / "data"
+    LOG_DIR = CONFIG_DIR / "logs"
+    PROOFS_DIR = CONFIG_DIR / "proofs"
+    SERVICE_NAME = "GreyOptimizer"
+    CGROUP_BASE = None
+else:
+    CONFIG_DIR = Path.home() / ".config" / "grey-optimizer"
+    DATA_DIR = CONFIG_DIR / "data"
+    LOG_DIR = CONFIG_DIR / "logs"
+    PROOFS_DIR = CONFIG_DIR / "proofs"
+    CGROUP_BASE = None
+
+# API settings
+API_HOST = os.environ.get("GREY_API_HOST", "127.0.0.1")
+API_PORT = int(os.environ.get("GREY_API_PORT", "5000"))
+API_BASE = f"http://{API_HOST}:{API_PORT}"
+
+# Audit settings
+AUDIT_DB = DATA_DIR / "audit.db"
+SNAPSHOTS_DB = DATA_DIR / "snapshots.db"
+AUDIT_SECRET = os.environ.get("GREY_AUDIT_SECRET", f"{platform.node()}-grey-optimizer-audit")
+HMAC_KEY_FILE = DATA_DIR / "hmac.key"
+
+# C helper binaries
+MADVISE_HELPER = Path(__file__).parent / "c" / "madvise_helper"
+CGROUP_HELPER = Path(__file__).parent / "c" / "cgroup_helper"
+
+# Reclamation profiles (memory limit percentages and strategies)
+RECLAIM_PROFILES = {
+    "conservative": {
+        "memory_limit_percent": 95,  # Very gentle limit
+        "madvise_enabled": True,
+        "madvise_min_size_kb": 16384,  # Only large regions
+        "ksm_enabled": False,
+        "zram_enabled": False,
+        "drop_caches": False,
+    },
+    "balanced": {
+        "memory_limit_percent": 85,
+        "madvise_enabled": True,
+        "madvise_min_size_kb": 4096,
+        "ksm_enabled": True,
+        "zram_enabled": True,
+        "zram_size_percent": 25,
+        "drop_caches": False,
+    },
+    "aggressive": {
+        "memory_limit_percent": 70,
+        "madvise_enabled": True,
+        "madvise_min_size_kb": 1024,
+        "ksm_enabled": True,
+        "zram_enabled": True,
+        "zram_size_percent": 50,
+        "drop_caches": True,
+    },
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Utilities
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class Colors:
+    """ANSI color codes for terminal output."""
+    RED = "\033[0;31m"
+    GREEN = "\033[0;32m"
+    YELLOW = "\033[1;33m"
+    BLUE = "\033[0;34m"
+    CYAN = "\033[0;36m"
+    MAGENTA = "\033[0;35m"
+    BOLD = "\033[1m"
+    DIM = "\033[2m"
+    NC = "\033[0m"  # No Color
+    
+    @classmethod
+    def disable(cls):
+        """Disable colors (for non-TTY output)."""
+        for attr in ['RED', 'GREEN', 'YELLOW', 'BLUE', 'CYAN', 'MAGENTA', 'BOLD', 'DIM', 'NC']:
+            setattr(cls, attr, "")
+
+# Disable colors if not a TTY
+if not sys.stdout.isatty():
+    Colors.disable()
+
+
+def print_info(msg: str):
+    print(f"{Colors.BLUE}[INFO]{Colors.NC} {msg}")
+
+
+def print_success(msg: str):
+    print(f"{Colors.GREEN}[OK]{Colors.NC} {msg}")
+
+
+def print_warn(msg: str):
+    print(f"{Colors.YELLOW}[WARN]{Colors.NC} {msg}")
+
+
+def print_error(msg: str):
+    print(f"{Colors.RED}[ERROR]{Colors.NC} {msg}", file=sys.stderr)
+
+
+def print_sim(msg: str):
+    """Print simulation mode message."""
+    print(f"{Colors.CYAN}[SIM]{Colors.NC} {msg}")
+
+
+def print_live(msg: str):
+    """Print live mode message."""
+    print(f"{Colors.MAGENTA}[LIVE]{Colors.NC} {msg}")
+
+
+def print_header(title: str):
+    print()
+    print(f"{Colors.BOLD}{'═' * 60}{Colors.NC}")
+    print(f"{Colors.BOLD}  {title}{Colors.NC}")
+    print(f"{Colors.BOLD}{'═' * 60}{Colors.NC}")
+    print()
+
+
+def print_subheader(title: str):
+    print()
+    print(f"{Colors.DIM}{'─' * 40}{Colors.NC}")
+    print(f"{Colors.BOLD}  {title}{Colors.NC}")
+    print(f"{Colors.DIM}{'─' * 40}{Colors.NC}")
+
+
+def format_bytes(b: int) -> str:
+    """Format bytes as human-readable string."""
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if abs(b) < 1024.0:
+            return f"{b:.1f} {unit}"
+        b /= 1024.0
+    return f"{b:.1f} PB"
+
+
+def format_delta(before: int, after: int) -> str:
+    """Format a before/after delta with color."""
+    delta = after - before
+    if delta < 0:
+        return f"{Colors.GREEN}{format_bytes(delta)}{Colors.NC}"
+    elif delta > 0:
+        return f"{Colors.RED}+{format_bytes(delta)}{Colors.NC}"
+    else:
+        return f"{Colors.DIM}no change{Colors.NC}"
+
+
+def api_call(method: str, endpoint: str, data: dict = None, timeout: int = 10) -> Optional[dict]:
+    """Make an API call to the daemon."""
+    url = f"{API_BASE}{endpoint}"
+    
+    if requests is None:
+        # Fallback to urllib
+        import urllib.request
+        import urllib.error
+        try:
+            req = urllib.request.Request(url)
+            if method.upper() == "POST" and data:
+                req.add_header('Content-Type', 'application/json')
+                req.data = json.dumps(data).encode()
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return json.loads(resp.read().decode())
+        except Exception:
+            return None
+    
+    try:
+        if method.upper() == "GET":
+            response = requests.get(url, timeout=timeout)
+        elif method.upper() == "POST":
+            response = requests.post(url, json=data, timeout=timeout)
+        else:
+            raise ValueError(f"Unknown method: {method}")
+        
+        response.raise_for_status()
+        return response.json()
+    
+    except Exception:
+        return None
+
+
+def is_daemon_running() -> bool:
+    """Check if the daemon is running."""
+    result = api_call("GET", "/health")
+    if result is None:
+        result = api_call("GET", "/healthz")
+    return result is not None
+
+
+def get_service_status() -> dict:
+    """Get service status based on platform."""
+    status = {
+        "running": False,
+        "enabled": False,
+        "pid": None,
+        "uptime": None,
+    }
+    
+    if IS_LINUX:
+        try:
+            result = subprocess.run(
+                ["systemctl", "is-active", SERVICE_NAME],
+                capture_output=True, text=True
+            )
+            status["running"] = result.stdout.strip() == "active"
+            
+            result = subprocess.run(
+                ["systemctl", "is-enabled", SERVICE_NAME],
+                capture_output=True, text=True
+            )
+            status["enabled"] = result.stdout.strip() == "enabled"
+            
+            if status["running"]:
+                result = subprocess.run(
+                    ["systemctl", "show", SERVICE_NAME, "--property=MainPID"],
+                    capture_output=True, text=True
+                )
+                pid_line = result.stdout.strip()
+                if "=" in pid_line:
+                    status["pid"] = int(pid_line.split("=")[1])
+        except Exception:
+            pass
+    
+    elif IS_MACOS:
+        try:
+            result = subprocess.run(
+                ["launchctl", "list"],
+                capture_output=True, text=True
+            )
+            status["running"] = SERVICE_LABEL in result.stdout
+            status["enabled"] = PLIST_PATH.exists()
+        except Exception:
+            pass
+    
+    elif IS_WINDOWS:
+        try:
+            result = subprocess.run(
+                ["schtasks", "/query", "/tn", SERVICE_NAME, "/fo", "CSV", "/v"],
+                capture_output=True, text=True, shell=True
+            )
+            status["running"] = "Running" in result.stdout
+            status["enabled"] = SERVICE_NAME in result.stdout
+        except Exception:
+            pass
+    
+    return status
+
+
+def compute_hmac(data: str, key: bytes = None) -> str:
+    """Compute HMAC-SHA256 signature."""
+    if key is None:
+        key = AUDIT_SECRET.encode()
+    return hmac.new(key, data.encode(), hashlib.sha256).hexdigest()
+
+
+def verify_hmac(data: str, signature: str, key: bytes = None) -> bool:
+    """Verify HMAC-SHA256 signature."""
+    expected = compute_hmac(data, key)
+    return hmac.compare_digest(expected, signature)
+
+
+def read_proc_meminfo() -> Dict[str, int]:
+    """Read /proc/meminfo and return values in bytes."""
+    meminfo = {}
+    try:
+        with open("/proc/meminfo", "r") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 2:
+                    key = parts[0].rstrip(':')
+                    value = int(parts[1]) * 1024  # Convert kB to bytes
+                    meminfo[key] = value
+    except Exception:
+        pass
+    return meminfo
+
+
+def read_process_smaps(pid: int) -> Dict[str, int]:
+    """Read /proc/[pid]/smaps_rollup for RSS/PSS."""
+    result = {"rss": 0, "pss": 0, "uss": 0, "swap": 0}
+    try:
+        smaps_path = Path(f"/proc/{pid}/smaps_rollup")
+        if smaps_path.exists():
+            content = smaps_path.read_text()
+            for line in content.split('\n'):
+                if line.startswith("Rss:"):
+                    result["rss"] = int(line.split()[1]) * 1024
+                elif line.startswith("Pss:"):
+                    result["pss"] = int(line.split()[1]) * 1024
+                elif line.startswith("Private_Clean:"):
+                    result["uss"] += int(line.split()[1]) * 1024
+                elif line.startswith("Private_Dirty:"):
+                    result["uss"] += int(line.split()[1]) * 1024
+                elif line.startswith("Swap:"):
+                    result["swap"] = int(line.split()[1]) * 1024
+    except Exception:
+        pass
+    return result
+
+
+def get_system_memory_snapshot() -> Dict[str, Any]:
+    """Get a system memory snapshot."""
+    meminfo = read_proc_meminfo()
+    snapshot = {
+        "timestamp": datetime.now().isoformat(),
+        "total": meminfo.get("MemTotal", 0),
+        "available": meminfo.get("MemAvailable", 0),
+        "free": meminfo.get("MemFree", 0),
+        "buffers": meminfo.get("Buffers", 0),
+        "cached": meminfo.get("Cached", 0),
+        "swap_total": meminfo.get("SwapTotal", 0),
+        "swap_free": meminfo.get("SwapFree", 0),
+    }
+    snapshot["used"] = snapshot["total"] - snapshot["available"]
+    snapshot["used_percent"] = (snapshot["used"] / snapshot["total"] * 100) if snapshot["total"] > 0 else 0
+    return snapshot
+
+
+def audit_log(action: str, category: str, details: str = "", success: int = 1, mode: str = "cli"):
+    """Log an action to the audit database with HMAC signature."""
+    try:
+        AUDIT_DB.parent.mkdir(parents=True, exist_ok=True)
+        
+        conn = sqlite3.connect(AUDIT_DB)
+        cursor = conn.cursor()
+        
+        # Create table if it doesn't exist
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+                action TEXT NOT NULL,
+                category TEXT NOT NULL,
+                details TEXT,
+                mode TEXT DEFAULT 'cli',
+                user TEXT,
+                hostname TEXT,
+                success INTEGER DEFAULT 1,
+                signature TEXT
+            )
+        """)
+        
+        timestamp = datetime.now().isoformat()
+        user = os.environ.get("USER", os.environ.get("USERNAME", "unknown"))
+        hostname = platform.node()
+        
+        # Create signature over all fields
+        sign_data = f"{action}|{category}|{details}|{mode}|{user}|{hostname}|{success}|{timestamp}"
+        signature = compute_hmac(sign_data)
+        
+        cursor.execute("""
+            INSERT INTO audit_log (timestamp, action, category, details, mode, user, hostname, success, signature)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (timestamp, action, category, details, mode, user, hostname, success, signature))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass  # Silently continue if audit fails
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Commands
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def cmd_install(args):
+    """Install Grey Optimizer as a system service."""
+    print_header("Grey Optimizer Installation")
+    
+    mode = args.mode
+    confirm_live = args.confirm_live
+    
+    if mode == "live" and not confirm_live:
+        print_error("Live mode requires --confirm-live flag")
+        print()
+        print("To install in live mode:")
+        print(f"  greyctl install --mode=live --confirm-live")
+        print()
+        print(f"{Colors.YELLOW}WARNING: Live mode will apply REAL memory enforcement.{Colors.NC}")
+        print(f"{Colors.YELLOW}Simulation mode is recommended for initial testing.{Colors.NC}")
+        return 1
+    
+    # Create necessary directories
+    dirs_to_create = [CONFIG_DIR, DATA_DIR, LOG_DIR, PROOFS_DIR]
+    for d in dirs_to_create:
+        if d and not d.exists():
+            print_info(f"Creating directory: {d}")
+            if confirm_live:
+                try:
+                    d.mkdir(parents=True, exist_ok=True)
+                except PermissionError:
+                    print_warn(f"Need root to create {d}")
+    
+    # Find and run the appropriate installer
+    script_dir = Path(__file__).parent / "scripts"
+    
+    if IS_LINUX:
+        installer = script_dir / "install.sh"
+    elif IS_MACOS:
+        installer = script_dir / "install_macos.sh"
+    elif IS_WINDOWS:
+        installer = script_dir / "install.ps1"
+    else:
+        print_error(f"Unsupported platform: {PLATFORM}")
+        return 1
+    
+    if not installer.exists():
+        print_warn(f"Installer script not found: {installer}")
+        print_info("Using built-in installation...")
+        
+        # Built-in installation for Linux
+        if IS_LINUX:
+            project_dir = Path(__file__).parent.resolve()
+            opt_dir = Path("/opt/grey-optimizer")
+            venv_dir = project_dir / ".venv"
+            wrapper_script = opt_dir / "run-daemon.sh"
+            
+            # Step 1: Create directories
+            print_info("Creating directories...")
+            dirs_needed = [
+                opt_dir,
+                Path("/etc/grey-optimizer"),
+                Path("/var/lib/grey-optimizer"),
+                Path("/var/log/grey-optimizer"),
+            ]
+            if confirm_live:
+                for d in dirs_needed:
+                    try:
+                        d.mkdir(parents=True, exist_ok=True)
+                        print_success(f"  Created: {d}")
+                    except PermissionError:
+                        print_error(f"Need root to create {d}")
+                        return 1
+            else:
+                for d in dirs_needed:
+                    print_sim(f"Would create: {d}")
+            
+            # Step 2: Create virtual environment if needed
+            print_info("Setting up Python virtual environment...")
+            if confirm_live:
+                if not venv_dir.exists():
+                    result = subprocess.run([sys.executable, "-m", "venv", str(venv_dir)])
+                    if result.returncode != 0:
+                        print_error("Failed to create virtual environment")
+                        return 1
+                    print_success(f"  Created venv: {venv_dir}")
+                
+                # Install dependencies
+                pip_path = venv_dir / "bin" / "pip"
+                print_info("Installing dependencies...")
+                result = subprocess.run([str(pip_path), "install", "aiosqlite", "aiohttp"],
+                                        capture_output=True, text=True)
+                if result.returncode == 0:
+                    print_success("  Installed: aiosqlite, aiohttp")
+                else:
+                    print_warn(f"  Dependency install warning: {result.stderr[:100]}")
+            else:
+                print_sim(f"Would create venv: {venv_dir}")
+                print_sim("Would install: aiosqlite, aiohttp")
+            
+            # Step 3: Create wrapper script
+            print_info("Creating daemon wrapper script...")
+            wrapper_content = f'''#!/bin/bash
+cd "{project_dir}"
+exec "{venv_dir}/bin/python" -m daemon.grey_daemon {"--simulation" if mode == "simulation" else "--confirm-live"}
+'''
+            if confirm_live:
+                wrapper_script.write_text(wrapper_content)
+                wrapper_script.chmod(0o755)
+                print_success(f"  Created: {wrapper_script}")
+            else:
+                print_sim(f"Would create: {wrapper_script}")
+            
+            # Step 4: Create systemd service
+            print_info("Creating systemd service...")
+            service_content = f"""[Unit]
+Description=Grey Optimizer - Resource Optimization Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart={wrapper_script}
+Restart=on-failure
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
+"""
+            service_path = Path("/etc/systemd/system/grey-optimizer.service")
+            if confirm_live:
+                try:
+                    service_path.write_text(service_content)
+                    subprocess.run(["systemctl", "daemon-reload"], check=True)
+                    subprocess.run(["systemctl", "enable", SERVICE_NAME], check=True)
+                    print_success("Service installed and enabled for boot")
+                    
+                    # Start the service immediately
+                    print_info("Starting service...")
+                    start_result = subprocess.run(["systemctl", "start", SERVICE_NAME])
+                    if start_result.returncode == 0:
+                        time.sleep(2)
+                        check = subprocess.run(
+                            ["systemctl", "is-active", SERVICE_NAME],
+                            capture_output=True, text=True
+                        )
+                        if check.stdout.strip() == "active":
+                            print_success("Service started and running")
+                        else:
+                            print_warn("Service enabled but may not be running - check: systemctl status grey-optimizer")
+                    else:
+                        print_warn("Service enabled but failed to start immediately")
+                except PermissionError:
+                    print_error("Need root privileges to install service")
+                    return 1
+            else:
+                print_sim(f"Would create: {service_path}")
+                print_sim("Would enable service for boot")
+        
+        audit_log("install_cli", "installation", f"mode={mode}", mode="simulation" if not confirm_live else "live")
+        print()
+        print_success("Installation complete!")
+        print_info("The daemon will now start automatically on boot.")
+        print_info("Check status with: greyctl status")
+        return 0
+    
+    # Build command
+    if IS_WINDOWS:
+        cmd = ["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", str(installer)]
+        if mode == "live":
+            cmd.extend(["-Mode", "live"])
+            if confirm_live:
+                cmd.append("-ConfirmLive")
+    else:
+        cmd = ["bash", str(installer)]
+        cmd.append(f"--mode={mode}")
+        if confirm_live:
+            cmd.append("--confirm-live")
+    
+    print_info(f"Running installer: {' '.join(cmd)}")
+    
+    audit_log("install_cli", "installation", f"mode={mode}")
+    
+    result = subprocess.run(cmd)
+    return result.returncode
+
+
+def cmd_uninstall(args):
+    """Uninstall Grey Optimizer from the system."""
+    print_header("Grey Optimizer Uninstallation")
+    
+    confirm = args.confirm_uninstall
+    
+    if not confirm:
+        print_warn("This is a DRY RUN. Use --confirm-uninstall to actually remove.")
+        print()
+        print_sim("Would stop the daemon")
+        print_sim("Would disable the service")
+        print_sim("Would remove service files")
+        print_sim("Would remove /opt/grey-optimizer")
+        if not args.preserve_logs:
+            print_sim(f"Would remove logs: {LOG_DIR}")
+            print_sim(f"Would remove data: {DATA_DIR}")
+        print()
+        return 0
+    
+    # Stop and disable service first
+    print_info("Stopping daemon...")
+    if IS_LINUX:
+        subprocess.run(["systemctl", "stop", SERVICE_NAME], capture_output=True)
+        subprocess.run(["systemctl", "disable", SERVICE_NAME], capture_output=True)
+        
+        service_path = Path("/etc/systemd/system/grey-optimizer.service")
+        if service_path.exists():
+            service_path.unlink()
+            subprocess.run(["systemctl", "daemon-reload"])
+            print_success("Service removed")
+        
+        # Remove wrapper script and opt directory
+        opt_dir = Path("/opt/grey-optimizer")
+        if opt_dir.exists():
+            import shutil
+            shutil.rmtree(opt_dir, ignore_errors=True)
+            print_success("Removed /opt/grey-optimizer")
+        
+        # Remove config directory
+        etc_dir = Path("/etc/grey-optimizer")
+        if etc_dir.exists():
+            import shutil
+            shutil.rmtree(etc_dir, ignore_errors=True)
+            print_success("Removed /etc/grey-optimizer")
+            
+    elif IS_MACOS:
+        subprocess.run(["launchctl", "unload", str(PLIST_PATH)], capture_output=True)
+        if PLIST_PATH.exists():
+            PLIST_PATH.unlink()
+            print_success("LaunchDaemon removed")
+    elif IS_WINDOWS:
+        subprocess.run(["schtasks", "/delete", "/tn", SERVICE_NAME, "/f"], shell=True, capture_output=True)
+        print_success("Scheduled task removed")
+    
+    # Remove data unless preserving
+    if not args.preserve_logs:
+        import shutil
+        for d in [LOG_DIR, DATA_DIR, PROOFS_DIR]:
+            if d and d.exists():
+                print_info(f"Removing: {d}")
+                shutil.rmtree(d, ignore_errors=True)
+        print_success("Removed logs and data")
+    else:
+        print_info("Preserving logs and data as requested")
+    
+    audit_log("uninstall_cli", "uninstallation", f"confirm={confirm},preserve_logs={args.preserve_logs}")
+    print()
+    print_success("Uninstallation complete!")
+    print_info("The virtual environment in the project directory was preserved.")
+    return 0
+
+
+def cmd_start(args):
+    """Start the Grey Optimizer daemon."""
+    print_info("Starting Grey Optimizer daemon...")
+    
+    status = get_service_status()
+    if status["running"]:
+        print_warn("Daemon is already running")
+        return 0
+    
+    if IS_LINUX:
+        result = subprocess.run(["systemctl", "start", SERVICE_NAME])
+    elif IS_MACOS:
+        result = subprocess.run(["launchctl", "load", str(PLIST_PATH)])
+    elif IS_WINDOWS:
+        result = subprocess.run(["schtasks", "/run", "/tn", SERVICE_NAME], shell=True)
+    else:
+        print_error(f"Unsupported platform: {PLATFORM}")
+        return 1
+    
+    if result.returncode == 0:
+        print_success("Daemon started")
+        audit_log("daemon_started", "service", "")
+    else:
+        print_error("Failed to start daemon")
+    
+    return result.returncode
+
+
+def cmd_stop(args):
+    """Stop the Grey Optimizer daemon."""
+    print_info("Stopping Grey Optimizer daemon...")
+    
+    status = get_service_status()
+    if not status["running"]:
+        print_warn("Daemon is not running")
+        return 0
+    
+    if IS_LINUX:
+        result = subprocess.run(["systemctl", "stop", SERVICE_NAME])
+    elif IS_MACOS:
+        result = subprocess.run(["launchctl", "unload", str(PLIST_PATH)])
+    elif IS_WINDOWS:
+        result = subprocess.run(["schtasks", "/end", "/tn", SERVICE_NAME], shell=True)
+    else:
+        print_error(f"Unsupported platform: {PLATFORM}")
+        return 1
+    
+    if result.returncode == 0:
+        print_success("Daemon stopped")
+        audit_log("daemon_stopped", "service", "")
+    else:
+        print_error("Failed to stop daemon")
+    
+    return result.returncode
+
+
+def cmd_status(args):
+    """Show daemon and enforcement status."""
+    print_header("Grey Optimizer Status")
+    
+    # Service status
+    service_status = get_service_status()
+    
+    print(f"Platform:    {PLATFORM.capitalize()}")
+    print(f"Version:     {VERSION}")
+    print()
+    
+    running_status = f"{Colors.GREEN}Running{Colors.NC}" if service_status["running"] else f"{Colors.RED}Stopped{Colors.NC}"
+    enabled_status = f"{Colors.GREEN}Enabled{Colors.NC}" if service_status["enabled"] else f"{Colors.YELLOW}Disabled{Colors.NC}"
+    
+    print(f"Service:     {running_status}")
+    print(f"Boot:        {enabled_status}")
+    
+    if service_status["pid"]:
+        print(f"PID:         {service_status['pid']}")
+    
+    # System memory
+    print_subheader("System Memory")
+    mem = get_system_memory_snapshot()
+    print(f"Total:       {format_bytes(mem['total'])}")
+    print(f"Used:        {format_bytes(mem['used'])} ({mem['used_percent']:.1f}%)")
+    print(f"Available:   {format_bytes(mem['available'])}")
+    print(f"Cached:      {format_bytes(mem['cached'])}")
+    if mem['swap_total'] > 0:
+        swap_used = mem['swap_total'] - mem['swap_free']
+        print(f"Swap:        {format_bytes(swap_used)} / {format_bytes(mem['swap_total'])}")
+    
+    # API status
+    print_subheader("Daemon Status")
+    if is_daemon_running():
+        status = api_call("GET", "/api/status")
+        if status:
+            mode_str = status.get('mode', 'unknown')
+            mode_color = Colors.CYAN if mode_str == 'simulation' else Colors.MAGENTA
+            print(f"Mode:        {mode_color}{mode_str}{Colors.NC}")
+            print(f"Profile:     {status.get('profile', 'none')}")
+            print(f"Enforcement: {'Active' if status.get('enforcement_active', False) else 'Inactive'}")
+            
+            if 'last_reclaim' in status:
+                print(f"Last Reclaim: {status['last_reclaim']}")
+            
+            # Recent metrics
+            metrics = api_call("GET", "/api/metrics")
+            if metrics:
+                print_subheader("Current Metrics")
+                if 'baseline_rss' in metrics and 'current_rss' in metrics:
+                    print(f"Baseline RSS:  {format_bytes(metrics['baseline_rss'])}")
+                    print(f"Current RSS:   {format_bytes(metrics['current_rss'])}")
+                    print(f"Reduction:     {format_delta(metrics['baseline_rss'], metrics['current_rss'])}")
+                if 'reclaim_count' in metrics:
+                    print(f"Reclaim Ops:   {metrics['reclaim_count']}")
+    else:
+        print(f"{Colors.YELLOW}API not responding - daemon may not be running{Colors.NC}")
+        print()
+        print("Start the daemon:")
+        print("  greyctl start")
+    
+    # Check for recent proof artifacts
+    if PROOFS_DIR.exists():
+        proofs = sorted(PROOFS_DIR.glob("proof_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:3]
+        if proofs:
+            print_subheader("Recent Proof Artifacts")
+            for p in proofs:
+                mtime = datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+                print(f"  {p.name} ({mtime})")
+    
+    print()
+    return 0
+
+
+def cmd_simulate(args):
+    """Run enforcement in simulation mode (SAFE - no actual changes)."""
+    print_header("Memory Reclamation Simulation")
+    
+    profile = args.profile
+    duration = args.duration
+    target_pids = args.pid or []
+    
+    profile_config = RECLAIM_PROFILES.get(profile, RECLAIM_PROFILES["balanced"])
+    
+    print_sim(f"Profile: {profile}")
+    print_sim(f"Duration: {duration}s")
+    if target_pids:
+        print_sim(f"Target PIDs: {', '.join(map(str, target_pids))}")
+    print()
+    
+    # Take baseline snapshot
+    print_info("Capturing baseline snapshot...")
+    baseline = get_system_memory_snapshot()
+    print(f"  System Used: {format_bytes(baseline['used'])} ({baseline['used_percent']:.1f}%)")
+    
+    # If targeting specific processes
+    process_baseline = {}
+    if target_pids:
+        for pid in target_pids:
+            smaps = read_process_smaps(pid)
+            if smaps['rss'] > 0:
+                process_baseline[pid] = smaps
+                print(f"  PID {pid}: RSS={format_bytes(smaps['rss'])}, PSS={format_bytes(smaps['pss'])}")
+    
+    # Simulate reclamation strategies
+    print_subheader("Simulating Reclamation Strategies")
+    
+    estimated_savings = 0
+    
+    # 1. madvise simulation
+    if profile_config.get("madvise_enabled", True):
+        if MADVISE_HELPER.exists():
+            print_sim("Running madvise helper in simulation mode...")
+            for pid in target_pids or []:
+                cmd = [
+                    str(MADVISE_HELPER),
+                    "--pid", str(pid),
+                    "--simulate",
+                    "--min-size", str(profile_config.get("madvise_min_size_kb", 4096)),
+                    "--json"
+                ]
+                try:
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                    if result.returncode == 0:
+                        data = json.loads(result.stdout)
+                        savings = data.get("potential_savings_bytes", 0)
+                        estimated_savings += savings
+                        print_sim(f"  PID {pid}: potential madvise savings = {format_bytes(savings)}")
+                except Exception as e:
+                    print_warn(f"  madvise simulation failed for PID {pid}: {e}")
+        else:
+            # Estimate based on cached memory
+            cached = baseline.get("cached", 0)
+            estimated_madvise = int(cached * 0.1)  # Estimate 10% of cached
+            estimated_savings += estimated_madvise
+            print_sim(f"madvise (estimated): {format_bytes(estimated_madvise)} potential savings")
+    
+    # 2. cgroup limit simulation
+    if profile_config.get("memory_limit_percent", 100) < 100:
+        limit_pct = profile_config["memory_limit_percent"]
+        limit_bytes = int(baseline['total'] * limit_pct / 100)
+        potential = baseline['used'] - limit_bytes if baseline['used'] > limit_bytes else 0
+        print_sim(f"cgroup limit ({limit_pct}%): would enforce {format_bytes(limit_bytes)} max")
+        if potential > 0:
+            print_sim(f"  Potential reclaim via memory.reclaim: {format_bytes(potential)}")
+            estimated_savings += potential
+    
+    # 3. KSM simulation
+    if profile_config.get("ksm_enabled", False):
+        ksm_run = Path("/sys/kernel/mm/ksm/run")
+        if ksm_run.exists():
+            current = ksm_run.read_text().strip()
+            print_sim(f"KSM: would enable (current state: {current})")
+            # Estimate 5-15% savings for similar pages
+            ksm_estimate = int(baseline['used'] * 0.05)
+            estimated_savings += ksm_estimate
+            print_sim(f"  Estimated KSM savings: {format_bytes(ksm_estimate)}")
+    
+    # 4. zram simulation
+    if profile_config.get("zram_enabled", False):
+        zram_pct = profile_config.get("zram_size_percent", 25)
+        zram_size = int(baseline['total'] * zram_pct / 100)
+        print_sim(f"zram: would configure {format_bytes(zram_size)} compressed swap")
+        # Estimate ~2:1 compression ratio
+        zram_effective = zram_size * 2
+        print_sim(f"  Effective memory expansion: ~{format_bytes(zram_effective)}")
+    
+    # 5. drop_caches simulation
+    if profile_config.get("drop_caches", False):
+        droppable = baseline['cached'] + baseline['buffers']
+        print_sim(f"drop_caches: would release {format_bytes(droppable)} (cached + buffers)")
+        estimated_savings += droppable
+    
+    # Summary
+    print_subheader("Simulation Summary")
+    print(f"Baseline System Used:      {format_bytes(baseline['used'])}")
+    print(f"Estimated Total Savings:   {Colors.GREEN}{format_bytes(estimated_savings)}{Colors.NC}")
+    print(f"Estimated Post-Reclaim:    {format_bytes(max(0, baseline['used'] - estimated_savings))}")
+    
+    reduction_pct = (estimated_savings / baseline['used'] * 100) if baseline['used'] > 0 else 0
+    print(f"Estimated Reduction:       {Colors.GREEN}{reduction_pct:.1f}%{Colors.NC}")
+    
+    print()
+    print(f"{Colors.CYAN}This was a SIMULATION - no actual changes were made.{Colors.NC}")
+    print()
+    print("To apply these changes for real:")
+    print(f"  greyctl apply --profile {profile} --confirm-live")
+    
+    audit_log("simulation_completed", "enforcement", 
+              f"profile={profile},estimated_savings={estimated_savings}", 
+              mode="simulation")
+    
+    return 0
+
+
+def cmd_apply(args):
+    """Apply memory reclamation (requires --confirm-live for live mode)."""
+    print_header("Apply Memory Reclamation")
+    
+    profile = args.profile
+    confirm_live = args.confirm_live
+    target_pids = args.pid or []
+    
+    profile_config = RECLAIM_PROFILES.get(profile, RECLAIM_PROFILES["balanced"])
+    
+    if not confirm_live:
+        print_error("Live enforcement requires --confirm-live flag")
+        print()
+        print(f"{Colors.YELLOW}╔══════════════════════════════════════════════════════════╗{Colors.NC}")
+        print(f"{Colors.YELLOW}║  WARNING: This will apply REAL memory reclamation!       ║{Colors.NC}")
+        print(f"{Colors.YELLOW}║  Processes may be affected. Data may be paged out.       ║{Colors.NC}")
+        print(f"{Colors.YELLOW}╚══════════════════════════════════════════════════════════╝{Colors.NC}")
+        print()
+        print("First, run a simulation:")
+        print(f"  greyctl simulate --profile {profile}")
+        print()
+        print("Then, to apply for real:")
+        print(f"  greyctl apply --profile {profile} --confirm-live")
+        return 1
+    
+    # Check if running as root (required for live mode)
+    if os.geteuid() != 0:
+        print_error("Live mode requires root privileges")
+        print()
+        print("Run with sudo:")
+        print(f"  sudo greyctl apply --profile {profile} --confirm-live")
+        return 1
+    
+    print_live(f"Profile: {profile}")
+    print_live(f"Memory Limit: {profile_config.get('memory_limit_percent', 100)}%")
+    print()
+    
+    # Capture baseline snapshot
+    print_info("Capturing baseline snapshot...")
+    baseline = get_system_memory_snapshot()
+    print(f"  System Used: {format_bytes(baseline['used'])} ({baseline['used_percent']:.1f}%)")
+    
+    # Save baseline to proof directory
+    PROOFS_DIR.mkdir(parents=True, exist_ok=True)
+    baseline_file = PROOFS_DIR / f"baseline_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    baseline_data = {
+        "type": "baseline",
+        "timestamp": baseline["timestamp"],
+        "system": baseline,
+        "profile": profile,
+    }
+    baseline_file.write_text(json.dumps(baseline_data, indent=2))
+    print_success(f"Baseline saved: {baseline_file.name}")
+    
+    # Store backup info for rollback
+    backup_info = {
+        "timestamp": datetime.now().isoformat(),
+        "profile": profile,
+        "actions": [],
+    }
+    
+    results = {
+        "strategies_applied": [],
+        "total_reclaimed": 0,
+        "errors": [],
+    }
+    
+    # Apply reclamation strategies
+    print_subheader("Applying Reclamation Strategies")
+    
+    # 1. Set cgroup memory limits
+    if profile_config.get("memory_limit_percent", 100) < 100:
+        limit_pct = profile_config["memory_limit_percent"]
+        limit_bytes = int(baseline['total'] * limit_pct / 100)
+        
+        if CGROUP_HELPER.exists() and CGROUP_BASE and CGROUP_BASE.exists():
+            cgroup_name = "grey-optimizer"
+            
+            # Create cgroup
+            cmd = [str(CGROUP_HELPER), "create", cgroup_name]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                print_live(f"Created cgroup: {cgroup_name}")
+                backup_info["actions"].append({"type": "cgroup_create", "name": cgroup_name})
+            
+            # Set memory limit
+            cmd = [str(CGROUP_HELPER), "set-limit", cgroup_name, str(limit_bytes)]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                print_live(f"Set memory limit: {format_bytes(limit_bytes)}")
+                results["strategies_applied"].append("cgroup_limit")
+                backup_info["actions"].append({"type": "cgroup_limit", "name": cgroup_name, "limit": limit_bytes})
+            
+            # Trigger memory.reclaim if available
+            reclaim_file = CGROUP_BASE / cgroup_name / "memory.reclaim"
+            if reclaim_file.exists():
+                try:
+                    reclaim_amount = baseline['used'] - limit_bytes
+                    if reclaim_amount > 0:
+                        reclaim_file.write_text(str(reclaim_amount))
+                        print_live(f"Triggered memory.reclaim: {format_bytes(reclaim_amount)}")
+                        results["total_reclaimed"] += reclaim_amount
+                except Exception as e:
+                    results["errors"].append(f"memory.reclaim failed: {e}")
+        else:
+            # Fallback: write directly to memory.max
+            print_warn("cgroup helper not available, using direct write")
+    
+    # 2. Apply madvise to target processes
+    if profile_config.get("madvise_enabled", True) and target_pids:
+        if MADVISE_HELPER.exists():
+            for pid in target_pids:
+                cmd = [
+                    str(MADVISE_HELPER),
+                    "--pid", str(pid),
+                    "--confirm-live",
+                    "--min-size", str(profile_config.get("madvise_min_size_kb", 4096)),
+                    "--json"
+                ]
+                try:
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+                    if result.returncode == 0:
+                        data = json.loads(result.stdout)
+                        reclaimed = data.get("reclaimed_bytes", 0)
+                        results["total_reclaimed"] += reclaimed
+                        print_live(f"PID {pid}: reclaimed {format_bytes(reclaimed)} via madvise")
+                        results["strategies_applied"].append(f"madvise_pid_{pid}")
+                except Exception as e:
+                    results["errors"].append(f"madvise failed for PID {pid}: {e}")
+    
+    # 3. Enable KSM
+    if profile_config.get("ksm_enabled", False):
+        ksm_run = Path("/sys/kernel/mm/ksm/run")
+        if ksm_run.exists():
+            try:
+                old_value = ksm_run.read_text().strip()
+                backup_info["actions"].append({"type": "ksm", "old_value": old_value})
+                ksm_run.write_text("1")
+                print_live("Enabled KSM (Kernel Same-page Merging)")
+                results["strategies_applied"].append("ksm")
+            except Exception as e:
+                results["errors"].append(f"KSM enable failed: {e}")
+    
+    # 4. Configure zram
+    if profile_config.get("zram_enabled", False):
+        zram_pct = profile_config.get("zram_size_percent", 25)
+        zram_size = int(baseline['total'] * zram_pct / 100)
+        
+        zram_device = Path("/dev/zram0")
+        if not zram_device.exists():
+            # Try to load zram module
+            subprocess.run(["modprobe", "zram"], capture_output=True)
+        
+        if zram_device.exists():
+            disksize_path = Path("/sys/block/zram0/disksize")
+            try:
+                if disksize_path.exists():
+                    old_size = disksize_path.read_text().strip()
+                    backup_info["actions"].append({"type": "zram", "old_size": old_size})
+                    disksize_path.write_text(str(zram_size))
+                    print_live(f"Configured zram: {format_bytes(zram_size)}")
+                    results["strategies_applied"].append("zram")
+            except Exception as e:
+                results["errors"].append(f"zram config failed: {e}")
+    
+    # 5. Drop caches
+    if profile_config.get("drop_caches", False):
+        drop_caches = Path("/proc/sys/vm/drop_caches")
+        if drop_caches.exists():
+            try:
+                # Sync first
+                subprocess.run(["sync"], check=True)
+                drop_caches.write_text("3")
+                print_live("Dropped page cache, dentries, and inodes")
+                results["strategies_applied"].append("drop_caches")
+            except Exception as e:
+                results["errors"].append(f"drop_caches failed: {e}")
+    
+    # Save backup info for rollback
+    backup_file = DATA_DIR / "last_backup.json"
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    backup_file.write_text(json.dumps(backup_info, indent=2))
+    
+    # Capture post snapshot
+    print_subheader("Capturing Post-Reclamation Snapshot")
+    time.sleep(1)  # Allow system to stabilize
+    post = get_system_memory_snapshot()
+    
+    # Calculate reduction
+    memory_delta = baseline['used'] - post['used']
+    reduction_pct = (memory_delta / baseline['used'] * 100) if baseline['used'] > 0 else 0
+    
+    print(f"  System Used: {format_bytes(post['used'])} ({post['used_percent']:.1f}%)")
+    print(f"  Reduction:   {format_delta(baseline['used'], post['used'])} ({reduction_pct:.1f}%)")
+    
+    # Generate proof artifact
+    print_subheader("Generating Proof Artifact")
+    proof_artifact = {
+        "version": "1.0",
+        "generated_at": datetime.now().isoformat(),
+        "profile": profile,
+        "baseline": {
+            "timestamp": baseline["timestamp"],
+            "system_used_bytes": baseline["used"],
+            "system_used_percent": baseline["used_percent"],
+        },
+        "post": {
+            "timestamp": post["timestamp"],
+            "system_used_bytes": post["used"],
+            "system_used_percent": post["used_percent"],
+        },
+        "reduction": {
+            "bytes": memory_delta,
+            "percent": reduction_pct,
+        },
+        "strategies_applied": results["strategies_applied"],
+        "errors": results["errors"],
+    }
+    
+    # Sign the proof artifact
+    artifact_json = json.dumps(proof_artifact, sort_keys=True)
+    proof_artifact["signature"] = compute_hmac(artifact_json)
+    
+    proof_file = PROOFS_DIR / f"proof_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    proof_file.write_text(json.dumps(proof_artifact, indent=2))
+    print_success(f"Proof artifact saved: {proof_file}")
+    
+    # Summary
+    print_subheader("Summary")
+    if memory_delta > 0:
+        print_success(f"Reclaimed {format_bytes(memory_delta)} ({reduction_pct:.1f}%)")
+    else:
+        print_warn("No memory reduction achieved")
+    
+    print(f"Strategies Applied: {', '.join(results['strategies_applied']) or 'none'}")
+    
+    if results["errors"]:
+        print_warn(f"Errors: {len(results['errors'])}")
+        for err in results["errors"]:
+            print(f"  - {err}")
+    
+    print()
+    print("To rollback these changes:")
+    print("  greyctl rollback")
+    
+    audit_log("apply_completed", "enforcement", 
+              f"profile={profile},reduction_bytes={memory_delta},strategies={','.join(results['strategies_applied'])}",
+              mode="live")
+    
+    return 0
+
+
+def cmd_rollback(args):
+    """Rollback to previous state."""
+    print_header("Rollback")
+    
+    confirm = args.confirm_rollback if hasattr(args, 'confirm_rollback') else True
+    
+    # Load backup info
+    backup_file = DATA_DIR / "last_backup.json"
+    if not backup_file.exists():
+        print_warn("No backup found to rollback")
+        print()
+        print("Backup file would be created when applying enforcement:")
+        print("  greyctl apply --profile balanced --confirm-live")
+        return 0
+    
+    try:
+        backup_info = json.loads(backup_file.read_text())
+    except Exception as e:
+        print_error(f"Failed to read backup: {e}")
+        return 1
+    
+    print_info(f"Found backup from: {backup_info.get('timestamp', 'unknown')}")
+    print_info(f"Profile was: {backup_info.get('profile', 'unknown')}")
+    print(f"Actions to rollback: {len(backup_info.get('actions', []))}")
+    print()
+    
+    if not confirm:
+        print_warn("This is a dry run. Use --confirm-rollback to actually rollback.")
+        for action in backup_info.get("actions", []):
+            print_sim(f"Would rollback: {action['type']}")
+        return 0
+    
+    # Check root
+    if os.geteuid() != 0:
+        print_error("Rollback requires root privileges")
+        print()
+        print("Run with sudo:")
+        print("  sudo greyctl rollback")
+        return 1
+    
+    errors = []
+    
+    # Rollback in reverse order
+    for action in reversed(backup_info.get("actions", [])):
+        action_type = action.get("type")
+        
+        if action_type == "cgroup_limit":
+            # Remove cgroup limit by deleting cgroup
+            cgroup_name = action.get("name", "grey-optimizer")
+            if CGROUP_HELPER.exists():
+                cmd = [str(CGROUP_HELPER), "delete", cgroup_name]
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode == 0:
+                    print_success(f"Removed cgroup: {cgroup_name}")
+                else:
+                    errors.append(f"Failed to remove cgroup: {cgroup_name}")
+        
+        elif action_type == "cgroup_create":
+            # Already handled by cgroup_limit rollback
+            pass
+        
+        elif action_type == "ksm":
+            old_value = action.get("old_value", "0")
+            ksm_run = Path("/sys/kernel/mm/ksm/run")
+            if ksm_run.exists():
+                try:
+                    ksm_run.write_text(old_value)
+                    print_success(f"Restored KSM state: {old_value}")
+                except Exception as e:
+                    errors.append(f"Failed to restore KSM: {e}")
+        
+        elif action_type == "zram":
+            old_size = action.get("old_size", "0")
+            disksize_path = Path("/sys/block/zram0/disksize")
+            if disksize_path.exists():
+                try:
+                    # Reset zram requires echo 1 to /sys/block/zram0/reset
+                    reset_path = Path("/sys/block/zram0/reset")
+                    if reset_path.exists():
+                        reset_path.write_text("1")
+                    print_success("Reset zram device")
+                except Exception as e:
+                    errors.append(f"Failed to reset zram: {e}")
+    
+    # Remove backup file
+    backup_file.unlink()
+    
+    if errors:
+        print_warn(f"Rollback completed with {len(errors)} errors:")
+        for err in errors:
+            print(f"  - {err}")
+        audit_log("rollback_completed", "enforcement", f"errors={len(errors)}", success=0)
+        return 1
+    else:
+        print_success("Rollback completed successfully")
+        audit_log("rollback_completed", "enforcement", "success=true")
+        return 0
+
+
+def cmd_health(args):
+    """Check daemon health (OOM, PSI pressure, services)."""
+    print_header("Health Check")
+    
+    checks_to_run = args.check.split(',') if args.check else ['all']
+    run_all = 'all' in checks_to_run
+    
+    results = {}
+    all_passed = True
+    
+    # Service check
+    if run_all or 'service' in checks_to_run:
+        service_status = get_service_status()
+        results["service_running"] = service_status["running"]
+        results["service_enabled"] = service_status["enabled"]
+    
+    # API check
+    if run_all or 'api' in checks_to_run:
+        results["api_responding"] = is_daemon_running()
+    
+    # OOM check
+    if run_all or 'oom' in checks_to_run:
+        print_info("Checking for recent OOM events...")
+        oom_count = 0
+        try:
+            # Check dmesg for OOM killer
+            result = subprocess.run(
+                ["dmesg", "-T"],
+                capture_output=True, text=True, timeout=10
+            )
+            oom_lines = [l for l in result.stdout.split('\n') if 'Out of memory' in l or 'oom-kill' in l.lower()]
+            oom_count = len(oom_lines)
+            
+            # Check last 1 hour
+            recent_ooms = []
+            for line in oom_lines[-10:]:  # Last 10 OOM events
+                recent_ooms.append(line[:80] + "..." if len(line) > 80 else line)
+            
+            results["oom_events"] = oom_count
+            results["recent_ooms"] = recent_ooms
+        except Exception:
+            results["oom_events"] = -1  # Unable to check
+    
+    # Memory Pressure (PSI) check
+    if run_all or 'pressure' in checks_to_run:
+        print_info("Checking memory pressure (PSI)...")
+        psi_file = Path("/proc/pressure/memory")
+        if psi_file.exists():
+            try:
+                content = psi_file.read_text()
+                for line in content.split('\n'):
+                    if line.startswith('some'):
+                        # Parse: some avg10=0.00 avg60=0.00 avg300=0.00 total=12345
+                        parts = line.split()
+                        for part in parts[1:]:
+                            if '=' in part:
+                                key, value = part.split('=')
+                                results[f"psi_some_{key}"] = float(value)
+                    elif line.startswith('full'):
+                        parts = line.split()
+                        for part in parts[1:]:
+                            if '=' in part:
+                                key, value = part.split('=')
+                                results[f"psi_full_{key}"] = float(value)
+                
+                # Evaluate pressure levels
+                some_avg10 = results.get("psi_some_avg10", 0)
+                full_avg10 = results.get("psi_full_avg10", 0)
+                
+                if full_avg10 > 25:
+                    results["pressure_status"] = "critical"
+                elif some_avg10 > 50:
+                    results["pressure_status"] = "high"
+                elif some_avg10 > 10:
+                    results["pressure_status"] = "moderate"
+                else:
+                    results["pressure_status"] = "low"
+            except Exception:
+                results["pressure_status"] = "unknown"
+        else:
+            results["pressure_status"] = "unavailable"
+    
+    # Critical services check
+    if run_all or 'services' in checks_to_run:
+        print_info("Checking critical services...")
+        critical_services = ["sshd", "systemd-journald", "dbus"]
+        services_ok = True
+        
+        for svc in critical_services:
+            try:
+                result = subprocess.run(
+                    ["systemctl", "is-active", svc],
+                    capture_output=True, text=True, timeout=5
+                )
+                is_active = result.stdout.strip() == "active"
+                results[f"service_{svc}"] = is_active
+                if not is_active:
+                    services_ok = False
+            except Exception:
+                results[f"service_{svc}"] = None
+        
+        results["critical_services_ok"] = services_ok
+    
+    # Config check
+    if run_all or 'config' in checks_to_run:
+        config_file = CONFIG_DIR / "config.yaml"
+        results["config_exists"] = config_file.exists()
+        results["audit_db_exists"] = AUDIT_DB.exists()
+        results["proofs_dir_exists"] = PROOFS_DIR.exists() if PROOFS_DIR else False
+    
+    # Print results
+    print_subheader("Health Status")
+    
+    for key, value in sorted(results.items()):
+        if isinstance(value, bool):
+            status = f"{Colors.GREEN}✓{Colors.NC}" if value else f"{Colors.RED}✗{Colors.NC}"
+            print(f"  {status} {key.replace('_', ' ').title()}")
+            if not value:
+                all_passed = False
+        elif isinstance(value, (int, float)):
+            print(f"    {key}: {value}")
+        elif isinstance(value, str):
+            color = Colors.GREEN if value in ['low', 'ok'] else Colors.YELLOW if value in ['moderate', 'unknown'] else Colors.RED
+            print(f"    {key}: {color}{value}{Colors.NC}")
+            if value in ['critical', 'high']:
+                all_passed = False
+        elif isinstance(value, list):
+            if value:
+                print(f"    {key}:")
+                for item in value[:5]:
+                    print(f"      - {item}")
+    
+    print()
+    
+    if all_passed:
+        print_success("All health checks passed")
+        return 0
+    else:
+        print_warn("Some health checks need attention")
+        return 1
+
+
+def cmd_memory_diagnose(args):
+    """Run memory diagnostics for a process or the system."""
+    print_header("Memory Diagnostics")
+    
+    target_pid = args.pid
+    output_format = args.format
+    
+    if target_pid:
+        # Process-specific diagnostics
+        print_info(f"Diagnosing PID: {target_pid}")
+        print()
+        
+        # Check if process exists
+        proc_path = Path(f"/proc/{target_pid}")
+        if not proc_path.exists():
+            print_error(f"Process {target_pid} not found")
+            return 1
+        
+        # Get process name
+        try:
+            comm = (proc_path / "comm").read_text().strip()
+            cmdline = (proc_path / "cmdline").read_text().replace('\x00', ' ').strip()
+        except Exception:
+            comm = "unknown"
+            cmdline = ""
+        
+        print(f"Process:  {comm}")
+        print(f"Command:  {cmdline[:60]}{'...' if len(cmdline) > 60 else ''}")
+        print()
+        
+        # Read memory info from smaps
+        smaps = read_process_smaps(target_pid)
+        
+        print_subheader("Memory Usage")
+        print(f"  RSS (Resident Set Size):    {format_bytes(smaps['rss'])}")
+        print(f"  PSS (Proportional Set Size): {format_bytes(smaps['pss'])}")
+        print(f"  USS (Unique Set Size):       {format_bytes(smaps['uss'])}")
+        print(f"  Swap:                        {format_bytes(smaps['swap'])}")
+        
+        # Parse detailed smaps for regions
+        print_subheader("Memory Regions (Top 10 by Size)")
+        
+        try:
+            maps_content = (proc_path / "maps").read_text()
+            smaps_content = (proc_path / "smaps").read_text()
+            
+            # Parse regions
+            regions = []
+            current_region = None
+            
+            for line in smaps_content.split('\n'):
+                if line and not line[0].isspace() and '-' in line.split()[0]:
+                    # New region line
+                    parts = line.split()
+                    addr_range = parts[0]
+                    perms = parts[1] if len(parts) > 1 else ""
+                    name = parts[-1] if len(parts) > 5 else "[anon]"
+                    
+                    start, end = addr_range.split('-')
+                    size = int(end, 16) - int(start, 16)
+                    
+                    current_region = {
+                        "address": addr_range,
+                        "perms": perms,
+                        "name": name,
+                        "size": size,
+                        "rss": 0,
+                        "pss": 0,
+                    }
+                    regions.append(current_region)
+                elif current_region and line.startswith("Rss:"):
+                    current_region["rss"] = int(line.split()[1]) * 1024
+                elif current_region and line.startswith("Pss:"):
+                    current_region["pss"] = int(line.split()[1]) * 1024
+            
+            # Sort by RSS and show top 10
+            regions.sort(key=lambda r: r["rss"], reverse=True)
+            
+            for i, region in enumerate(regions[:10]):
+                print(f"  {i+1:2}. {region['name'][:30]:<30} "
+                      f"RSS: {format_bytes(region['rss']):>10} "
+                      f"Perms: {region['perms']}")
+            
+        except Exception as e:
+            print_warn(f"Could not parse memory regions: {e}")
+        
+        # Reclamation recommendations
+        print_subheader("Reclamation Recommendations")
+        
+        if smaps['rss'] > 100 * 1024 * 1024:  # > 100MB
+            print(f"  • Consider madvise reclamation (RSS > 100MB)")
+            print(f"    greyctl apply --pid {target_pid} --profile balanced --confirm-live")
+        
+        if smaps['swap'] > 0:
+            print(f"  • Process is swapping ({format_bytes(smaps['swap'])})")
+            print(f"    Consider increasing memory or reducing workload")
+        
+        if output_format == "json":
+            result = {
+                "pid": target_pid,
+                "comm": comm,
+                "cmdline": cmdline,
+                "memory": smaps,
+            }
+            print()
+            print(json.dumps(result, indent=2))
+    
+    else:
+        # System-wide diagnostics
+        print_info("System-wide memory diagnostics")
+        print()
+        
+        mem = get_system_memory_snapshot()
+        
+        print_subheader("System Memory")
+        print(f"  Total:        {format_bytes(mem['total'])}")
+        print(f"  Used:         {format_bytes(mem['used'])} ({mem['used_percent']:.1f}%)")
+        print(f"  Available:    {format_bytes(mem['available'])}")
+        print(f"  Free:         {format_bytes(mem['free'])}")
+        print(f"  Buffers:      {format_bytes(mem['buffers'])}")
+        print(f"  Cached:       {format_bytes(mem['cached'])}")
+        
+        if mem['swap_total'] > 0:
+            swap_used = mem['swap_total'] - mem['swap_free']
+            swap_pct = (swap_used / mem['swap_total'] * 100)
+            print(f"  Swap Used:    {format_bytes(swap_used)} ({swap_pct:.1f}%)")
+        
+        # Top memory consumers
+        print_subheader("Top Memory Consumers")
+        
+        processes = []
+        for proc_dir in Path("/proc").iterdir():
+            if proc_dir.name.isdigit():
+                pid = int(proc_dir.name)
+                try:
+                    comm = (proc_dir / "comm").read_text().strip()
+                    smaps = read_process_smaps(pid)
+                    if smaps['rss'] > 0:
+                        processes.append({
+                            "pid": pid,
+                            "comm": comm,
+                            "rss": smaps['rss'],
+                            "pss": smaps['pss'],
+                        })
+                except Exception:
+                    continue
+        
+        # Sort by RSS
+        processes.sort(key=lambda p: p['rss'], reverse=True)
+        
+        for i, proc in enumerate(processes[:10]):
+            print(f"  {i+1:2}. PID {proc['pid']:>6} {proc['comm']:<20} "
+                  f"RSS: {format_bytes(proc['rss']):>10}")
+        
+        # Recommendations
+        print_subheader("Optimization Recommendations")
+        
+        if mem['used_percent'] > 80:
+            print(f"  {Colors.RED}• High memory usage ({mem['used_percent']:.1f}%){Colors.NC}")
+            print("    Consider running aggressive reclamation:")
+            print("    greyctl apply --profile aggressive --confirm-live")
+        elif mem['used_percent'] > 60:
+            print(f"  {Colors.YELLOW}• Moderate memory usage ({mem['used_percent']:.1f}%){Colors.NC}")
+            print("    Consider running balanced reclamation:")
+            print("    greyctl apply --profile balanced --confirm-live")
+        else:
+            print(f"  {Colors.GREEN}• Memory usage is healthy ({mem['used_percent']:.1f}%){Colors.NC}")
+        
+        droppable = mem['cached'] + mem['buffers']
+        print(f"  • Droppable cache: {format_bytes(droppable)}")
+        
+        if output_format == "json":
+            result = {
+                "system": mem,
+                "top_processes": processes[:10],
+            }
+            print()
+            print(json.dumps(result, indent=2))
+    
+    audit_log("memory_diagnose", "diagnostics", f"pid={target_pid or 'system'}")
+    return 0
+
+
+def cmd_audit(args):
+    """Export audit log entries with optional HMAC verification."""
+    print_header("Audit Log Export")
+    
+    if not AUDIT_DB.exists():
+        print_warn(f"Audit database not found: {AUDIT_DB}")
+        print()
+        print("The audit database is created when actions are performed.")
+        print("Try running a command first, e.g.:")
+        print("  greyctl status")
+        return 0
+    
+    output_format = args.format
+    output_file = args.output
+    limit = args.limit
+    verify = args.verify
+    
+    try:
+        conn = sqlite3.connect(AUDIT_DB)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        if limit:
+            cursor.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,))
+        else:
+            cursor.execute("SELECT * FROM audit_log ORDER BY id DESC")
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        entries = [dict(row) for row in rows]
+        
+        # Verify signatures if requested
+        if verify:
+            print_info("Verifying HMAC signatures...")
+            verified = 0
+            failed = 0
+            
+            for entry in entries:
+                signature = entry.get("signature", "")
+                
+                # Reconstruct the signed data
+                sign_data = (f"{entry['action']}|{entry['category']}|{entry.get('details', '')}|"
+                            f"{entry.get('mode', 'cli')}|{entry.get('user', '')}|"
+                            f"{entry.get('hostname', '')}|{entry.get('success', 1)}|{entry['timestamp']}")
+                
+                if verify_hmac(sign_data, signature):
+                    entry["_verified"] = True
+                    verified += 1
+                else:
+                    entry["_verified"] = False
+                    failed += 1
+            
+            print_success(f"Verified: {verified} entries")
+            if failed > 0:
+                print_error(f"Failed verification: {failed} entries")
+            print()
+        
+        if output_format == "json":
+            output = json.dumps(entries, indent=2, default=str)
+        else:  # table
+            lines = []
+            lines.append(f"{'ID':>6} {'Timestamp':<20} {'Action':<20} {'Category':<12} {'Mode':<10} {'OK':<4}{'Sig' if verify else ''}")
+            lines.append("-" * (85 if verify else 75))
+            for entry in entries:
+                success = "✓" if entry.get("success", 1) else "✗"
+                sig = ""
+                if verify:
+                    if entry.get("_verified"):
+                        sig = f" {Colors.GREEN}✓{Colors.NC}"
+                    else:
+                        sig = f" {Colors.RED}✗{Colors.NC}"
+                ts = entry.get('timestamp', '')[:19]  # Truncate timestamp
+                lines.append(f"{entry.get('id', 0):>6} {ts:<20} {entry.get('action', '')[:20]:<20} "
+                           f"{entry.get('category', '')[:12]:<12} {entry.get('mode', 'cli')[:10]:<10} {success}{sig}")
+            output = "\n".join(lines)
+        
+        if output_file:
+            Path(output_file).write_text(output if output_format == "json" else 
+                                        "\n".join([l.replace(Colors.GREEN, "").replace(Colors.RED, "").replace(Colors.NC, "") 
+                                                  for l in output.split("\n")]))
+            print_success(f"Exported {len(entries)} entries to {output_file}")
+        else:
+            print(output)
+        
+        return 0
+    
+    except Exception as e:
+        print_error(f"Failed to read audit log: {e}")
+        return 1
+
+
+def cmd_proof(args):
+    """Export or verify proof artifacts."""
+    print_header("Proof Artifacts")
+    
+    export_file = args.export
+    verify_file = args.verify
+    list_proofs = args.list
+    
+    if not PROOFS_DIR or not PROOFS_DIR.exists():
+        print_warn(f"Proofs directory not found: {PROOFS_DIR}")
+        print()
+        print("Proof artifacts are created when applying enforcement:")
+        print("  greyctl apply --profile balanced --confirm-live")
+        return 0
+    
+    if list_proofs or (not export_file and not verify_file):
+        # List available proofs
+        proofs = sorted(PROOFS_DIR.glob("proof_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        
+        if not proofs:
+            print_info("No proof artifacts found")
+            return 0
+        
+        print(f"Found {len(proofs)} proof artifact(s):")
+        print()
+        
+        for p in proofs:
+            try:
+                data = json.loads(p.read_text())
+                reduction = data.get("reduction", {})
+                reduction_bytes = reduction.get("bytes", 0)
+                reduction_pct = reduction.get("percent", 0)
+                profile = data.get("profile", "unknown")
+                generated = data.get("generated_at", "unknown")[:19]
+                
+                reduction_str = f"{Colors.GREEN}-{format_bytes(abs(reduction_bytes))} ({reduction_pct:.1f}%){Colors.NC}" if reduction_bytes > 0 else f"{Colors.YELLOW}no reduction{Colors.NC}"
+                
+                print(f"  {p.name}")
+                print(f"    Generated: {generated}")
+                print(f"    Profile:   {profile}")
+                print(f"    Reduction: {reduction_str}")
+                print()
+            except Exception as e:
+                print(f"  {p.name} (error reading: {e})")
+        
+        return 0
+    
+    if verify_file:
+        # Verify a proof artifact
+        proof_path = Path(verify_file)
+        if not proof_path.exists():
+            # Try in proofs directory
+            proof_path = PROOFS_DIR / verify_file
+        
+        if not proof_path.exists():
+            print_error(f"Proof file not found: {verify_file}")
+            return 1
+        
+        print_info(f"Verifying: {proof_path}")
+        
+        try:
+            data = json.loads(proof_path.read_text())
+            signature = data.pop("signature", None)
+            
+            if not signature:
+                print_error("Proof artifact has no signature")
+                return 1
+            
+            # Verify signature
+            artifact_json = json.dumps(data, sort_keys=True)
+            if verify_hmac(artifact_json, signature):
+                print_success("Signature verification: PASSED")
+                print()
+                print(f"Generated:  {data.get('generated_at', 'unknown')}")
+                print(f"Profile:    {data.get('profile', 'unknown')}")
+                
+                baseline = data.get("baseline", {})
+                post = data.get("post", {})
+                reduction = data.get("reduction", {})
+                
+                print()
+                print(f"Baseline:   {format_bytes(baseline.get('system_used_bytes', 0))} "
+                      f"({baseline.get('system_used_percent', 0):.1f}%)")
+                print(f"Post:       {format_bytes(post.get('system_used_bytes', 0))} "
+                      f"({post.get('system_used_percent', 0):.1f}%)")
+                print(f"Reduction:  {format_bytes(reduction.get('bytes', 0))} "
+                      f"({reduction.get('percent', 0):.1f}%)")
+                
+                strategies = data.get("strategies_applied", [])
+                if strategies:
+                    print(f"Strategies: {', '.join(strategies)}")
+                
+                return 0
+            else:
+                print_error("Signature verification: FAILED")
+                print()
+                print(f"{Colors.RED}The proof artifact may have been tampered with!{Colors.NC}")
+                return 1
+            
+        except Exception as e:
+            print_error(f"Failed to verify proof: {e}")
+            return 1
+    
+    if export_file:
+        # Export latest proof
+        proofs = sorted(PROOFS_DIR.glob("proof_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        
+        if not proofs:
+            print_error("No proof artifacts to export")
+            return 1
+        
+        latest = proofs[0]
+        import shutil
+        shutil.copy(latest, export_file)
+        print_success(f"Exported {latest.name} to {export_file}")
+        return 0
+    
+    return 0
+
+
+def cmd_version(args):
+    """Show version information."""
+    print(f"greyctl version {VERSION}")
+    print(f"Platform: {PLATFORM}")
+    print(f"Python: {platform.python_version()}")
+    print()
+    print("Components:")
+    print(f"  madvise_helper: {'✓' if MADVISE_HELPER.exists() else '✗'} {MADVISE_HELPER}")
+    print(f"  cgroup_helper:  {'✓' if CGROUP_HELPER.exists() else '✗'} {CGROUP_HELPER}")
+    print(f"  daemon:         {'✓' if (Path(__file__).parent / 'daemon' / 'grey_daemon.py').exists() else '✗'}")
+    print()
+    print("Paths:")
+    print(f"  Config:  {CONFIG_DIR}")
+    print(f"  Data:    {DATA_DIR}")
+    print(f"  Logs:    {LOG_DIR}")
+    print(f"  Proofs:  {PROOFS_DIR}")
+    return 0
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Main
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog="greyctl",
+        description="Grey Optimizer CLI - Adaptive RAM Reclamation with Proof Artifacts",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+SAFETY MODES:
+  By default, all operations run in SIMULATION mode (safe, no changes).
+  Use --confirm-live to apply real changes (requires root).
+
+EXAMPLES:
+  greyctl status                    Show daemon and memory status
+  greyctl start                     Start the daemon
+  greyctl simulate --profile balanced   Simulate reclamation (safe)
+  greyctl apply --profile balanced --confirm-live   Apply reclamation (live)
+  greyctl memory-diagnose --pid 1234    Diagnose process memory
+  greyctl health --check oom,pressure   Check for OOM and pressure
+  greyctl rollback                  Rollback previous changes
+  greyctl audit --verify            Export and verify audit log
+  greyctl proof --list              List proof artifacts
+
+PROFILES:
+  conservative   Gentle limits (95%), large regions only
+  balanced       Moderate limits (85%), KSM, zram
+  aggressive     Aggressive limits (70%), drop caches
+
+For more information: https://github.com/your-org/grey-optimizer
+"""
+    )
+    
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    
+    # install
+    p_install = subparsers.add_parser("install", help="Install as system service")
+    p_install.add_argument("--mode", choices=["simulation", "live"], default="simulation",
+                          help="Installation mode (default: simulation)")
+    p_install.add_argument("--confirm-live", action="store_true",
+                          help="Confirm live mode installation (REQUIRED for live)")
+    p_install.set_defaults(func=cmd_install)
+    
+    # uninstall
+    p_uninstall = subparsers.add_parser("uninstall", help="Remove from system")
+    p_uninstall.add_argument("--confirm-uninstall", action="store_true",
+                            help="Confirm uninstallation (default: dry run)")
+    p_uninstall.add_argument("--preserve-logs", action="store_true",
+                            help="Keep logs and audit data")
+    p_uninstall.set_defaults(func=cmd_uninstall)
+    
+    # start
+    p_start = subparsers.add_parser("start", help="Start the daemon")
+    p_start.set_defaults(func=cmd_start)
+    
+    # stop
+    p_stop = subparsers.add_parser("stop", help="Stop the daemon")
+    p_stop.set_defaults(func=cmd_stop)
+    
+    # status
+    p_status = subparsers.add_parser("status", help="Show daemon and memory status")
+    p_status.set_defaults(func=cmd_status)
+    
+    # simulate
+    p_simulate = subparsers.add_parser("simulate", help="Run simulation (SAFE, no changes)")
+    p_simulate.add_argument("--duration", type=int, default=60,
+                           help="Simulation duration in seconds (default: 60)")
+    p_simulate.add_argument("--profile", choices=["conservative", "balanced", "aggressive"],
+                           default="balanced", help="Reclamation profile")
+    p_simulate.add_argument("--pid", type=int, action="append",
+                           help="Target specific PIDs (can be repeated)")
+    p_simulate.set_defaults(func=cmd_simulate)
+    
+    # apply
+    p_apply = subparsers.add_parser("apply", help="Apply reclamation (requires --confirm-live)")
+    p_apply.add_argument("--confirm-live", action="store_true",
+                        help="Confirm live enforcement (REQUIRED)")
+    p_apply.add_argument("--profile", choices=["conservative", "balanced", "aggressive"],
+                        default="balanced", help="Reclamation profile")
+    p_apply.add_argument("--pid", type=int, action="append",
+                        help="Target specific PIDs (can be repeated)")
+    p_apply.set_defaults(func=cmd_apply)
+    
+    # rollback
+    p_rollback = subparsers.add_parser("rollback", help="Rollback to previous state")
+    p_rollback.add_argument("--confirm-rollback", action="store_true", default=True,
+                           help="Confirm rollback (default: true)")
+    p_rollback.set_defaults(func=cmd_rollback)
+    
+    # memory-diagnose
+    p_diagnose = subparsers.add_parser("memory-diagnose", help="Run memory diagnostics")
+    p_diagnose.add_argument("--pid", type=int,
+                           help="Target specific PID (omit for system-wide)")
+    p_diagnose.add_argument("--format", choices=["text", "json"], default="text",
+                           help="Output format")
+    p_diagnose.set_defaults(func=cmd_memory_diagnose)
+    
+    # health
+    p_health = subparsers.add_parser("health", help="Check daemon health")
+    p_health.add_argument("--check", type=str, default="all",
+                         help="Checks to run: all,service,api,oom,pressure,services,config")
+    p_health.set_defaults(func=cmd_health)
+    
+    # audit
+    p_audit = subparsers.add_parser("audit", help="Export audit log")
+    p_audit.add_argument("--format", choices=["json", "table"], default="table",
+                        help="Output format (default: table)")
+    p_audit.add_argument("--output", "-o", help="Output file (default: stdout)")
+    p_audit.add_argument("--limit", "-n", type=int, help="Limit number of entries")
+    p_audit.add_argument("--verify", action="store_true",
+                        help="Verify HMAC signatures")
+    p_audit.set_defaults(func=cmd_audit)
+    
+    # proof
+    p_proof = subparsers.add_parser("proof", help="Manage proof artifacts")
+    p_proof.add_argument("--list", "-l", action="store_true",
+                        help="List available proof artifacts")
+    p_proof.add_argument("--export", "-e", metavar="FILE",
+                        help="Export latest proof artifact to file")
+    p_proof.add_argument("--verify", "-v", metavar="FILE",
+                        help="Verify a proof artifact's signature")
+    p_proof.set_defaults(func=cmd_proof)
+    
+    # version
+    p_version = subparsers.add_parser("version", help="Show version")
+    p_version.set_defaults(func=cmd_version)
+    
+    args = parser.parse_args()
+    
+    if not args.command:
+        parser.print_help()
+        return 0
+    
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

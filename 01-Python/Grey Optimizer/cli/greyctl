@@ -1,0 +1,1555 @@
+#!/usr/bin/env python3
+"""
+Grey Optimizer CLI - greyctl
+
+Command-line interface for managing the Grey Optimizer daemon.
+Provides commands for installation, control, and monitoring.
+"""
+
+import argparse
+import asyncio
+import json
+import os
+import platform
+import signal
+import subprocess
+import sys
+from pathlib import Path
+from typing import Optional
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "daemon"))
+
+try:
+    from grey_optimizer.config import Config
+    from grey_optimizer.persistence.database import Database
+    from grey_optimizer.telemetry.memory_diagnostics import MemoryDiagnostics
+    from grey_optimizer.enforcement.memory_ops import MemoryOps
+    from grey_optimizer.enforcement.watchdog import MemoryWatchdog
+    HAS_BACKEND = True
+except ImportError:
+    HAS_BACKEND = False
+
+# Try to import daemon memory_reclaim module
+try:
+    from memory_reclaim import (
+        enable_ksm, disable_ksm, tune_ksm,
+        invoke_madvise, enable_zram, disable_zram, safe_drop_caches,
+    )
+    HAS_DAEMON = True
+except ImportError:
+    HAS_DAEMON = False
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONFIGURATION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+VERSION = "1.0.0"
+DEFAULT_API_URL = "http://127.0.0.1:8080"
+
+# Platform-specific paths
+if platform.system() == "Windows":
+    CONFIG_PATH = Path(os.environ.get("GREY_OPTIMIZER_CONFIG", r"C:\ProgramData\Grey Optimizer\config\config.yaml"))
+    PID_FILE = Path(r"C:\ProgramData\Grey Optimizer\data\daemon.pid")
+else:
+    CONFIG_PATH = Path(os.environ.get("GREY_OPTIMIZER_CONFIG", "/etc/grey-optimizer/config.yaml"))
+    PID_FILE = Path("/var/run/grey-optimizer.pid")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COLORS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class Colors:
+    """ANSI color codes for terminal output."""
+    RED = '\033[0;31m'
+    GREEN = '\033[0;32m'
+    YELLOW = '\033[1;33m'
+    BLUE = '\033[0;34m'
+    CYAN = '\033[0;36m'
+    BOLD = '\033[1m'
+    NC = '\033[0m'  # No Color
+    
+    @classmethod
+    def disable(cls):
+        """Disable colors (for non-TTY output)."""
+        cls.RED = cls.GREEN = cls.YELLOW = cls.BLUE = cls.CYAN = cls.BOLD = cls.NC = ''
+
+
+if not sys.stdout.isatty():
+    Colors.disable()
+
+
+def print_success(msg: str):
+    print(f"{Colors.GREEN}✓ {msg}{Colors.NC}")
+
+
+def print_error(msg: str):
+    print(f"{Colors.RED}✗ {msg}{Colors.NC}")
+
+
+def print_warning(msg: str):
+    print(f"{Colors.YELLOW}⚠ {msg}{Colors.NC}")
+
+
+def print_info(msg: str):
+    print(f"{Colors.BLUE}ℹ {msg}{Colors.NC}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# UTILITY FUNCTIONS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_platform() -> str:
+    """Get the current platform identifier."""
+    system = platform.system().lower()
+    if system == "darwin":
+        return "macos"
+    return system
+
+
+def is_root() -> bool:
+    """Check if running with root/admin privileges."""
+    if platform.system() == "Windows":
+        try:
+            import ctypes
+            return ctypes.windll.shell32.IsUserAnAdmin() != 0
+        except:
+            return False
+    return os.geteuid() == 0
+
+
+def get_daemon_pid() -> Optional[int]:
+    """Get the PID of the running daemon."""
+    if PID_FILE.exists():
+        try:
+            return int(PID_FILE.read_text().strip())
+        except:
+            pass
+    return None
+
+
+def is_daemon_running() -> bool:
+    """Check if the daemon is running."""
+    pid = get_daemon_pid()
+    if pid is None:
+        return False
+    
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def call_api(endpoint: str, method: str = "GET", data: dict = None) -> dict:
+    """Make an API call to the daemon."""
+    import urllib.request
+    import urllib.error
+    
+    url = f"{DEFAULT_API_URL}{endpoint}"
+    
+    try:
+        req = urllib.request.Request(url, method=method)
+        req.add_header("Content-Type", "application/json")
+        
+        if data:
+            req.data = json.dumps(data).encode()
+        
+        with urllib.request.urlopen(req, timeout=5) as response:
+            return json.loads(response.read().decode())
+    except urllib.error.URLError as e:
+        return {"error": str(e)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COMMANDS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def cmd_start(args):
+    """Start the Grey Optimizer daemon."""
+    if is_daemon_running():
+        print_warning("Daemon is already running")
+        return 0
+    
+    plat = get_platform()
+    
+    if plat == "linux":
+        if is_root():
+            result = subprocess.run(["systemctl", "start", "grey-optimizer"], capture_output=True)
+            if result.returncode == 0:
+                print_success("Daemon started via systemd")
+                return 0
+            else:
+                print_error(f"Failed to start: {result.stderr.decode()}")
+                return 1
+        else:
+            print_warning("Starting in foreground (use sudo for service mode)")
+            os.execvp("python3", ["python3", "-m", "grey_optimizer.daemon"])
+    
+    elif plat == "macos":
+        if is_root():
+            result = subprocess.run(
+                ["launchctl", "load", "/Library/LaunchDaemons/com.grey.optimizer.plist"],
+                capture_output=True
+            )
+            if result.returncode == 0:
+                print_success("Daemon started via launchd")
+                return 0
+        print_warning("Starting in foreground")
+        os.execvp("python3", ["python3", "-m", "grey_optimizer.daemon"])
+    
+    elif plat == "windows":
+        result = subprocess.run(
+            ["schtasks", "/Run", "/TN", "GreyOptimizer"],
+            capture_output=True
+        )
+        if result.returncode == 0:
+            print_success("Daemon started")
+            return 0
+        print_error(f"Failed to start: {result.stderr.decode()}")
+        return 1
+    
+    return 0
+
+
+def cmd_stop(args):
+    """Stop the Grey Optimizer daemon."""
+    graceful = getattr(args, 'graceful', False)
+    
+    plat = get_platform()
+    
+    if plat == "linux":
+        if is_root():
+            result = subprocess.run(["systemctl", "stop", "grey-optimizer"], capture_output=True)
+            if result.returncode == 0:
+                print_success("Daemon stopped")
+                return 0
+    
+    elif plat == "macos":
+        if is_root():
+            result = subprocess.run(
+                ["launchctl", "unload", "/Library/LaunchDaemons/com.grey.optimizer.plist"],
+                capture_output=True
+            )
+            if result.returncode == 0:
+                print_success("Daemon stopped")
+                return 0
+    
+    elif plat == "windows":
+        result = subprocess.run(
+            ["schtasks", "/End", "/TN", "GreyOptimizer"],
+            capture_output=True
+        )
+        if result.returncode == 0:
+            print_success("Daemon stopped")
+            return 0
+    
+    # Fallback: try to stop via API
+    response = call_api("/api/shutdown", method="POST")
+    if "error" not in response:
+        print_success("Daemon stopped via API")
+        return 0
+    
+    # Last resort: send SIGTERM to PID
+    pid = get_daemon_pid()
+    if pid:
+        try:
+            os.kill(pid, signal.SIGTERM if graceful else signal.SIGKILL)
+            print_success(f"Sent signal to PID {pid}")
+            return 0
+        except OSError as e:
+            print_error(f"Failed to stop daemon: {e}")
+            return 1
+    
+    print_error("Could not stop daemon")
+    return 1
+
+
+def cmd_status(args):
+    """Show the current status of Grey Optimizer."""
+    print(f"\n{Colors.BOLD}Grey Optimizer Status{Colors.NC}")
+    print("=" * 50)
+    
+    # Check daemon status
+    if is_daemon_running():
+        pid = get_daemon_pid()
+        print_success(f"Daemon running (PID: {pid})")
+    else:
+        print_error("Daemon not running")
+    
+    # Get status from API
+    response = call_api("/api/status")
+    
+    if "error" in response:
+        print_warning(f"API unavailable: {response['error']}")
+    else:
+        print(f"\n{Colors.CYAN}Mode:{Colors.NC} {'Simulation' if response.get('simulation_mode') else 'Live'}")
+        print(f"{Colors.CYAN}Uptime:{Colors.NC} {response.get('uptime', 'N/A')}")
+        
+        if 'metrics' in response:
+            metrics = response['metrics']
+            print(f"\n{Colors.BOLD}Current Metrics:{Colors.NC}")
+            print(f"  CPU:  {metrics.get('cpu', 'N/A')}%")
+            print(f"  RAM:  {metrics.get('ram', 'N/A')}%")
+            print(f"  Disk: {metrics.get('disk', 'N/A')}%")
+        
+        if 'reductions' in response:
+            reductions = response['reductions']
+            print(f"\n{Colors.BOLD}Reductions Achieved:{Colors.NC}")
+            print(f"  CPU:  {reductions.get('cpu', 'N/A')}%")
+            print(f"  RAM:  {reductions.get('ram', 'N/A')}%")
+            print(f"  Disk: {reductions.get('disk', 'N/A')}%")
+    
+    # Check service status
+    print(f"\n{Colors.BOLD}Service Status:{Colors.NC}")
+    plat = get_platform()
+    
+    if plat == "linux":
+        result = subprocess.run(
+            ["systemctl", "is-active", "grey-optimizer"],
+            capture_output=True
+        )
+        status = result.stdout.decode().strip()
+        if status == "active":
+            print_success(f"systemd: {status}")
+        else:
+            print_warning(f"systemd: {status}")
+    
+    elif plat == "macos":
+        result = subprocess.run(
+            ["launchctl", "list"],
+            capture_output=True
+        )
+        if "com.grey.optimizer" in result.stdout.decode():
+            print_success("launchd: loaded")
+        else:
+            print_warning("launchd: not loaded")
+    
+    print()
+    return 0
+
+
+def cmd_simulate(args):
+    """Run enforcement in simulation mode."""
+    print_info("Running in simulation mode - no system changes will be made")
+    
+    os.environ["GREY_OPTIMIZER_SIMULATION"] = "true"
+    os.execvp("python3", ["python3", "-m", "grey_optimizer.daemon", "--simulation"])
+
+
+def cmd_apply(args):
+    """Apply enforcement actions."""
+    if not is_root():
+        print_error("Live enforcement requires root privileges")
+        print_info("Run with: sudo greyctl apply")
+        return 1
+    
+    if not args.force:
+        print_warning("This will apply real system enforcement")
+        confirm = input("Continue? (yes/no): ")
+        if confirm.lower() != "yes":
+            print_info("Aborted")
+            return 0
+    
+    response = call_api("/api/apply", method="POST")
+    
+    if "error" in response:
+        print_error(f"Failed to apply: {response['error']}")
+        return 1
+    
+    print_success(f"Applied {response.get('actions_count', 0)} enforcement actions")
+    return 0
+
+
+def cmd_rollback(args):
+    """Rollback all enforcement actions."""
+    print_info("Rolling back enforcement actions...")
+    
+    if args.force:
+        confirm = "yes"
+    else:
+        confirm = input("This will undo all enforcement changes. Continue? (yes/no): ")
+    
+    if confirm.lower() != "yes":
+        print_info("Aborted")
+        return 0
+    
+    response = call_api("/api/rollback", method="POST")
+    
+    if "error" in response:
+        # Try direct rollback if API unavailable
+        print_warning("API unavailable, attempting direct rollback...")
+        
+        if HAS_BACKEND:
+            try:
+                config = Config.load(str(CONFIG_PATH))
+                # Import and run rollback
+                from grey_optimizer.enforcement.manager import EnforcementManager
+                manager = EnforcementManager(config)
+                asyncio.run(manager.rollback_all())
+                print_success("Rollback completed")
+                return 0
+            except Exception as e:
+                print_error(f"Direct rollback failed: {e}")
+                return 1
+        else:
+            print_error(f"Rollback failed: {response['error']}")
+            return 1
+    
+    print_success(f"Rolled back {response.get('actions_count', 0)} enforcement actions")
+    return 0
+
+
+def cmd_install(args):
+    """Install Grey Optimizer as a system service."""
+    script_dir = Path(__file__).parent.parent / "installer"
+    
+    plat = get_platform()
+    
+    if plat == "windows":
+        installer = script_dir / "install.ps1"
+        if not installer.exists():
+            print_error(f"Installer not found: {installer}")
+            return 1
+        
+        cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(installer)]
+        if args.simulation:
+            cmd.append("-Simulation")
+        if args.confirm_live:
+            cmd.append("-ConfirmLive")
+    else:
+        installer = script_dir / "install.sh"
+        if not installer.exists():
+            print_error(f"Installer not found: {installer}")
+            return 1
+        
+        cmd = ["bash", str(installer)]
+        if args.simulation:
+            cmd.append("--simulation")
+        if args.confirm_live:
+            cmd.append("--confirm-live")
+    
+    return subprocess.run(cmd).returncode
+
+
+def cmd_uninstall(args):
+    """Uninstall Grey Optimizer."""
+    script_dir = Path(__file__).parent.parent / "installer"
+    
+    plat = get_platform()
+    
+    if plat == "windows":
+        installer = script_dir / "install.ps1"
+        cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(installer), "-Uninstall"]
+    else:
+        installer = script_dir / "install.sh"
+        cmd = ["bash", str(installer), "--uninstall"]
+    
+    return subprocess.run(cmd).returncode
+
+
+def cmd_logs(args):
+    """View daemon logs."""
+    plat = get_platform()
+    lines = args.lines or 50
+    
+    if plat == "linux":
+        cmd = ["journalctl", "-u", "grey-optimizer", "-n", str(lines)]
+        if args.follow:
+            cmd.append("-f")
+        os.execvp("journalctl", cmd)
+    
+    elif plat == "macos":
+        log_file = Path("/var/log/grey-optimizer/daemon.log")
+        if not log_file.exists():
+            print_error(f"Log file not found: {log_file}")
+            return 1
+        
+        if args.follow:
+            os.execvp("tail", ["tail", "-f", str(log_file)])
+        else:
+            os.execvp("tail", ["tail", "-n", str(lines), str(log_file)])
+    
+    elif plat == "windows":
+        log_file = Path(r"C:\ProgramData\Grey Optimizer\logs\daemon.log")
+        if not log_file.exists():
+            print_error(f"Log file not found: {log_file}")
+            return 1
+        
+        with open(log_file) as f:
+            lines_content = f.readlines()[-lines:]
+            print("".join(lines_content))
+    
+    return 0
+
+
+def cmd_verify(args):
+    """Run verification tests."""
+    print_info("Running verification suite...")
+    
+    test_dir = Path(__file__).parent.parent / "tests"
+    
+    result = subprocess.run(
+        ["python3", "-m", "pytest", str(test_dir / "test_verification.py"), "-v"],
+        cwd=str(Path(__file__).parent.parent)
+    )
+    
+    return result.returncode
+
+
+def cmd_version(args):
+    """Show version information."""
+    print(f"Grey Optimizer v{VERSION}")
+    print(f"Platform: {platform.system()} {platform.release()}")
+    print(f"Python: {platform.python_version()}")
+    return 0
+
+
+def cmd_memory_diagnose(args):
+    """Run memory diagnostics."""
+    print(f"\n{Colors.BOLD}Memory Diagnostics{Colors.NC}")
+    print("=" * 60)
+    
+    if not HAS_BACKEND:
+        print_error("Backend modules not available")
+        return 1
+    
+    async def run_diagnostics():
+        diagnostics = MemoryDiagnostics()
+        
+        # Take snapshot
+        print_info("Collecting memory snapshot...")
+        snapshot = await diagnostics.take_snapshot(include_all_processes=True)
+        
+        print(f"\n{Colors.CYAN}System Memory:{Colors.NC}")
+        print(f"  Total:     {snapshot.total_mb:,.0f} MB")
+        print(f"  Used:      {snapshot.used_mb:,.0f} MB ({snapshot.used_percent:.1f}%)")
+        print(f"  Available: {snapshot.available_mb:,.0f} MB")
+        
+        # Memory breakdown
+        cached_mb = snapshot.meminfo.get("Cached", 0) // (1024 * 1024)
+        buffers_mb = snapshot.meminfo.get("Buffers", 0) // (1024 * 1024)
+        swap_total = snapshot.meminfo.get("SwapTotal", 0) // (1024 * 1024)
+        swap_free = snapshot.meminfo.get("SwapFree", 0) // (1024 * 1024)
+        swap_used = swap_total - swap_free
+        
+        print(f"\n{Colors.CYAN}Memory Breakdown:{Colors.NC}")
+        print(f"  Page Cache:  {cached_mb:,} MB")
+        print(f"  Buffers:     {buffers_mb:,} MB")
+        print(f"  Swap Used:   {swap_used:,} MB / {swap_total:,} MB")
+        
+        # Top processes
+        print(f"\n{Colors.CYAN}Top Memory Consumers:{Colors.NC}")
+        sorted_procs = sorted(snapshot.processes, key=lambda x: x.rss, reverse=True)
+        
+        for i, proc in enumerate(sorted_procs[:10], 1):
+            pss_str = f" (PSS: {proc.pss_mb} MB)" if proc.pss > 0 else ""
+            print(f"  {i:2}. {proc.name[:30]:30} PID {proc.pid:6}  {proc.rss_mb:8.1f} MB{pss_str}")
+        
+        # Leak detection
+        if args.detect_leaks:
+            print(f"\n{Colors.CYAN}Potential Memory Leaks:{Colors.NC}")
+            leaks = await diagnostics.get_leak_candidates(
+                threshold_mb=args.leak_threshold,
+                threshold_growth_rate=0.1,
+            )
+            
+            if leaks:
+                for leak in leaks[:5]:
+                    growth_mb = leak.growth // (1024 * 1024)
+                    print(f"  ⚠ {leak.name} (PID {leak.pid}): +{growth_mb} MB ({leak.growth_rate:.1%} growth)")
+            else:
+                print_success("No significant memory growth detected")
+        
+        # cgroup info
+        if snapshot.cgroups:
+            print(f"\n{Colors.CYAN}cgroup Memory:{Colors.NC}")
+            for path, stats in snapshot.cgroups.items():
+                current_mb = stats.get("current", 0) // (1024 * 1024)
+                print(f"  {path}: {current_mb} MB")
+        
+        # KSM status
+        ksm_path = "/sys/kernel/mm/ksm/run"
+        if os.path.exists(ksm_path):
+            print(f"\n{Colors.CYAN}KSM Status:{Colors.NC}")
+            try:
+                with open(ksm_path, "r") as f:
+                    ksm_enabled = f.read().strip() == "1"
+                
+                if ksm_enabled:
+                    print_success("KSM enabled")
+                    
+                    # Get KSM stats
+                    for stat in ["pages_shared", "pages_sharing", "pages_unshared"]:
+                        stat_path = f"/sys/kernel/mm/ksm/{stat}"
+                        if os.path.exists(stat_path):
+                            with open(stat_path, "r") as f:
+                                value = int(f.read().strip())
+                                mb = value * 4 / 1024  # 4KB pages to MB
+                                print(f"  {stat}: {value} pages ({mb:.1f} MB)")
+                else:
+                    print_warning("KSM disabled")
+            except Exception as e:
+                print_warning(f"Could not read KSM status: {e}")
+        
+        # Memory pressure (PSI)
+        psi_path = "/proc/pressure/memory"
+        if os.path.exists(psi_path):
+            print(f"\n{Colors.CYAN}Memory Pressure (PSI):{Colors.NC}")
+            try:
+                with open(psi_path, "r") as f:
+                    for line in f:
+                        print(f"  {line.strip()}")
+            except Exception:
+                print_warning("Could not read memory pressure")
+        
+        # JSON output
+        if args.json:
+            report = await diagnostics.generate_report()
+            print(f"\n{Colors.CYAN}JSON Report:{Colors.NC}")
+            print(json.dumps(report, indent=2))
+        
+        # Verbose mode: show all processes
+        if args.verbose:
+            print(f"\n{Colors.CYAN}All Processes ({len(snapshot.processes)}):{Colors.NC}")
+            for proc in sorted_procs:
+                print(f"  {proc.pid:6}  {proc.name[:30]:30}  RSS: {proc.rss_mb:8.1f} MB")
+        
+        return 0
+    
+    return asyncio.run(run_diagnostics())
+
+
+def cmd_memory_enforce(args):
+    """Apply memory enforcement actions."""
+    if not is_root():
+        print_error("Memory enforcement requires root privileges")
+        print_info("Run with: sudo greyctl memory-enforce")
+        return 1
+    
+    print(f"\n{Colors.BOLD}Memory Enforcement{Colors.NC}")
+    print("=" * 60)
+    
+    if args.simulation:
+        print_info("Running in simulation mode - no changes will be made")
+    else:
+        print_warning("This will apply real memory enforcement")
+        if not args.force:
+            confirm = input("Continue? (yes/no): ")
+            if confirm.lower() != "yes":
+                print_info("Aborted")
+                return 0
+    
+    async def run_enforcement():
+        if not HAS_BACKEND:
+            print_error("Backend modules not available")
+            return 1
+        
+        diagnostics = MemoryDiagnostics()
+        
+        # Take baseline
+        print_info("Taking baseline snapshot...")
+        before = await diagnostics.take_snapshot(include_all_processes=True)
+        print(f"  Before: {before.used_mb:.0f} MB used, {before.available_mb:.0f} MB available")
+        
+        actions_taken = []
+        
+        # Drop caches if requested
+        if args.drop_caches:
+            print_info("Dropping kernel caches...")
+            if not args.simulation:
+                try:
+                    os.sync()
+                    with open("/proc/sys/vm/drop_caches", "w") as f:
+                        f.write("3")
+                    actions_taken.append("drop_caches")
+                    print_success("Dropped page cache and slab caches")
+                except PermissionError:
+                    print_error("Permission denied for drop_caches")
+            else:
+                print_info("[SIM] Would drop caches")
+        
+        # Enable KSM if requested
+        if args.enable_ksm:
+            print_info("Enabling KSM...")
+            ksm_path = "/sys/kernel/mm/ksm/run"
+            if not args.simulation:
+                try:
+                    # Configure KSM
+                    with open("/sys/kernel/mm/ksm/sleep_millisecs", "w") as f:
+                        f.write("200" if not args.aggressive else "20")
+                    with open("/sys/kernel/mm/ksm/pages_to_scan", "w") as f:
+                        f.write("100" if not args.aggressive else "1000")
+                    with open(ksm_path, "w") as f:
+                        f.write("1")
+                    actions_taken.append("enable_ksm")
+                    print_success("KSM enabled")
+                except PermissionError:
+                    print_error("Permission denied for KSM")
+            else:
+                print_info("[SIM] Would enable KSM")
+        
+        # Wait for effect
+        if actions_taken and not args.simulation:
+            import time
+            print_info("Waiting for effects...")
+            time.sleep(2)
+        
+        # Take after snapshot
+        print_info("Taking after snapshot...")
+        after = await diagnostics.take_snapshot(include_all_processes=True)
+        
+        # Compare
+        comparison = await diagnostics.compare_snapshots(before, after)
+        
+        print(f"\n{Colors.BOLD}Results:{Colors.NC}")
+        print(f"  Before:    {before.used_mb:.0f} MB used")
+        print(f"  After:     {after.used_mb:.0f} MB used")
+        print(f"  Delta:     {comparison.system_used_delta_mb:+.1f} MB")
+        print(f"  Available: {after.available_mb:.0f} MB (+{after.available_mb - before.available_mb:.0f} MB)")
+        
+        if comparison.system_used_delta_mb < 0:
+            print_success(f"Memory reduced by {abs(comparison.system_used_delta_mb):.1f} MB")
+        else:
+            print_warning("No significant memory reduction")
+        
+        print(f"\n  Actions taken: {', '.join(actions_taken) if actions_taken else 'none'}")
+        
+        return 0
+    
+    return asyncio.run(run_enforcement())
+
+
+def cmd_memory_watch(args):
+    """Watch memory usage in real-time."""
+    print(f"{Colors.BOLD}Memory Watch{Colors.NC} (Ctrl+C to exit)")
+    print("=" * 60)
+    
+    interval = args.interval or 2
+    
+    try:
+        while True:
+            # Clear screen for live update
+            if not args.no_clear:
+                print("\033[H\033[J", end="")  # ANSI clear screen
+                print(f"{Colors.BOLD}Memory Watch{Colors.NC} (Ctrl+C to exit)")
+                print("=" * 60)
+            
+            # Read /proc/meminfo
+            meminfo = {}
+            try:
+                with open("/proc/meminfo", "r") as f:
+                    for line in f:
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            key = parts[0].rstrip(":")
+                            value = int(parts[1])  # KB
+                            meminfo[key] = value
+            except Exception as e:
+                print_error(f"Could not read meminfo: {e}")
+                return 1
+            
+            total_mb = meminfo.get("MemTotal", 0) // 1024
+            available_mb = meminfo.get("MemAvailable", 0) // 1024
+            used_mb = total_mb - available_mb
+            cached_mb = meminfo.get("Cached", 0) // 1024
+            buffers_mb = meminfo.get("Buffers", 0) // 1024
+            
+            used_pct = (used_mb / total_mb * 100) if total_mb > 0 else 0
+            
+            # Color based on usage
+            if used_pct > 90:
+                color = Colors.RED
+            elif used_pct > 70:
+                color = Colors.YELLOW
+            else:
+                color = Colors.GREEN
+            
+            print(f"\n{Colors.CYAN}System Memory:{Colors.NC}")
+            print(f"  Total:     {total_mb:,} MB")
+            print(f"  Used:      {color}{used_mb:,} MB ({used_pct:.1f}%){Colors.NC}")
+            print(f"  Available: {available_mb:,} MB")
+            print(f"  Cached:    {cached_mb:,} MB")
+            print(f"  Buffers:   {buffers_mb:,} MB")
+            
+            # Bar chart
+            bar_width = 40
+            filled = int(used_pct / 100 * bar_width)
+            bar = "█" * filled + "░" * (bar_width - filled)
+            print(f"\n  [{color}{bar}{Colors.NC}] {used_pct:.1f}%")
+            
+            # Swap
+            swap_total = meminfo.get("SwapTotal", 0) // 1024
+            swap_free = meminfo.get("SwapFree", 0) // 1024
+            swap_used = swap_total - swap_free
+            
+            if swap_total > 0:
+                swap_pct = (swap_used / swap_total * 100)
+                print(f"\n{Colors.CYAN}Swap:{Colors.NC}")
+                print(f"  Used: {swap_used:,} MB / {swap_total:,} MB ({swap_pct:.1f}%)")
+            
+            # Top 5 processes
+            if args.show_processes:
+                print(f"\n{Colors.CYAN}Top Memory Consumers:{Colors.NC}")
+                procs = []
+                
+                for pid_dir in os.listdir("/proc"):
+                    if not pid_dir.isdigit():
+                        continue
+                    
+                    try:
+                        status_path = f"/proc/{pid_dir}/status"
+                        with open(status_path, "r") as f:
+                            name = ""
+                            rss_kb = 0
+                            for line in f:
+                                if line.startswith("Name:"):
+                                    name = line.split()[1]
+                                elif line.startswith("VmRSS:"):
+                                    rss_kb = int(line.split()[1])
+                            
+                            if rss_kb > 0:
+                                procs.append((int(pid_dir), name, rss_kb // 1024))
+                    except (FileNotFoundError, PermissionError, ValueError):
+                        continue
+                
+                procs.sort(key=lambda x: x[2], reverse=True)
+                for pid, name, rss_mb in procs[:5]:
+                    print(f"  {pid:6}  {name[:25]:25}  {rss_mb:,} MB")
+            
+            import time
+            time.sleep(interval)
+            
+    except KeyboardInterrupt:
+        print(f"\n{Colors.NC}Stopped")
+        return 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# KSM, MADVISE, ZRAM, DROPCACHES COMMANDS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def cmd_ksm(args):
+    """Manage KSM (Kernel Same-page Merging)."""
+    if get_platform() != "linux":
+        print_error("KSM is only available on Linux")
+        return 1
+    
+    action = args.action
+    simulation = getattr(args, 'simulation', True)
+    
+    if action == "status":
+        # Show KSM status
+        ksm_path = "/sys/kernel/mm/ksm"
+        if not os.path.exists(ksm_path):
+            print_error("KSM not available on this system")
+            return 1
+        
+        print(f"\n{Colors.BOLD}KSM Status{Colors.NC}")
+        print("=" * 50)
+        
+        try:
+            with open(f"{ksm_path}/run", "r") as f:
+                enabled = f.read().strip() == "1"
+            
+            if enabled:
+                print_success("KSM: Enabled")
+            else:
+                print_warning("KSM: Disabled")
+            
+            # Read stats
+            stats = {}
+            for stat in ["pages_shared", "pages_sharing", "pages_unshared", 
+                         "pages_volatile", "full_scans", "pages_to_scan", "sleep_millisecs"]:
+                stat_path = f"{ksm_path}/{stat}"
+                if os.path.exists(stat_path):
+                    with open(stat_path, "r") as f:
+                        stats[stat] = int(f.read().strip())
+            
+            print(f"\n{Colors.CYAN}Statistics:{Colors.NC}")
+            page_size = os.sysconf("SC_PAGE_SIZE") // 1024  # KB
+            
+            if "pages_shared" in stats:
+                mb = stats["pages_shared"] * page_size / 1024
+                print(f"  Pages Shared:   {stats['pages_shared']:,} ({mb:.1f} MB)")
+            if "pages_sharing" in stats:
+                mb = stats["pages_sharing"] * page_size / 1024
+                print(f"  Pages Sharing:  {stats['pages_sharing']:,} ({mb:.1f} MB)")
+            if "pages_unshared" in stats:
+                mb = stats["pages_unshared"] * page_size / 1024
+                print(f"  Pages Unshared: {stats['pages_unshared']:,} ({mb:.1f} MB)")
+            
+            # Savings
+            if "pages_sharing" in stats and "pages_shared" in stats:
+                savings_pages = stats["pages_sharing"] - stats["pages_shared"]
+                savings_mb = savings_pages * page_size / 1024
+                print(f"\n  {Colors.GREEN}Memory Saved: {savings_mb:.1f} MB{Colors.NC}")
+            
+            print(f"\n{Colors.CYAN}Configuration:{Colors.NC}")
+            if "pages_to_scan" in stats:
+                print(f"  Pages to Scan:    {stats['pages_to_scan']:,}")
+            if "sleep_millisecs" in stats:
+                print(f"  Sleep Millisecs:  {stats['sleep_millisecs']:,} ms")
+            if "full_scans" in stats:
+                print(f"  Full Scans Done:  {stats['full_scans']:,}")
+            
+        except Exception as e:
+            print_error(f"Could not read KSM status: {e}")
+            return 1
+        
+        return 0
+    
+    elif action == "enable":
+        if not HAS_DAEMON:
+            print_error("Daemon module not available")
+            return 1
+        
+        if not is_root() and not simulation:
+            print_error("Enabling KSM requires root privileges")
+            print_info("Run with: sudo greyctl ksm enable")
+            return 1
+        
+        pages_to_scan = getattr(args, 'pages_to_scan', 100)
+        sleep_millisecs = getattr(args, 'sleep_millisecs', 200)
+        
+        print_info(f"Enabling KSM (pages_to_scan={pages_to_scan}, sleep={sleep_millisecs}ms)")
+        if simulation:
+            print_info("[SIMULATION MODE - no changes will be made]")
+        
+        result = enable_ksm(
+            pages_to_scan=pages_to_scan,
+            sleep_millisecs=sleep_millisecs,
+            simulation=simulation,
+        )
+        
+        if result.success:
+            print_success("KSM enabled successfully")
+            if result.before_snapshot:
+                print(f"  Artifact: {result.before_snapshot.get('artifact_path', 'N/A')}")
+            return 0
+        else:
+            print_error(f"Failed to enable KSM: {result.error_message}")
+            return 1
+    
+    elif action == "disable":
+        if not HAS_DAEMON:
+            print_error("Daemon module not available")
+            return 1
+        
+        if not is_root() and not simulation:
+            print_error("Disabling KSM requires root privileges")
+            return 1
+        
+        print_info("Disabling KSM")
+        if simulation:
+            print_info("[SIMULATION MODE - no changes will be made]")
+        
+        result = disable_ksm(simulation=simulation)
+        
+        if result.success:
+            print_success("KSM disabled successfully")
+            return 0
+        else:
+            print_error(f"Failed to disable KSM: {result.error_message}")
+            return 1
+    
+    elif action == "tune":
+        if not HAS_DAEMON:
+            print_error("Daemon module not available")
+            return 1
+        
+        if not is_root() and not simulation:
+            print_error("Tuning KSM requires root privileges")
+            return 1
+        
+        pages_to_scan = getattr(args, 'pages_to_scan', None)
+        sleep_millisecs = getattr(args, 'sleep_millisecs', None)
+        
+        print_info(f"Tuning KSM (pages_to_scan={pages_to_scan}, sleep={sleep_millisecs}ms)")
+        if simulation:
+            print_info("[SIMULATION MODE - no changes will be made]")
+        
+        result = tune_ksm(
+            pages_to_scan=pages_to_scan,
+            sleep_millisecs=sleep_millisecs,
+            simulation=simulation,
+        )
+        
+        if result.success:
+            print_success("KSM tuned successfully")
+            return 0
+        else:
+            print_error(f"Failed to tune KSM: {result.error_message}")
+            return 1
+    
+    return 0
+
+
+def cmd_madvise(args):
+    """Invoke madvise-based memory reclamation."""
+    if get_platform() != "linux":
+        print_error("madvise is only available on Linux")
+        return 1
+    
+    if not HAS_DAEMON:
+        print_error("Daemon module not available")
+        return 1
+    
+    action = args.action
+    simulation = getattr(args, 'simulation', True)
+    
+    if action == "reclaim":
+        pid = args.pid
+        mapping_id = getattr(args, 'mapping', None)
+        
+        if not pid:
+            print_error("--pid is required")
+            return 1
+        
+        if not is_root() and not simulation:
+            print_error("madvise reclaim requires root privileges")
+            print_info("Run with: sudo greyctl madvise reclaim --pid <pid>")
+            return 1
+        
+        print_info(f"Invoking madvise reclaim on PID {pid}")
+        if mapping_id:
+            print_info(f"  Targeting mapping: {mapping_id}")
+        if simulation:
+            print_info("[SIMULATION MODE - no changes will be made]")
+        
+        result = invoke_madvise(
+            pid=pid,
+            mapping_id=mapping_id,
+            simulation=simulation,
+        )
+        
+        if result.success:
+            print_success("madvise reclaim completed")
+            if result.bytes_affected:
+                mb = result.bytes_affected / (1024 * 1024)
+                print(f"  Bytes affected: {result.bytes_affected:,} ({mb:.1f} MB)")
+            if result.before_snapshot:
+                print(f"  Before snapshot: {result.before_snapshot.get('artifact_path', 'N/A')}")
+            if result.after_snapshot:
+                print(f"  After snapshot:  {result.after_snapshot.get('artifact_path', 'N/A')}")
+            return 0
+        else:
+            print_error(f"madvise failed: {result.error_message}")
+            return 1
+    
+    return 0
+
+
+def cmd_zram(args):
+    """Manage zram swap."""
+    if get_platform() != "linux":
+        print_error("zram is only available on Linux")
+        return 1
+    
+    action = args.action
+    simulation = getattr(args, 'simulation', True)
+    
+    if action == "status":
+        # Show zram status
+        print(f"\n{Colors.BOLD}zram Status{Colors.NC}")
+        print("=" * 50)
+        
+        zram_path = "/sys/block/zram0"
+        if not os.path.exists(zram_path):
+            print_warning("zram0 device not found")
+            print_info("To enable zram: sudo greyctl zram enable")
+            return 0
+        
+        try:
+            stats = {}
+            for stat in ["disksize", "mem_used_total", "comp_algorithm", "orig_data_size", "compr_data_size"]:
+                stat_path = f"{zram_path}/{stat}"
+                if os.path.exists(stat_path):
+                    with open(stat_path, "r") as f:
+                        stats[stat] = f.read().strip()
+            
+            print_success("zram0: Active")
+            
+            if "disksize" in stats:
+                size_mb = int(stats["disksize"]) / (1024 * 1024)
+                print(f"  Disk Size:     {size_mb:.0f} MB")
+            if "mem_used_total" in stats:
+                used_mb = int(stats["mem_used_total"]) / (1024 * 1024)
+                print(f"  Memory Used:   {used_mb:.1f} MB")
+            if "comp_algorithm" in stats:
+                print(f"  Algorithm:     {stats['comp_algorithm']}")
+            
+            # Compression ratio
+            if "orig_data_size" in stats and "compr_data_size" in stats:
+                orig = int(stats["orig_data_size"])
+                compr = int(stats["compr_data_size"])
+                if compr > 0:
+                    ratio = orig / compr
+                    print(f"  Compression:   {ratio:.2f}x")
+            
+            # Check if in swap
+            print(f"\n{Colors.CYAN}Swap Status:{Colors.NC}")
+            with open("/proc/swaps", "r") as f:
+                swaps = f.read()
+                if "/dev/zram0" in swaps:
+                    print_success("zram0 is active as swap")
+                    for line in swaps.strip().split("\n")[1:]:
+                        if "zram0" in line:
+                            parts = line.split()
+                            if len(parts) >= 4:
+                                size_kb = int(parts[2])
+                                used_kb = int(parts[3])
+                                print(f"  Size: {size_kb // 1024} MB, Used: {used_kb // 1024} MB")
+                else:
+                    print_warning("zram0 not active as swap")
+        
+        except Exception as e:
+            print_error(f"Could not read zram status: {e}")
+            return 1
+        
+        return 0
+    
+    elif action == "enable":
+        if not HAS_DAEMON:
+            print_error("Daemon module not available")
+            return 1
+        
+        if not is_root() and not simulation:
+            print_error("Enabling zram requires root privileges")
+            print_info("Run with: sudo greyctl zram enable")
+            return 1
+        
+        size_mb = getattr(args, 'size', 512)
+        algo = getattr(args, 'algorithm', 'lz4')
+        
+        print_info(f"Enabling zram (size={size_mb}MB, algorithm={algo})")
+        if simulation:
+            print_info("[SIMULATION MODE - no changes will be made]")
+        
+        result = enable_zram(
+            size_mb=size_mb,
+            compression_algo=algo,
+            simulation=simulation,
+        )
+        
+        if result.success:
+            print_success("zram enabled successfully")
+            return 0
+        else:
+            print_error(f"Failed to enable zram: {result.error_message}")
+            return 1
+    
+    elif action == "disable":
+        if not HAS_DAEMON:
+            print_error("Daemon module not available")
+            return 1
+        
+        if not is_root() and not simulation:
+            print_error("Disabling zram requires root privileges")
+            return 1
+        
+        print_info("Disabling zram")
+        if simulation:
+            print_info("[SIMULATION MODE - no changes will be made]")
+        
+        result = disable_zram(simulation=simulation)
+        
+        if result.success:
+            print_success("zram disabled successfully")
+            return 0
+        else:
+            print_error(f"Failed to disable zram: {result.error_message}")
+            return 1
+    
+    return 0
+
+
+def cmd_dropcaches(args):
+    """Manage kernel cache dropping."""
+    if get_platform() != "linux":
+        print_error("drop_caches is only available on Linux")
+        return 1
+    
+    action = args.action
+    
+    if action == "simulate":
+        print_info("Simulating drop_caches operation...")
+        
+        # Read current cache stats
+        try:
+            with open("/proc/meminfo", "r") as f:
+                meminfo = {}
+                for line in f:
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        meminfo[parts[0].rstrip(":")] = int(parts[1])
+            
+            cached_mb = meminfo.get("Cached", 0) // 1024
+            buffers_mb = meminfo.get("Buffers", 0) // 1024
+            available_mb = meminfo.get("MemAvailable", 0) // 1024
+            
+            print(f"\n{Colors.BOLD}Current Cache State:{Colors.NC}")
+            print(f"  Page Cache:   {cached_mb:,} MB")
+            print(f"  Buffers:      {buffers_mb:,} MB")
+            print(f"  Available:    {available_mb:,} MB")
+            
+            level = getattr(args, 'level', 3)
+            expected_freed = 0
+            
+            if level == 1:
+                expected_freed = cached_mb * 0.8  # Page cache only
+                print_info("Level 1: Would free pagecache")
+            elif level == 2:
+                expected_freed = buffers_mb * 0.9  # Dentries and inodes
+                print_info("Level 2: Would free dentries and inodes")
+            else:
+                expected_freed = (cached_mb + buffers_mb) * 0.7
+                print_info("Level 3: Would free pagecache, dentries, and inodes")
+            
+            print(f"\n  {Colors.YELLOW}Expected freeable: ~{expected_freed:.0f} MB{Colors.NC}")
+            print_info("[SIMULATION - no changes made]")
+        
+        except Exception as e:
+            print_error(f"Could not read memory info: {e}")
+            return 1
+        
+        return 0
+    
+    elif action == "apply":
+        if not HAS_DAEMON:
+            print_error("Daemon module not available")
+            return 1
+        
+        if not is_root():
+            print_error("Dropping caches requires root privileges")
+            print_info("Run with: sudo greyctl dropcaches apply --confirm-live")
+            return 1
+        
+        confirm_live = getattr(args, 'confirm_live', False)
+        level = getattr(args, 'level', 3)
+        
+        if not confirm_live:
+            print_error("Live cache dropping requires --confirm-live flag")
+            print_warning("This operation will drop kernel caches and is irreversible")
+            print_info("Example: sudo greyctl dropcaches apply --confirm-live")
+            return 1
+        
+        print_warning("Dropping kernel caches (LIVE operation)")
+        print_info(f"  Level: {level}")
+        
+        result = safe_drop_caches(
+            confirm_live=True,
+            level=level,
+            simulation=False,
+        )
+        
+        if result.success:
+            print_success("Caches dropped successfully")
+            if result.bytes_affected:
+                mb = result.bytes_affected / (1024 * 1024)
+                print(f"  Memory freed: ~{mb:.0f} MB")
+            return 0
+        else:
+            print_error(f"Failed to drop caches: {result.error_message}")
+            return 1
+    
+    return 0
+
+
+def cmd_memory_apply(args):
+    """Apply memory enforcement with all subsystems."""
+    if get_platform() != "linux":
+        print_error("Memory enforcement is only available on Linux")
+        return 1
+    
+    confirm_live = getattr(args, 'confirm_live', False)
+    simulation = not confirm_live
+    
+    print(f"\n{Colors.BOLD}Memory Enforcement{Colors.NC}")
+    print("=" * 60)
+    
+    if simulation:
+        print_info("[SIMULATION MODE - no changes will be made]")
+        print_info("Use --confirm-live to apply changes")
+    else:
+        if not is_root():
+            print_error("Live enforcement requires root privileges")
+            print_info("Run with: sudo greyctl memory-apply --confirm-live")
+            return 1
+        
+        print_warning("LIVE ENFORCEMENT MODE - changes will be applied")
+        confirm = input("Continue? (yes/no): ")
+        if confirm.lower() != "yes":
+            print_info("Aborted")
+            return 0
+    
+    if not HAS_DAEMON:
+        print_error("Daemon module not available")
+        return 1
+    
+    actions = []
+    errors = []
+    
+    # 1. Enable KSM
+    print_info("Step 1: Enabling KSM...")
+    result = enable_ksm(
+        pages_to_scan=100,
+        sleep_millisecs=200,
+        simulation=simulation,
+    )
+    if result.success:
+        actions.append("KSM enabled")
+        print_success("  KSM enabled")
+    else:
+        errors.append(f"KSM: {result.error_message}")
+        print_warning(f"  KSM failed: {result.error_message}")
+    
+    # 2. Enable zram
+    print_info("Step 2: Enabling zram swap...")
+    result = enable_zram(
+        size_mb=512,
+        compression_algo="lz4",
+        simulation=simulation,
+    )
+    if result.success:
+        actions.append("zram enabled")
+        print_success("  zram enabled")
+    else:
+        errors.append(f"zram: {result.error_message}")
+        print_warning(f"  zram failed: {result.error_message}")
+    
+    # 3. Drop caches (only in live mode with confirmation)
+    if confirm_live:
+        print_info("Step 3: Dropping kernel caches...")
+        result = safe_drop_caches(
+            confirm_live=True,
+            level=3,
+            simulation=False,
+        )
+        if result.success:
+            actions.append("Caches dropped")
+            print_success("  Caches dropped")
+        else:
+            errors.append(f"drop_caches: {result.error_message}")
+            print_warning(f"  drop_caches failed: {result.error_message}")
+    else:
+        print_info("Step 3: Skipping cache drop (requires --confirm-live)")
+    
+    # Summary
+    print(f"\n{Colors.BOLD}Summary:{Colors.NC}")
+    print(f"  Actions completed: {len(actions)}")
+    for action in actions:
+        print(f"    ✓ {action}")
+    
+    if errors:
+        print(f"  Errors: {len(errors)}")
+        for error in errors:
+            print(f"    ✗ {error}")
+    
+    return 0 if not errors else 1
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MAIN
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog="greyctl",
+        description="Grey Optimizer CLI - Manage the resource optimization daemon",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  greyctl status              Show daemon status and metrics
+  greyctl start               Start the daemon
+  greyctl stop                Stop the daemon
+  greyctl simulate            Run in simulation mode
+  greyctl apply               Apply enforcement (requires root)
+  greyctl rollback            Rollback all changes
+  greyctl install --simulation    Install as service (simulation mode)
+  greyctl install --confirm-live  Install as service (live mode)
+  greyctl uninstall           Remove service and restore settings
+  greyctl logs -f             Follow daemon logs
+  greyctl verify              Run verification tests
+
+KSM Commands (Linux):
+  greyctl ksm status                      Show KSM status and stats
+  greyctl ksm enable --live               Enable KSM (live mode)
+  greyctl ksm disable --live              Disable KSM
+  greyctl ksm tune --pages-to-scan 200    Tune KSM parameters
+
+madvise Commands (Linux):
+  greyctl madvise reclaim --pid 1234      Reclaim memory from process
+  greyctl madvise reclaim --pid 1234 --live    Apply live madvise
+
+zram Commands (Linux):
+  greyctl zram status                     Show zram status
+  greyctl zram enable --size 1024 --live  Enable zram swap
+  greyctl zram disable --live             Disable zram
+
+Cache Commands (Linux):
+  greyctl dropcaches simulate             Show cache stats (no changes)
+  greyctl dropcaches apply --confirm-live Drop kernel caches (requires confirmation)
+
+Memory Enforcement:
+  greyctl memory-apply                    Simulate full memory optimization
+  greyctl memory-apply --confirm-live     Apply all optimizations (KSM, zram, drop_caches)
+  greyctl memory-diagnose                 Show memory diagnostics
+  greyctl memory-diagnose --json          Export JSON report
+  greyctl memory-diagnose --detect-leaks  Detect memory leaks
+  greyctl memory-watch -p                 Watch memory with top processes
+"""
+    )
+    
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    
+    # start
+    start_parser = subparsers.add_parser("start", help="Start the daemon")
+    start_parser.set_defaults(func=cmd_start)
+    
+    # stop
+    stop_parser = subparsers.add_parser("stop", help="Stop the daemon")
+    stop_parser.add_argument("--graceful", action="store_true", help="Graceful shutdown")
+    stop_parser.set_defaults(func=cmd_stop)
+    
+    # status
+    status_parser = subparsers.add_parser("status", help="Show daemon status")
+    status_parser.set_defaults(func=cmd_status)
+    
+    # simulate
+    simulate_parser = subparsers.add_parser("simulate", help="Run in simulation mode")
+    simulate_parser.set_defaults(func=cmd_simulate)
+    
+    # apply
+    apply_parser = subparsers.add_parser("apply", help="Apply enforcement actions")
+    apply_parser.add_argument("--force", action="store_true", help="Skip confirmation")
+    apply_parser.set_defaults(func=cmd_apply)
+    
+    # rollback
+    rollback_parser = subparsers.add_parser("rollback", help="Rollback all changes")
+    rollback_parser.add_argument("--force", action="store_true", help="Skip confirmation")
+    rollback_parser.set_defaults(func=cmd_rollback)
+    
+    # install
+    install_parser = subparsers.add_parser("install", help="Install as system service")
+    install_parser.add_argument("--simulation", action="store_true", help="Simulation mode")
+    install_parser.add_argument("--confirm-live", action="store_true", help="Live enforcement")
+    install_parser.set_defaults(func=cmd_install)
+    
+    # uninstall
+    uninstall_parser = subparsers.add_parser("uninstall", help="Uninstall service")
+    uninstall_parser.set_defaults(func=cmd_uninstall)
+    
+    # logs
+    logs_parser = subparsers.add_parser("logs", help="View daemon logs")
+    logs_parser.add_argument("-f", "--follow", action="store_true", help="Follow log output")
+    logs_parser.add_argument("-n", "--lines", type=int, default=50, help="Number of lines")
+    logs_parser.set_defaults(func=cmd_logs)
+    
+    # verify
+    verify_parser = subparsers.add_parser("verify", help="Run verification tests")
+    verify_parser.set_defaults(func=cmd_verify)
+    
+    # version
+    version_parser = subparsers.add_parser("version", help="Show version")
+    version_parser.set_defaults(func=cmd_version)
+    
+    # memory-diagnose
+    mem_diag_parser = subparsers.add_parser("memory-diagnose", help="Run memory diagnostics")
+    mem_diag_parser.add_argument("--verbose", "-v", action="store_true", help="Show all processes")
+    mem_diag_parser.add_argument("--json", "-j", action="store_true", help="Output JSON report")
+    mem_diag_parser.add_argument("--detect-leaks", action="store_true", help="Detect potential memory leaks")
+    mem_diag_parser.add_argument("--leak-threshold", type=int, default=10, help="Leak threshold in MB")
+    mem_diag_parser.set_defaults(func=cmd_memory_diagnose)
+    
+    # memory-enforce
+    mem_enforce_parser = subparsers.add_parser("memory-enforce", help="Apply memory enforcement")
+    mem_enforce_parser.add_argument("--simulation", "-s", action="store_true", help="Simulation mode")
+    mem_enforce_parser.add_argument("--force", "-f", action="store_true", help="Skip confirmation")
+    mem_enforce_parser.add_argument("--drop-caches", action="store_true", help="Drop kernel caches")
+    mem_enforce_parser.add_argument("--enable-ksm", action="store_true", help="Enable KSM")
+    mem_enforce_parser.add_argument("--aggressive", action="store_true", help="Aggressive mode")
+    mem_enforce_parser.set_defaults(func=cmd_memory_enforce)
+    
+    # memory-watch
+    mem_watch_parser = subparsers.add_parser("memory-watch", help="Watch memory usage in real-time")
+    mem_watch_parser.add_argument("--interval", "-i", type=int, default=2, help="Update interval (seconds)")
+    mem_watch_parser.add_argument("--no-clear", action="store_true", help="Don't clear screen")
+    mem_watch_parser.add_argument("--show-processes", "-p", action="store_true", help="Show top processes")
+    mem_watch_parser.set_defaults(func=cmd_memory_watch)
+    
+    # ksm - KSM management
+    ksm_parser = subparsers.add_parser("ksm", help="Manage KSM (Kernel Same-page Merging)")
+    ksm_parser.add_argument("action", choices=["enable", "disable", "status", "tune"],
+                            help="Action to perform")
+    ksm_parser.add_argument("--simulation", "-s", action="store_true", default=True,
+                            help="Simulation mode (default)")
+    ksm_parser.add_argument("--live", action="store_false", dest="simulation",
+                            help="Live mode (requires root)")
+    ksm_parser.add_argument("--pages-to-scan", type=int, default=100,
+                            help="Pages to scan per cycle (default: 100)")
+    ksm_parser.add_argument("--sleep-millisecs", type=int, default=200,
+                            help="Sleep between scans in ms (default: 200)")
+    ksm_parser.set_defaults(func=cmd_ksm)
+    
+    # madvise - madvise-based reclamation
+    madvise_parser = subparsers.add_parser("madvise", help="madvise-based memory reclamation")
+    madvise_parser.add_argument("action", choices=["reclaim"],
+                                help="Action to perform")
+    madvise_parser.add_argument("--pid", type=int, required=False,
+                                help="Target process PID")
+    madvise_parser.add_argument("--mapping", type=str, required=False,
+                                help="Specific memory mapping ID to target")
+    madvise_parser.add_argument("--simulation", "-s", action="store_true", default=True,
+                                help="Simulation mode (default)")
+    madvise_parser.add_argument("--live", action="store_false", dest="simulation",
+                                help="Live mode (requires root)")
+    madvise_parser.set_defaults(func=cmd_madvise)
+    
+    # zram - zram swap management
+    zram_parser = subparsers.add_parser("zram", help="Manage zram swap")
+    zram_parser.add_argument("action", choices=["enable", "disable", "status"],
+                             help="Action to perform")
+    zram_parser.add_argument("--simulation", "-s", action="store_true", default=True,
+                             help="Simulation mode (default)")
+    zram_parser.add_argument("--live", action="store_false", dest="simulation",
+                             help="Live mode (requires root)")
+    zram_parser.add_argument("--size", type=int, default=512,
+                             help="zram size in MB (default: 512)")
+    zram_parser.add_argument("--algorithm", type=str, default="lz4",
+                             choices=["lz4", "lzo", "zstd"],
+                             help="Compression algorithm (default: lz4)")
+    zram_parser.set_defaults(func=cmd_zram)
+    
+    # dropcaches - kernel cache management
+    dropcaches_parser = subparsers.add_parser("dropcaches", help="Manage kernel cache dropping")
+    dropcaches_parser.add_argument("action", choices=["apply", "simulate"],
+                                   help="Action to perform")
+    dropcaches_parser.add_argument("--confirm-live", action="store_true",
+                                   help="Confirm live cache dropping (required for apply)")
+    dropcaches_parser.add_argument("--level", type=int, default=3, choices=[1, 2, 3],
+                                   help="Cache drop level: 1=pagecache, 2=dentries/inodes, 3=all")
+    dropcaches_parser.set_defaults(func=cmd_dropcaches)
+    
+    # memory-apply - comprehensive memory enforcement
+    mem_apply_parser = subparsers.add_parser("memory-apply", help="Apply all memory optimizations")
+    mem_apply_parser.add_argument("--confirm-live", action="store_true",
+                                  help="Confirm live enforcement (required for real changes)")
+    mem_apply_parser.set_defaults(func=cmd_memory_apply)
+    
+    args = parser.parse_args()
+    
+    if args.command is None:
+        parser.print_help()
+        return 0
+    
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

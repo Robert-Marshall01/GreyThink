@@ -1,0 +1,12 @@
+{
+  "vendor": "nvidia",
+  "model": "GeForce RTX 3070",
+  "vram_total_mb": 8192,
+  "vram_free_mb": 6144,
+  "compute_capability": "8.6",
+  "cuda_version": "",
+  "num_sm": 0,
+  "pci_bandwidth": "",
+  "clock_mhz": 0,
+  "thermal_limits": {}
+}

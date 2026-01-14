@@ -1,0 +1,14 @@
+# Grey Optimizer Backend Dependencies
+
+# Async support
+aiohttp>=3.9.0
+aiosqlite>=0.19.0
+
+# Note: We minimize dependencies intentionally
+# Core functionality uses only Python standard library
+# where possible for portability and security
+
+# Development dependencies (optional)
+# pytest>=7.0.0
+# pytest-asyncio>=0.21.0
+# mypy>=1.0.0

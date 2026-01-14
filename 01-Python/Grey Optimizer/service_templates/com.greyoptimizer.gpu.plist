@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Label: Unique identifier for this daemon -->
+    <key>Label</key>
+    <string>com.greyoptimizer.gpu</string>
+    
+    <!-- Human-readable description -->
+    <key>Comment</key>
+    <string>Grey GPU Optimizer Daemon - GPU immune-system governance</string>
+    
+    <!-- Program and arguments -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/grey-gpu-opt</string>
+        <string>start-daemon</string>
+        <string>--interval</string>
+        <string>30</string>
+        <!-- Add --force --confirm for live enforcement -->
+    </array>
+    
+    <!-- Start at boot -->
+    <key>RunAtLoad</key>
+    <true/>
+    
+    <!-- Keep alive: restart if exits -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+    
+    <!-- Restart throttle: wait 10s between restarts -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    
+    <!-- Environment variables -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>GREY_CONFIG_DIR</key>
+        <string>/etc/grey_optimizer</string>
+        <key>GREY_LOG_DIR</key>
+        <string>/var/log/grey_optimizer</string>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    
+    <!-- Working directory -->
+    <key>WorkingDirectory</key>
+    <string>/var/lib/grey_optimizer</string>
+    
+    <!-- Log files -->
+    <key>StandardOutPath</key>
+    <string>/var/log/grey_optimizer/grey-gpu-opt.out.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>/var/log/grey_optimizer/grey-gpu-opt.err.log</string>
+    
+    <!-- Resource limits -->
+    <key>SoftResourceLimits</key>
+    <dict>
+        <key>NumberOfFiles</key>
+        <integer>1024</integer>
+    </dict>
+    
+    <key>HardResourceLimits</key>
+    <dict>
+        <key>NumberOfFiles</key>
+        <integer>2048</integer>
+    </dict>
+    
+    <!-- Nice priority (lower = higher priority) -->
+    <key>Nice</key>
+    <integer>5</integer>
+    
+    <!-- Session type -->
+    <key>LimitLoadToSessionType</key>
+    <array>
+        <string>Background</string>
+        <string>Aqua</string>
+    </array>
+    
+    <!-- Abort process if idles too long (24 hours) -->
+    <key>ExitTimeOut</key>
+    <integer>86400</integer>
+</dict>
+</plist>

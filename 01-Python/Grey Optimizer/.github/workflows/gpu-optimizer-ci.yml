@@ -1,0 +1,257 @@
+# .github/workflows/gpu-optimizer-ci.yml
+# GitHub Actions CI workflow for Grey GPU Optimizer
+#
+# Runs debug diagnostics and fails PR if:
+# - plan_confidence < 0.5
+# - detection_success == false
+# - Any critical gaps detected
+#
+# Usage: Triggers on push/PR to main branch
+
+name: GPU Optimizer CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: '3.10'
+
+jobs:
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff mypy
+          pip install -r requirements.txt || true
+
+      - name: Run ruff linter
+        run: |
+          ruff check . --output-format=github
+
+      - name: Run mypy type checker
+        run: |
+          mypy grey_gpu_optimizer debug_gpu_optimizer.py --ignore-missing-imports || true
+
+  test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov
+          pip install -r requirements.txt || true
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ -v --cov=grey_gpu_optimizer --cov=debug_gpu_optimizer --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  diagnostic-check:
+    name: Run GPU Debug Diagnostics
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml || true
+          pip install -r requirements.txt || true
+
+      - name: Create mock spec for CI
+        run: |
+          mkdir -p ~/.grey_optimizer
+          cat > ~/.grey_optimizer/gpu_spec.json << 'EOF'
+          {
+            "vendor": "nvidia",
+            "model": "CI Test GPU",
+            "vram_total_mb": 8192,
+            "vram_free_mb": 7000,
+            "compute_capability": "8.6",
+            "cuda_version": "12.1",
+            "num_sm": 68,
+            "pci_bandwidth": "16 GT/s",
+            "clock_mhz": 1500,
+            "thermal_limits": {"throttle_c": 83, "shutdown_c": 100}
+          }
+          EOF
+
+      - name: Create mock plan for CI
+        run: |
+          cat > ~/.grey_optimizer/optimization_plan.yaml << 'EOF'
+          mode: safe
+          per_process_vram_cap_mb: 5734
+          recommended_batch_size: 16
+          cooldown_threshold_c: 80
+          resume_threshold_c: 65
+          fair_scheduling_policy: round_robin
+          vram_deduplication_enabled: false
+          estimated_reclaimed_mb: 0
+          EOF
+
+      - name: Run gpu-debug report
+        id: diagnostic
+        run: |
+          python debug_gpu_optimizer.py report \
+            --spec ~/.grey_optimizer/gpu_spec.json \
+            --plan ~/.grey_optimizer/optimization_plan.yaml \
+            --out diagnostic_report.json
+
+      - name: Upload diagnostic report
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-report
+          path: diagnostic_report.json
+
+      - name: Check diagnostic results
+        run: |
+          python << 'EOF'
+          import json
+          import sys
+
+          with open('diagnostic_report.json', 'r') as f:
+              report = json.load(f)
+
+          print("=" * 60)
+          print("GPU OPTIMIZER DIAGNOSTIC CHECK")
+          print("=" * 60)
+          print(f"Health Score: {report.get('overall_health_score', 0)}/100")
+          print(f"Detection Success: {report.get('detection_success', False)}")
+          print(f"Plan Confidence: {report.get('plan_confidence', 0):.2f}")
+          print(f"Enforcement Active: {report.get('enforcement_active', False)}")
+          print("=" * 60)
+
+          # Gate conditions
+          exit_code = 0
+          issues = []
+
+          # Check 1: Plan confidence >= 0.5
+          plan_confidence = report.get('plan_confidence', 0)
+          if plan_confidence < 0.5:
+              issues.append(f"FAIL: plan_confidence ({plan_confidence:.2f}) < 0.5")
+              exit_code = 1
+          else:
+              print(f"PASS: plan_confidence ({plan_confidence:.2f}) >= 0.5")
+
+          # Check 2: Detection success
+          detection_success = report.get('detection_success', False)
+          if not detection_success:
+              issues.append("FAIL: detection_success == false")
+              exit_code = 1
+          else:
+              print("PASS: detection_success == true")
+
+          # Check 3: Overall health score >= 50
+          health_score = report.get('overall_health_score', 0)
+          if health_score < 50:
+              issues.append(f"FAIL: overall_health_score ({health_score}) < 50")
+              exit_code = 1
+          else:
+              print(f"PASS: overall_health_score ({health_score}) >= 50")
+
+          # Check 4: No critical gaps
+          critical_gaps = report.get('critical_gaps', [])
+          if critical_gaps:
+              issues.append(f"FAIL: {len(critical_gaps)} critical gap(s) detected")
+              for gap in critical_gaps:
+                  print(f"  - {gap}")
+              exit_code = 1
+          else:
+              print("PASS: No critical gaps")
+
+          print("=" * 60)
+          if exit_code != 0:
+              print("DIAGNOSTIC CHECK FAILED:")
+              for issue in issues:
+                  print(f"  {issue}")
+              print()
+              print("See DEVELOPER_TODO.md for resolution steps.")
+          else:
+              print("ALL DIAGNOSTIC CHECKS PASSED")
+          print("=" * 60)
+
+          sys.exit(exit_code)
+          EOF
+
+  integration-test:
+    name: Integration Test (Optional)
+    runs-on: ubuntu-latest
+    needs: diagnostic-check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || true
+
+      - name: Run full optimization cycle (dry-run)
+        run: |
+          echo "Running full optimization cycle in dry-run mode..."
+          
+          # Detect GPUs
+          python -c "
+          from grey_gpu_optimizer import detect_gpus
+          specs = detect_gpus()
+          print(f'Detected {len(specs)} GPU(s)')
+          for s in specs:
+              print(f'  - {s.vendor} {s.model}: {s.vram_total_mb}MB')
+          " || echo "No GPU detected (expected in CI)"
+
+          # Plan optimizations (with mock spec)
+          python -c "
+          from grey_gpu_optimizer import plan_optimizations, GPUSpec
+          spec = GPUSpec(
+              vendor='nvidia',
+              model='CI Test',
+              vram_total_mb=8192,
+              vram_free_mb=7000,
+          )
+          plan = plan_optimizations(spec, mode='safe')
+          print(f'Plan: {plan}')
+          "
+
+          echo "Integration test completed successfully."

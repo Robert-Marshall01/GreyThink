@@ -1,0 +1,45 @@
+# Grey GPU Optimizer - Example Plan for Debugging
+# This plan demonstrates typical optimization settings for an RTX 3070
+
+# GPU Target
+gpu_id: "0"
+gpu_model: "GeForce RTX 3070"
+mode: "safe"
+
+# VRAM Management
+per_process_vram_cap_mb: 4096
+vram_headroom_mb: 1024
+vram_deduplication_enabled: false
+estimated_reclaimed_mb: 0
+
+# Batch Size Optimization
+recommended_batch_size: 8
+batch_size_rationale: "Safe mode with 8GB VRAM, compute_capability 8.6"
+
+# Thermal Management
+cooldown_threshold_c: 80
+resume_threshold_c: 65
+thermal_rationale: "Default safe thresholds for NVIDIA Ampere"
+
+# Scheduling
+fair_scheduling_policy: "round_robin"
+scheduling_rationale: "Round-robin for fair process distribution in safe mode"
+
+# Preemptive Throttle
+preemptive_throttle:
+  enabled: false
+  throttle_pct: 50
+  grace_period_s: 5
+
+# Checkpointing
+checkpoint:
+  enabled: true
+  interval_s: 300
+  path: "~/.grey_optimizer/checkpoints/"
+
+# Rationale summary
+plan_rationale: |
+  Conservative plan for RTX 3070 8GB in safe mode.
+  VRAM cap at 50% to leave headroom for system.
+  Thermal thresholds at defaults.
+  Deduplication disabled in safe mode.

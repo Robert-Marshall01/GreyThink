@@ -1,0 +1,54 @@
+[Unit]
+Description=Grey Optimizer - Resource Optimization Daemon
+Documentation=https://github.com/grey-optimizer/grey-optimizer
+After=network.target
+Wants=network.target
+
+[Service]
+Type=notify
+NotifyAccess=main
+
+# Run as root for cgroup and scheduler control
+User=root
+Group=root
+
+# Working directory
+WorkingDirectory=/opt/grey-optimizer
+
+# Environment
+Environment=GREY_OPTIMIZER_CONFIG=/etc/grey-optimizer/config.yaml
+Environment=GREY_OPTIMIZER_LOG_LEVEL=INFO
+Environment=PYTHONUNBUFFERED=1
+
+# Main daemon
+ExecStart=/opt/grey-optimizer/venv/bin/python -m grey_optimizer.daemon
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStop=/bin/kill -TERM $MAINPID
+
+# Restart policy
+Restart=on-failure
+RestartSec=10s
+RestartPreventExitStatus=0
+
+# Security hardening
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+NoNewPrivileges=false
+CapabilityBoundingSet=CAP_SYS_NICE CAP_SYS_RESOURCE CAP_DAC_OVERRIDE CAP_SYS_ADMIN
+AmbientCapabilities=CAP_SYS_NICE CAP_SYS_RESOURCE CAP_DAC_OVERRIDE CAP_SYS_ADMIN
+
+# Resource limits
+LimitNOFILE=65535
+LimitNPROC=4096
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=grey-optimizer
+
+# Watchdog
+WatchdogSec=60
+
+[Install]
+WantedBy=multi-user.target

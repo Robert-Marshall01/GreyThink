@@ -1,0 +1,71 @@
+[Unit]
+Description=Grey GPU Optimizer Daemon (Aggressive Mode)
+Documentation=https://github.com/grey-optimizer/grey_gpu_optimizer
+After=network.target graphical.target nvidia-persistenced.service
+Wants=nvidia-persistenced.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+# Working directory for artifact storage
+WorkingDirectory=/var/lib/grey_optimizer
+
+# Main daemon command with aggressive enforcement
+# WARNING: This will actively manage GPU processes
+ExecStart=/usr/bin/python3 -m grey_gpu_optimizer.daemon \
+    --interval 15 \
+    --mode aggressive \
+    --consent \
+    --confirm \
+    --log-level DEBUG
+
+# Reload configuration on SIGHUP
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Graceful shutdown
+ExecStop=/bin/kill -TERM $MAINPID
+TimeoutStopSec=60
+
+# Restart policy
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=3
+StartLimitIntervalSec=300
+
+# Environment variables
+Environment="GREY_CONFIG_DIR=/etc/grey_optimizer"
+Environment="GREY_LOG_DIR=/var/log/grey_optimizer"
+Environment="GREY_ARTIFACTS_DIR=/var/lib/grey_optimizer/artifacts"
+Environment="GREY_ENFORCEMENT_ENABLED=1"
+Environment="PYTHONUNBUFFERED=1"
+
+# Security - less restrictive for enforcement
+NoNewPrivileges=false
+ProtectSystem=false
+ProtectHome=read-only
+PrivateTmp=true
+ProtectKernelTunables=false
+ProtectControlGroups=false
+
+# Required capabilities for process management
+CapabilityBoundingSet=CAP_SYS_NICE CAP_SYS_RESOURCE CAP_KILL CAP_SYS_PTRACE
+AmbientCapabilities=CAP_SYS_NICE CAP_SYS_RESOURCE CAP_KILL
+
+# Allow access to GPU devices and cgroups
+DeviceAllow=/dev/nvidia*
+DeviceAllow=/dev/dri/*
+DeviceAllow=/dev/kfd
+
+# Higher resource limits for enforcement
+MemoryLimit=1G
+CPUQuota=50%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=grey-gpu-opt
+
+[Install]
+WantedBy=multi-user.target

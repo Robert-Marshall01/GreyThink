@@ -1,0 +1,54 @@
+# Grey Optimizer - Development Configuration
+# This configuration is safe for local development
+
+telemetry:
+  interval_seconds: 1.0
+  history_size: 300
+
+cpu_enforcement:
+  enabled: true
+  target_percent: 10
+  min_percent: 1
+
+ram_enforcement:
+  enabled: true
+  target_mb: 64
+  min_mb: 64
+  enable_ksm: false  # Disabled for dev
+
+disk_enforcement:
+  enabled: true
+  target_iops: 100
+  enable_log_compression: false
+  enable_cache_drop: false
+
+safety:
+  simulation_mode: true  # Always simulate in development
+  protected_patterns:
+    - "systemd*"
+    - "kernel*"
+    - "code"
+    - "node"
+    - "python*"
+    - "npm"
+    - "chrome"
+    - "firefox"
+  rollback_on_failure: true
+  max_enforcement_percent: 90
+
+api:
+  host: "127.0.0.1"
+  port: 8080
+  enable_websocket: true
+  cors_origins:
+    - "http://localhost:5173"
+    - "http://localhost:3000"
+
+persistence:
+  database_path: "./data/audit.db"
+  proof_dir: "./data/proofs"
+  retention_days: 7
+
+logging:
+  level: DEBUG
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

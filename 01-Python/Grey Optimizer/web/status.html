@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grey Optimizer - Memory Dashboard</title>
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-blue: #3b82f6;
+            --accent-green: #22c55e;
+            --accent-yellow: #eab308;
+            --accent-red: #ef4444;
+            --accent-cyan: #06b6d4;
+            --border: #475569;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            font-size: 0.875rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connected { background: var(--accent-green); }
+        .status-dot.disconnected { background: var(--accent-red); }
+        .status-dot.connecting { background: var(--accent-yellow); }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid var(--border);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+        }
+
+        .card-badge {
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+        }
+
+        /* Gauge Component */
+        .gauge-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+        }
+
+        .gauge {
+            position: relative;
+            width: 160px;
+            height: 80px;
+            overflow: hidden;
+        }
+
+        .gauge-bg {
+            position: absolute;
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            border: 16px solid var(--bg-tertiary);
+            border-bottom-color: transparent;
+            border-left-color: transparent;
+            transform: rotate(225deg);
+        }
+
+        .gauge-fill {
+            position: absolute;
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            border: 16px solid transparent;
+            border-top-color: var(--accent-blue);
+            border-right-color: var(--accent-blue);
+            transform: rotate(225deg);
+            transition: transform 0.5s ease;
+        }
+
+        .gauge-fill.low { 
+            border-top-color: var(--accent-green); 
+            border-right-color: var(--accent-green); 
+        }
+        .gauge-fill.medium { 
+            border-top-color: var(--accent-yellow); 
+            border-right-color: var(--accent-yellow); 
+        }
+        .gauge-fill.high { 
+            border-top-color: var(--accent-red); 
+            border-right-color: var(--accent-red); 
+        }
+
+        .gauge-value {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .gauge-label {
+            margin-top: 16px;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        /* Stats */
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--bg-tertiary);
+        }
+
+        .stats-row:last-child {
+            border-bottom: none;
+        }
+
+        .stats-label {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .stats-value {
+            font-weight: 600;
+            font-family: monospace;
+        }
+
+        .stats-value.positive { color: var(--accent-green); }
+        .stats-value.negative { color: var(--accent-red); }
+
+        /* Proof Artifacts */
+        .proof-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .proof-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            margin-bottom: 8px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .proof-item:hover {
+            transform: translateX(4px);
+        }
+
+        .proof-info {
+            flex: 1;
+        }
+
+        .proof-name {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .proof-meta {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .proof-reduction {
+            font-weight: 700;
+            color: var(--accent-green);
+            font-size: 1.125rem;
+        }
+
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            background: var(--accent-blue);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .download-btn:hover {
+            background: #2563eb;
+        }
+
+        /* Timeline */
+        .timeline {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .timeline-item {
+            display: flex;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--bg-tertiary);
+        }
+
+        .timeline-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-blue);
+            margin-top: 6px;
+            flex-shrink: 0;
+        }
+
+        .timeline-dot.success { background: var(--accent-green); }
+        .timeline-dot.warning { background: var(--accent-yellow); }
+        .timeline-dot.error { background: var(--accent-red); }
+
+        .timeline-content {
+            flex: 1;
+        }
+
+        .timeline-action {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .timeline-time {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        /* Mode Toggle */
+        .mode-toggle {
+            display: flex;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            padding: 4px;
+        }
+
+        .mode-btn {
+            padding: 8px 16px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+
+        .mode-btn.active {
+            background: var(--accent-cyan);
+            color: var(--bg-primary);
+            font-weight: 600;
+        }
+
+        .mode-btn.live.active {
+            background: var(--accent-red);
+        }
+
+        /* Chart placeholder */
+        .chart-container {
+            height: 200px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+        }
+
+        .chart-bars {
+            display: flex;
+            align-items: flex-end;
+            gap: 4px;
+            height: 100%;
+            padding: 20px;
+        }
+
+        .chart-bar {
+            width: 20px;
+            background: linear-gradient(to top, var(--accent-blue), var(--accent-cyan));
+            border-radius: 4px 4px 0 0;
+            transition: height 0.3s;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            
+            header {
+                flex-direction: column;
+                gap: 16px;
+            }
+        }
+
+        /* Loading */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--bg-tertiary);
+            border-radius: 50%;
+            border-top-color: var(--accent-cyan);
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Hidden */
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <div class="logo-icon">🔧</div>
+                <h1>Grey Optimizer</h1>
+            </div>
+            <div style="display: flex; gap: 16px; align-items: center;">
+                <div class="mode-toggle">
+                    <button class="mode-btn active" id="simMode">Simulation</button>
+                    <button class="mode-btn live" id="liveMode">Live</button>
+                </div>
+                <div class="status-badge">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Connecting...</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="grid">
+            <!-- Memory Usage Gauges -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Baseline Memory</span>
+                    <span class="card-badge" id="baselineTime">--</span>
+                </div>
+                <div class="gauge-container">
+                    <div class="gauge">
+                        <div class="gauge-bg"></div>
+                        <div class="gauge-fill" id="baselineGaugeFill"></div>
+                        <div class="gauge-value" id="baselineValue">--</div>
+                    </div>
+                    <div class="gauge-label" id="baselineLabel">System Memory Used</div>
+                </div>
+                <div class="stats-row">
+                    <span class="stats-label">Total</span>
+                    <span class="stats-value" id="baselineTotal">--</span>
+                </div>
+                <div class="stats-row">
+                    <span class="stats-label">Available</span>
+                    <span class="stats-value" id="baselineAvailable">--</span>
+                </div>
+            </div>
+
+            <!-- Post Reclamation -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Post Reclamation</span>
+                    <span class="card-badge" id="postTime">--</span>
+                </div>
+                <div class="gauge-container">
+                    <div class="gauge">
+                        <div class="gauge-bg"></div>
+                        <div class="gauge-fill" id="postGaugeFill"></div>
+                        <div class="gauge-value" id="postValue">--</div>
+                    </div>
+                    <div class="gauge-label" id="postLabel">System Memory Used</div>
+                </div>
+                <div class="stats-row">
+                    <span class="stats-label">Reduction</span>
+                    <span class="stats-value positive" id="reductionBytes">--</span>
+                </div>
+                <div class="stats-row">
+                    <span class="stats-label">Reduction %</span>
+                    <span class="stats-value positive" id="reductionPercent">--</span>
+                </div>
+            </div>
+
+            <!-- Current Status -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Current Status</span>
+                    <span class="card-badge" id="daemonMode">--</span>
+                </div>
+                <div class="stats-row">
+                    <span class="stats-label">Daemon</span>
+                    <span class="stats-value" id="daemonStatus">--</span>
+                </div>
+                <div class="stats-row">
+                    <span class="stats-label">Profile</span>
+                    <span class="stats-value" id="currentProfile">--</span>
+                </div>
+                <div class="stats-row">
+                    <span class="stats-label">Enforcement</span>
+                    <span class="stats-value" id="enforcementActive">--</span>
+                </div>
+                <div class="stats-row">
+                    <span class="stats-label">Last Reclaim</span>
+                    <span class="stats-value" id="lastReclaim">--</span>
+                </div>
+                <div class="stats-row">
+                    <span class="stats-label">Uptime</span>
+                    <span class="stats-value" id="uptime">--</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <!-- Proof Artifacts -->
+            <div class="card" style="grid-column: span 2;">
+                <div class="card-header">
+                    <span class="card-title">Proof Artifacts</span>
+                    <button class="download-btn" id="downloadLatest">
+                        ⬇️ Download Latest
+                    </button>
+                </div>
+                <div class="proof-list" id="proofList">
+                    <div style="color: var(--text-muted); padding: 20px; text-align: center;">
+                        No proof artifacts yet. Run a reclamation to generate one.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activity Timeline -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Activity Timeline</span>
+                    <span class="card-badge" id="auditCount">0 events</span>
+                </div>
+                <div class="timeline" id="timeline">
+                    <div style="color: var(--text-muted); padding: 20px; text-align: center;">
+                        <div class="loading"></div>
+                        <div style="margin-top: 12px;">Loading audit log...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Memory History Chart -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Memory History (Last Hour)</span>
+            </div>
+            <div class="chart-container">
+                <div class="chart-bars" id="memoryChart">
+                    <!-- Bars will be added dynamically -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ═══════════════════════════════════════════════════════════════════════
+        // Configuration
+        // ═══════════════════════════════════════════════════════════════════════
+        
+        const API_BASE = 'http://127.0.0.1:5000';
+        const WS_URL = 'ws://127.0.0.1:5000/ws';
+        
+        let ws = null;
+        let reconnectTimeout = null;
+        let currentMode = 'simulation';
+        let proofArtifacts = [];
+        let memoryHistory = [];
+        
+        // ═══════════════════════════════════════════════════════════════════════
+        // Utilities
+        // ═══════════════════════════════════════════════════════════════════════
+        
+        function formatBytes(bytes) {
+            if (bytes === 0 || bytes == null) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(Math.abs(bytes)) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function formatTime(isoString) {
+            if (!isoString) return '--';
+            const date = new Date(isoString);
+            return date.toLocaleTimeString();
+        }
+        
+        function formatRelativeTime(isoString) {
+            if (!isoString) return '--';
+            const date = new Date(isoString);
+            const now = new Date();
+            const diff = Math.floor((now - date) / 1000);
+            
+            if (diff < 60) return `${diff}s ago`;
+            if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+            if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+            return date.toLocaleDateString();
+        }
+        
+        // ═══════════════════════════════════════════════════════════════════════
+        // UI Updates
+        // ═══════════════════════════════════════════════════════════════════════
+        
+        function updateConnectionStatus(status) {
+            const dot = document.getElementById('statusDot');
+            const text = document.getElementById('statusText');
+            
+            dot.className = 'status-dot ' + status;
+            
+            switch (status) {
+                case 'connected':
+                    text.textContent = 'Connected';
+                    break;
+                case 'disconnected':
+                    text.textContent = 'Disconnected';
+                    break;
+                case 'connecting':
+                    text.textContent = 'Connecting...';
+                    break;
+            }
+        }
+        
+        function updateGauge(prefix, percent, bytes, total) {
+            const fill = document.getElementById(prefix + 'GaugeFill');
+            const value = document.getElementById(prefix + 'Value');
+            
+            // Calculate rotation (0-270 degrees for 0-100%)
+            const rotation = Math.min(percent, 100) * 2.7;
+            fill.style.transform = `rotate(${225 + rotation}deg)`;
+            
+            // Set color based on percentage
+            fill.classList.remove('low', 'medium', 'high');
+            if (percent < 50) fill.classList.add('low');
+            else if (percent < 80) fill.classList.add('medium');
+            else fill.classList.add('high');
+            
+            value.textContent = Math.round(percent) + '%';
+        }
+        
+        function updateStatus(data) {
+            document.getElementById('daemonStatus').textContent = data.running ? 'Running' : 'Stopped';
+            document.getElementById('daemonMode').textContent = data.mode || 'Unknown';
+            document.getElementById('currentProfile').textContent = data.profile || 'None';
+            document.getElementById('enforcementActive').textContent = data.enforcement_active ? 'Active' : 'Inactive';
+            document.getElementById('lastReclaim').textContent = formatRelativeTime(data.last_reclaim);
+            document.getElementById('uptime').textContent = data.uptime || '--';
+        }
+        
+        function updateMetrics(data) {
+            if (data.baseline) {
+                const baseline = data.baseline;
+                const usedPct = baseline.system_used_percent || 0;
+                updateGauge('baseline', usedPct);
+                document.getElementById('baselineTime').textContent = formatTime(baseline.timestamp);
+                document.getElementById('baselineTotal').textContent = formatBytes(baseline.system_total || 0);
+                document.getElementById('baselineAvailable').textContent = formatBytes(baseline.system_available || 0);
+            }
+            
+            if (data.post) {
+                const post = data.post;
+                const usedPct = post.system_used_percent || 0;
+                updateGauge('post', usedPct);
+                document.getElementById('postTime').textContent = formatTime(post.timestamp);
+            }
+            
+            if (data.reduction) {
+                document.getElementById('reductionBytes').textContent = formatBytes(data.reduction.bytes || 0);
+                document.getElementById('reductionPercent').textContent = 
+                    (data.reduction.percent || 0).toFixed(1) + '%';
+            }
+            
+            // Update memory history
+            if (data.current_used_percent != null) {
+                memoryHistory.push(data.current_used_percent);
+                if (memoryHistory.length > 60) memoryHistory.shift();
+                updateMemoryChart();
+            }
+        }
+        
+        function updateProofList(proofs) {
+            proofArtifacts = proofs;
+            const container = document.getElementById('proofList');
+            
+            if (!proofs || proofs.length === 0) {
+                container.innerHTML = `
+                    <div style="color: var(--text-muted); padding: 20px; text-align: center;">
+                        No proof artifacts yet. Run a reclamation to generate one.
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = proofs.map((proof, idx) => `
+                <div class="proof-item" onclick="downloadProof(${idx})">
+                    <div class="proof-info">
+                        <div class="proof-name">${proof.filename || 'proof_' + idx + '.json'}</div>
+                        <div class="proof-meta">
+                            ${formatRelativeTime(proof.generated_at)} · 
+                            Profile: ${proof.profile || 'unknown'}
+                        </div>
+                    </div>
+                    <div class="proof-reduction">
+                        -${(proof.reduction?.percent || 0).toFixed(1)}%
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function updateTimeline(events) {
+            const container = document.getElementById('timeline');
+            const countBadge = document.getElementById('auditCount');
+            
+            countBadge.textContent = events.length + ' events';
+            
+            if (!events || events.length === 0) {
+                container.innerHTML = `
+                    <div style="color: var(--text-muted); padding: 20px; text-align: center;">
+                        No activity yet.
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = events.slice(0, 20).map(event => {
+                let dotClass = '';
+                if (event.success === 0) dotClass = 'error';
+                else if (event.action?.includes('warning')) dotClass = 'warning';
+                else dotClass = 'success';
+                
+                return `
+                    <div class="timeline-item">
+                        <div class="timeline-dot ${dotClass}"></div>
+                        <div class="timeline-content">
+                            <div class="timeline-action">${event.action || 'Unknown action'}</div>
+                            <div class="timeline-time">
+                                ${formatRelativeTime(event.timestamp)} · 
+                                ${event.category || ''} · 
+                                ${event.mode || 'cli'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function updateMemoryChart() {
+            const container = document.getElementById('memoryChart');
+            const bars = memoryHistory.map(pct => 
+                `<div class="chart-bar" style="height: ${pct}%"></div>`
+            ).join('');
+            container.innerHTML = bars || '<span style="color: var(--text-muted)">No data yet</span>';
+        }
+        
+        // ═══════════════════════════════════════════════════════════════════════
+        // WebSocket Connection
+        // ═══════════════════════════════════════════════════════════════════════
+        
+        function connectWebSocket() {
+            updateConnectionStatus('connecting');
+            
+            try {
+                ws = new WebSocket(WS_URL);
+                
+                ws.onopen = () => {
+                    console.log('WebSocket connected');
+                    updateConnectionStatus('connected');
+                };
+                
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        handleMessage(data);
+                    } catch (e) {
+                        console.error('Failed to parse message:', e);
+                    }
+                };
+                
+                ws.onclose = () => {
+                    console.log('WebSocket disconnected');
+                    updateConnectionStatus('disconnected');
+                    scheduleReconnect();
+                };
+                
+                ws.onerror = (err) => {
+                    console.error('WebSocket error:', err);
+                    updateConnectionStatus('disconnected');
+                };
+            } catch (e) {
+                console.error('Failed to connect WebSocket:', e);
+                updateConnectionStatus('disconnected');
+                scheduleReconnect();
+            }
+        }
+        
+        function scheduleReconnect() {
+            if (reconnectTimeout) return;
+            reconnectTimeout = setTimeout(() => {
+                reconnectTimeout = null;
+                connectWebSocket();
+            }, 5000);
+        }
+        
+        function handleMessage(data) {
+            switch (data.type) {
+                case 'status':
+                    updateStatus(data);
+                    break;
+                case 'metrics':
+                    updateMetrics(data);
+                    break;
+                case 'proofs':
+                    updateProofList(data.proofs);
+                    break;
+                case 'audit':
+                    updateTimeline(data.events);
+                    break;
+                default:
+                    // Handle combined updates
+                    if (data.status) updateStatus(data.status);
+                    if (data.metrics) updateMetrics(data.metrics);
+                    if (data.proofs) updateProofList(data.proofs);
+                    if (data.audit) updateTimeline(data.audit);
+            }
+        }
+        
+        // ═══════════════════════════════════════════════════════════════════════
+        // API Fallback (when WebSocket not available)
+        // ═══════════════════════════════════════════════════════════════════════
+        
+        async function fetchData() {
+            try {
+                const [statusRes, metricsRes, auditRes] = await Promise.all([
+                    fetch(API_BASE + '/api/status').catch(() => null),
+                    fetch(API_BASE + '/api/metrics').catch(() => null),
+                    fetch(API_BASE + '/api/audit').catch(() => null),
+                ]);
+                
+                if (statusRes?.ok) {
+                    const status = await statusRes.json();
+                    updateStatus(status);
+                    updateConnectionStatus('connected');
+                }
+                
+                if (metricsRes?.ok) {
+                    const metrics = await metricsRes.json();
+                    updateMetrics(metrics);
+                }
+                
+                if (auditRes?.ok) {
+                    const audit = await auditRes.json();
+                    updateTimeline(audit.events || audit);
+                }
+            } catch (e) {
+                console.error('API fetch error:', e);
+                updateConnectionStatus('disconnected');
+            }
+        }
+        
+        // ═══════════════════════════════════════════════════════════════════════
+        // Actions
+        // ═══════════════════════════════════════════════════════════════════════
+        
+        function downloadProof(index) {
+            if (proofArtifacts[index]) {
+                const proof = proofArtifacts[index];
+                const blob = new Blob([JSON.stringify(proof, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = proof.filename || `proof_${index}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+        }
+        
+        function downloadLatestProof() {
+            if (proofArtifacts.length > 0) {
+                downloadProof(0);
+            } else {
+                alert('No proof artifacts available');
+            }
+        }
+        
+        // ═══════════════════════════════════════════════════════════════════════
+        // Initialization
+        // ═══════════════════════════════════════════════════════════════════════
+        
+        document.getElementById('downloadLatest').addEventListener('click', downloadLatestProof);
+        
+        document.getElementById('simMode').addEventListener('click', function() {
+            currentMode = 'simulation';
+            this.classList.add('active');
+            document.getElementById('liveMode').classList.remove('active');
+        });
+        
+        document.getElementById('liveMode').addEventListener('click', function() {
+            if (confirm('Switch to Live mode? This will show real system data.')) {
+                currentMode = 'live';
+                this.classList.add('active');
+                document.getElementById('simMode').classList.remove('active');
+            }
+        });
+        
+        // Start connection
+        connectWebSocket();
+        
+        // Fallback polling if WebSocket fails
+        setInterval(() => {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                fetchData();
+            }
+        }, 5000);
+        
+        // Initial data load
+        fetchData();
+        
+        // Initialize with demo data for testing
+        setTimeout(() => {
+            if (document.getElementById('baselineValue').textContent === '--') {
+                // Show demo data
+                updateGauge('baseline', 72);
+                updateGauge('post', 58);
+                document.getElementById('baselineTotal').textContent = '16.0 GB';
+                document.getElementById('baselineAvailable').textContent = '4.5 GB';
+                document.getElementById('reductionBytes').textContent = '2.2 GB';
+                document.getElementById('reductionPercent').textContent = '14.0%';
+                document.getElementById('daemonStatus').textContent = 'Demo Mode';
+                document.getElementById('currentProfile').textContent = 'balanced';
+                
+                // Demo memory history
+                for (let i = 0; i < 30; i++) {
+                    memoryHistory.push(60 + Math.random() * 20);
+                }
+                updateMemoryChart();
+            }
+        }, 3000);
+    </script>
+</body>
+</html>

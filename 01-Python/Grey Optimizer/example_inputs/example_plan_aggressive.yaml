@@ -1,0 +1,45 @@
+# Grey GPU Optimizer - Aggressive Plan for Debugging
+# This plan demonstrates aggressive optimization settings for an RTX 3070
+
+# GPU Target
+gpu_id: "0"
+gpu_model: "GeForce RTX 3070"
+mode: "aggressive"
+
+# VRAM Management
+per_process_vram_cap_mb: 7168
+vram_headroom_mb: 512
+vram_deduplication_enabled: true
+estimated_reclaimed_mb: 300
+
+# Batch Size Optimization
+recommended_batch_size: 32
+batch_size_rationale: "Aggressive mode with 8GB VRAM, compute_capability 8.6, maximize throughput"
+
+# Thermal Management
+cooldown_threshold_c: 85
+resume_threshold_c: 70
+thermal_rationale: "Higher thresholds for aggressive mode, still below hardware throttle"
+
+# Scheduling
+fair_scheduling_policy: "priority_weighted"
+scheduling_rationale: "Priority-weighted for workload-aware scheduling in aggressive mode"
+
+# Preemptive Throttle
+preemptive_throttle:
+  enabled: true
+  throttle_pct: 75
+  grace_period_s: 3
+
+# Checkpointing
+checkpoint:
+  enabled: true
+  interval_s: 180
+  path: "~/.grey_optimizer/checkpoints/"
+
+# Rationale summary
+plan_rationale: |
+  Aggressive plan for RTX 3070 8GB targeting maximum throughput.
+  VRAM cap at 87.5% utilization.
+  Deduplication enabled to reclaim ~300MB.
+  Preemptive throttle at 75% before thermal ceiling.

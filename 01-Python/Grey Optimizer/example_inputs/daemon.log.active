@@ -1,0 +1,15 @@
+{"timestamp": "2026-01-11T14:00:00Z", "component": "daemon", "level": "INFO", "event_type": "startup", "details": {"version": "0.1.0", "mode": "live"}}
+{"timestamp": "2026-01-11T14:00:01Z", "component": "detector", "level": "INFO", "event_type": "detection_complete", "details": {"vendor": "nvidia", "vram_total_mb": 8192, "vram_free_mb": 7000, "confidence": 0.92}}
+{"timestamp": "2026-01-11T14:00:05Z", "component": "planner", "level": "INFO", "event_type": "plan_generated", "details": {"mode": "aggressive", "vram_cap_mb": 7168, "batch_size": 32}}
+{"timestamp": "2026-01-11T14:00:06Z", "component": "enforcer", "level": "INFO", "event_type": "plan_applied", "dry_run": false, "details": {"actions_count": 3, "actions": ["set_vram_cap", "set_thermal_thresholds", "enable_dedup"]}}
+{"timestamp": "2026-01-11T14:00:10Z", "component": "monitor", "level": "INFO", "event_type": "sample", "details": {"temp_c": 42, "vram_used_mb": 1500, "utilization_pct": 18}}
+{"timestamp": "2026-01-11T14:01:10Z", "component": "monitor", "level": "INFO", "event_type": "sample", "details": {"temp_c": 55, "vram_used_mb": 4200, "utilization_pct": 51}}
+{"timestamp": "2026-01-11T14:02:10Z", "component": "monitor", "level": "INFO", "event_type": "sample", "details": {"temp_c": 72, "vram_used_mb": 6500, "utilization_pct": 79}}
+{"timestamp": "2026-01-11T14:02:15Z", "component": "dedup", "level": "INFO", "event_type": "dedup_scan", "details": {"buffers_scanned": 48, "duplicates_found": 5, "reclaimed_mb": 150}}
+{"timestamp": "2026-01-11T14:03:10Z", "component": "monitor", "level": "INFO", "event_type": "sample", "details": {"temp_c": 80, "vram_used_mb": 6350, "utilization_pct": 77}}
+{"timestamp": "2026-01-11T14:03:12Z", "component": "enforcer", "level": "WARNING", "event_type": "threshold_breached", "details": {"metric": "thermal", "current_c": 80, "threshold_c": 80}}
+{"timestamp": "2026-01-11T14:03:13Z", "component": "enforcer", "level": "INFO", "event_type": "plan_applied", "dry_run": false, "details": {"action": "preemptive_throttle", "throttle_pct": 75, "reason": "Preemptive throttle before thermal ceiling"}}
+{"timestamp": "2026-01-11T14:04:10Z", "component": "monitor", "level": "INFO", "event_type": "sample", "details": {"temp_c": 74, "vram_used_mb": 6200, "utilization_pct": 75}}
+{"timestamp": "2026-01-11T14:05:10Z", "component": "monitor", "level": "INFO", "event_type": "sample", "details": {"temp_c": 68, "vram_used_mb": 6100, "utilization_pct": 74}}
+{"timestamp": "2026-01-11T14:05:12Z", "component": "enforcer", "level": "INFO", "event_type": "throttle_released", "details": {"current_c": 68, "resume_threshold_c": 70}}
+{"timestamp": "2026-01-11T14:10:00Z", "component": "daemon", "level": "INFO", "event_type": "status", "details": {"uptime_s": 600, "samples_collected": 7, "actions_proposed": 2, "actions_applied": 2, "dedup_reclaimed_mb": 150}}
