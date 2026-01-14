@@ -1,0 +1,15 @@
+{"timestamp": "2026-01-11T10:00:00Z", "component": "daemon", "level": "INFO", "event_type": "startup", "details": {"version": "0.1.0", "mode": "dry_run"}}
+{"timestamp": "2026-01-11T10:00:01Z", "component": "detector", "level": "INFO", "event_type": "detection_complete", "details": {"vendor": "nvidia", "vram_total_mb": 8192, "vram_free_mb": 6500, "confidence": 0.75}}
+{"timestamp": "2026-01-11T10:00:05Z", "component": "planner", "level": "INFO", "event_type": "plan_generated", "details": {"mode": "safe", "vram_cap_mb": 4096, "batch_size": 8}}
+{"timestamp": "2026-01-11T10:00:10Z", "component": "monitor", "level": "INFO", "event_type": "sample", "details": {"temp_c": 45, "vram_used_mb": 2048, "utilization_pct": 25}}
+{"timestamp": "2026-01-11T10:01:10Z", "component": "monitor", "level": "INFO", "event_type": "sample", "details": {"temp_c": 52, "vram_used_mb": 3500, "utilization_pct": 42}}
+{"timestamp": "2026-01-11T10:02:10Z", "component": "monitor", "level": "INFO", "event_type": "sample", "details": {"temp_c": 68, "vram_used_mb": 5200, "utilization_pct": 63}}
+{"timestamp": "2026-01-11T10:03:10Z", "component": "monitor", "level": "INFO", "event_type": "sample", "details": {"temp_c": 75, "vram_used_mb": 6800, "utilization_pct": 83}}
+{"timestamp": "2026-01-11T10:03:15Z", "component": "enforcer", "level": "WARNING", "event_type": "threshold_approaching", "details": {"metric": "vram", "current": 6800, "threshold": 7168}}
+{"timestamp": "2026-01-11T10:04:10Z", "component": "monitor", "level": "INFO", "event_type": "sample", "details": {"temp_c": 82, "vram_used_mb": 7500, "utilization_pct": 91}}
+{"timestamp": "2026-01-11T10:04:12Z", "component": "enforcer", "level": "WARNING", "event_type": "threshold_breached", "details": {"metric": "thermal", "current_c": 82, "threshold_c": 80}}
+{"timestamp": "2026-01-11T10:04:13Z", "component": "enforcer", "level": "INFO", "event_type": "plan_applied", "dry_run": true, "details": {"action": "thermal_throttle", "proposed": "reduce GPU clock by 20%", "reason": "Temperature 82°C exceeds cooldown threshold 80°C"}}
+{"timestamp": "2026-01-11T10:05:10Z", "component": "monitor", "level": "INFO", "event_type": "sample", "details": {"temp_c": 78, "vram_used_mb": 7200, "utilization_pct": 88}}
+{"timestamp": "2026-01-11T10:06:10Z", "component": "monitor", "level": "INFO", "event_type": "sample", "details": {"temp_c": 71, "vram_used_mb": 6800, "utilization_pct": 83}}
+{"timestamp": "2026-01-11T10:06:15Z", "component": "enforcer", "level": "INFO", "event_type": "threshold_resolved", "details": {"metric": "thermal", "current_c": 71, "resume_threshold_c": 65}}
+{"timestamp": "2026-01-11T10:10:00Z", "component": "daemon", "level": "INFO", "event_type": "status", "details": {"uptime_s": 600, "samples_collected": 7, "actions_proposed": 1, "actions_applied": 0}}

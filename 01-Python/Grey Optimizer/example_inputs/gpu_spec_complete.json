@@ -1,0 +1,18 @@
+{
+  "vendor": "nvidia",
+  "model": "GeForce RTX 3070",
+  "vram_total_mb": 8192,
+  "vram_free_mb": 6144,
+  "compute_capability": "8.6",
+  "cuda_version": "12.1",
+  "num_sm": 46,
+  "pci_bandwidth": "16 GT/s",
+  "clock_mhz": 1725,
+  "thermal_limits": {
+    "throttle_c": 83,
+    "shutdown_c": 98
+  },
+  "driver_version": "535.154.05",
+  "power_limit_w": 220,
+  "temperature_c": 42
+}

@@ -1,0 +1,107 @@
+[Unit]
+Description=Grey Optimizer - Resource Optimization Daemon
+Documentation=https://github.com/grey-optimizer/grey-optimizer
+After=network.target local-fs.target
+Wants=network.target
+
+[Service]
+Type=notify
+NotifyAccess=main
+
+# Run as root for full enforcement capabilities
+User=root
+Group=root
+
+# Working directory
+WorkingDirectory=/opt/grey-optimizer
+
+# Environment configuration
+Environment=GREY_OPTIMIZER_CONFIG=/etc/grey-optimizer/config.yaml
+Environment=GREY_OPTIMIZER_LOG_LEVEL=INFO
+Environment=PYTHONUNBUFFERED=1
+
+# Pre-start verification
+ExecStartPre=/bin/bash -c 'echo "Grey Optimizer starting at $(date -Iseconds)"'
+ExecStartPre=/bin/bash -c 'test -f /etc/grey-optimizer/config.yaml || { echo "Config not found"; exit 1; }'
+
+# Main daemon with immediate enforcement flag
+ExecStart=/opt/grey-optimizer/venv/bin/python -m grey_optimizer.daemon --immediate
+
+# Reload configuration
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Graceful shutdown with rollback
+ExecStop=/opt/grey-optimizer/venv/bin/python -m grey_optimizer.cli stop --graceful
+ExecStopPost=/bin/bash -c 'echo "Grey Optimizer stopped at $(date -Iseconds)"'
+
+# Restart policy
+Restart=on-failure
+RestartSec=10s
+RestartPreventExitStatus=0
+
+# Timeouts
+TimeoutStartSec=60
+TimeoutStopSec=30
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECURITY HARDENING
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Filesystem protection (allow specific paths for enforcement)
+ProtectSystem=strict
+ReadWritePaths=/var/lib/grey-optimizer
+ReadWritePaths=/var/log/grey-optimizer
+ReadWritePaths=/etc/grey-optimizer
+ReadWritePaths=/sys/kernel/mm/ksm
+ReadWritePaths=/sys/fs/cgroup
+ReadWritePaths=/proc/sys/vm
+
+# Home directory access (read-only for file analysis)
+ProtectHome=read-only
+
+# Private temp
+PrivateTmp=true
+
+# Capabilities required for enforcement
+# CAP_SYS_NICE: sched_setscheduler, setpriority
+# CAP_SYS_RESOURCE: setrlimit, cgroup manipulation
+# CAP_DAC_OVERRIDE: read any file for dedup analysis
+# CAP_SYS_ADMIN: cgroup operations, KSM control
+NoNewPrivileges=false
+CapabilityBoundingSet=CAP_SYS_NICE CAP_SYS_RESOURCE CAP_DAC_OVERRIDE CAP_SYS_ADMIN CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_SYS_NICE CAP_SYS_RESOURCE CAP_DAC_OVERRIDE CAP_SYS_ADMIN
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RESOURCE LIMITS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+LimitNOFILE=65535
+LimitNPROC=4096
+LimitCORE=0
+
+# Memory limit for the daemon itself
+MemoryMax=512M
+MemoryHigh=256M
+
+# CPU accounting
+CPUAccounting=true
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LOGGING
+# ═══════════════════════════════════════════════════════════════════════════════
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=grey-optimizer
+SyslogFacility=daemon
+SyslogLevel=info
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# WATCHDOG
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# systemd watchdog - daemon must call sd_notify("WATCHDOG=1") periodically
+WatchdogSec=60
+
+[Install]
+WantedBy=multi-user.target

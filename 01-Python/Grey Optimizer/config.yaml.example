@@ -1,0 +1,147 @@
+# Grey Optimizer Configuration
+# Copy this file to config.yaml and adjust as needed
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TELEMETRY SETTINGS
+# ═══════════════════════════════════════════════════════════════════════════════
+telemetry:
+  # Metrics collection interval in seconds
+  interval_seconds: 1.0
+  
+  # Number of historical data points to retain (for charts)
+  history_size: 300
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CPU ENFORCEMENT
+# ═══════════════════════════════════════════════════════════════════════════════
+cpu_enforcement:
+  # Enable/disable CPU optimization
+  enabled: true
+  
+  # Target CPU usage percentage after optimization
+  # A value of 10 means target 90% reduction
+  target_percent: 10
+  
+  # Minimum CPU percentage that will always be allowed (safety floor)
+  # Prevents complete CPU starvation
+  min_percent: 1
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RAM ENFORCEMENT
+# ═══════════════════════════════════════════════════════════════════════════════
+ram_enforcement:
+  # Enable/disable RAM optimization
+  enabled: true
+  
+  # Target memory limit in MB per cgroup
+  target_mb: 64
+  
+  # Minimum memory that will always be allowed (safety floor)
+  # Prevents OOM for critical processes
+  min_mb: 64
+  
+  # Enable Kernel Same-page Merging for memory deduplication
+  enable_ksm: true
+  
+  # KSM scan interval in milliseconds
+  ksm_sleep_ms: 100
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DISK ENFORCEMENT
+# ═══════════════════════════════════════════════════════════════════════════════
+disk_enforcement:
+  # Enable/disable disk I/O optimization
+  enabled: true
+  
+  # Target I/O operations per second limit
+  target_iops: 100
+  
+  # Enable automatic log compression for .log files
+  enable_log_compression: true
+  
+  # Enable cache drop for high-memory-pressure situations
+  enable_cache_drop: false
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SAFETY SETTINGS
+# ═══════════════════════════════════════════════════════════════════════════════
+safety:
+  # IMPORTANT: Simulation mode prevents any actual system changes
+  # Set to false only in production with proper testing
+  simulation_mode: true
+  
+  # Process name patterns that will never be modified
+  # Uses shell-style wildcards
+  protected_patterns:
+    - "systemd*"
+    - "kernel*"
+    - "init"
+    - "sshd"
+    - "grey-optimizer"
+    - "dockerd"
+    - "containerd"
+    - "kubelet"
+  
+  # Automatically rollback all changes if enforcement fails
+  rollback_on_failure: true
+  
+  # Maximum percentage of resources that can be enforced
+  # Prevents overly aggressive optimization
+  max_enforcement_percent: 90
+  
+  # Time window (seconds) during which rollback is available
+  rollback_window_seconds: 3600
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# API SERVER
+# ═══════════════════════════════════════════════════════════════════════════════
+api:
+  # Network interface to bind to
+  # Use 0.0.0.0 to listen on all interfaces
+  host: "127.0.0.1"
+  
+  # Port for REST API and WebSocket
+  port: 8080
+  
+  # Enable WebSocket for real-time telemetry
+  enable_websocket: true
+  
+  # CORS origins (for frontend development)
+  cors_origins:
+    - "http://localhost:5173"
+    - "http://localhost:3000"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PERSISTENCE
+# ═══════════════════════════════════════════════════════════════════════════════
+persistence:
+  # SQLite database path for audit log
+  database_path: "/var/lib/grey-optimizer/audit.db"
+  
+  # Directory for proof artifact JSON files
+  proof_dir: "/var/lib/grey-optimizer/proofs"
+  
+  # Number of days to retain audit entries
+  retention_days: 30
+  
+  # Secret key for HMAC signatures (auto-generated if not set)
+  # hmac_secret: "your-secret-key-here"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LOGGING
+# ═══════════════════════════════════════════════════════════════════════════════
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: INFO
+  
+  # Log format
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  # Log to file (in addition to stdout)
+  file_path: "/var/log/grey-optimizer/daemon.log"
+  
+  # Maximum log file size in MB
+  max_file_size_mb: 100
+  
+  # Number of log files to keep
+  backup_count: 5

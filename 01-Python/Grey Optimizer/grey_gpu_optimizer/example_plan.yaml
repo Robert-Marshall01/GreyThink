@@ -1,0 +1,375 @@
+# Grey GPU Optimizer Example Plans
+# These are pre-generated optimization plans for common GPU configurations
+
+# =============================================================================
+# Intel Arc A770 (6 GB VRAM) - Safe Mode
+# =============================================================================
+# Target: Intel discrete GPU with limited VRAM
+# Use case: Gaming workloads, light inference, development
+
+intel_arc_6gb_safe:
+  # GPU Specification (reference)
+  gpu_spec:
+    vendor: intel
+    model: "Intel Arc A770"
+    vram_total_mb: 6144
+    vram_free_mb: 5600
+    driver: "xe"
+    compute_capability: ""
+    pci_bandwidth: "16 GT/s"
+  
+  # Optimization Plan
+  mode: safe
+  per_process_vram_cap_mb: 3072  # 50% of total - conservative for Intel
+  recommended_batch_size: 4       # Small batches for 6GB VRAM
+  tensor_chunk_size_mb: 32        # Smaller chunks for limited memory
+  
+  # Thermal Management
+  cooldown_threshold_c: 75        # Intel has tighter thermal limits
+  resume_threshold_c: 60
+  
+  # Scheduling
+  fair_scheduling_policy: time_slice
+  max_concurrent_gpu_processes: 2  # Limit concurrency for small VRAM
+  
+  # Resource Management
+  preemptive_throttle:
+    enabled: false
+    throttle_pct: 50
+    grace_period_s: 5
+  
+  vram_deduplication_enabled: false  # Not recommended for < 8GB
+  estimated_reclaimed_mb: 0
+  
+  # Confidence and Rationale
+  confidence: 0.75
+  rationale:
+    vram_cap: "Intel GPU with 6GB VRAM - using 50% cap to prevent OOM"
+    batch_size: "Reduced batch size (4) for memory-constrained Intel GPU"
+    thermal: "Intel thermal thresholds: 75°C cooldown (conservative)"
+    scheduling: "Time-slice scheduling for fair GPU sharing"
+  
+  notes:
+    - "Intel GPUs benefit from smaller batch sizes"
+    - "Consider CPU fallback for large model inference"
+    - "XeSS upscaling can improve gaming performance"
+
+---
+
+# =============================================================================
+# Intel Arc A770 (6 GB VRAM) - Aggressive Mode
+# =============================================================================
+
+intel_arc_6gb_aggressive:
+  gpu_spec:
+    vendor: intel
+    model: "Intel Arc A770"
+    vram_total_mb: 6144
+    vram_free_mb: 5600
+    driver: "xe"
+  
+  mode: aggressive
+  per_process_vram_cap_mb: 4915   # 80% of total
+  recommended_batch_size: 8       # Larger batches for throughput
+  tensor_chunk_size_mb: 48
+  
+  cooldown_threshold_c: 80
+  resume_threshold_c: 65
+  
+  fair_scheduling_policy: priority_weighted
+  max_concurrent_gpu_processes: 1  # Single process for max performance
+  
+  preemptive_throttle:
+    enabled: true
+    throttle_pct: 30
+    grace_period_s: 3
+  
+  vram_deduplication_enabled: false
+  estimated_reclaimed_mb: 0
+  
+  confidence: 0.70
+  rationale:
+    vram_cap: "Aggressive 80% VRAM utilization for max throughput"
+    batch_size: "Maximized batch (8) for single-process workloads"
+    thermal: "Aggressive thermals: 80°C cooldown"
+    scheduling: "Priority-weighted for dedicated workloads"
+  
+  notes:
+    - "Use for dedicated ML inference or gaming"
+    - "Monitor thermals closely with aggressive settings"
+    - "Single-process mode maximizes memory availability"
+
+---
+
+# =============================================================================
+# NVIDIA GeForce RTX 4070 (8 GB VRAM) - Safe Mode
+# =============================================================================
+# Target: Mid-range NVIDIA consumer GPU
+# Use case: ML development, gaming, inference
+
+nvidia_rtx_4070_8gb_safe:
+  gpu_spec:
+    vendor: nvidia
+    model: "NVIDIA GeForce RTX 4070"
+    vram_total_mb: 8192
+    vram_free_mb: 7500
+    driver: "545.23.08"
+    cuda_version: "12.3"
+    compute_capability: "8.9"
+    num_sm: 46
+    pci_bandwidth: "16 GT/s"
+  
+  mode: safe
+  per_process_vram_cap_mb: 5734   # 70% of total
+  recommended_batch_size: 16      # Moderate batch for CUDA
+  tensor_chunk_size_mb: 64
+  
+  cooldown_threshold_c: 80
+  resume_threshold_c: 65
+  
+  fair_scheduling_policy: round_robin
+  max_concurrent_gpu_processes: 3
+  
+  preemptive_throttle:
+    enabled: false
+    throttle_pct: 50
+    grace_period_s: 5
+  
+  vram_deduplication_enabled: false
+  estimated_reclaimed_mb: 0
+  
+  # NVIDIA-specific settings
+  nvidia_settings:
+    persistence_mode: true
+    power_limit_pct: 80           # Conservative power
+    mps_enabled: false            # Multi-Process Service
+    cuda_mps_pipe_directory: /tmp/nvidia-mps
+  
+  confidence: 0.85
+  rationale:
+    vram_cap: "8GB VRAM with 70% cap for headroom"
+    batch_size: "Batch 16 optimized for Ada Lovelace (CC 8.9)"
+    thermal: "Standard NVIDIA thresholds: 80°C cooldown"
+    scheduling: "Round-robin for fair multi-tenant sharing"
+  
+  notes:
+    - "CUDA 12.3 supports flash attention 2"
+    - "TensorRT recommended for inference optimization"
+    - "FP8 compute available for supported models"
+
+---
+
+# =============================================================================
+# NVIDIA GeForce RTX 4070 (8 GB VRAM) - Aggressive Mode
+# =============================================================================
+
+nvidia_rtx_4070_8gb_aggressive:
+  gpu_spec:
+    vendor: nvidia
+    model: "NVIDIA GeForce RTX 4070"
+    vram_total_mb: 8192
+    vram_free_mb: 7500
+    driver: "545.23.08"
+    cuda_version: "12.3"
+    compute_capability: "8.9"
+    num_sm: 46
+  
+  mode: aggressive
+  per_process_vram_cap_mb: 7372   # 90% of total
+  recommended_batch_size: 32      # Large batches for throughput
+  tensor_chunk_size_mb: 128
+  
+  cooldown_threshold_c: 83
+  resume_threshold_c: 70
+  
+  fair_scheduling_policy: priority_weighted
+  max_concurrent_gpu_processes: 2
+  
+  preemptive_throttle:
+    enabled: true
+    throttle_pct: 30
+    grace_period_s: 3
+  
+  vram_deduplication_enabled: true
+  estimated_reclaimed_mb: 1229    # ~15% of 8GB
+  
+  nvidia_settings:
+    persistence_mode: true
+    power_limit_pct: 100          # Full power
+    mps_enabled: true             # Enable MPS for multi-process
+    cuda_mps_pipe_directory: /tmp/nvidia-mps
+    ecc_enabled: false            # Disable ECC for consumer cards
+  
+  confidence: 0.88
+  rationale:
+    vram_cap: "Aggressive 90% VRAM utilization"
+    batch_size: "Batch 32 with CUDA MPS for maximum throughput"
+    thermal: "Extended thermal headroom: 83°C cooldown"
+    dedup: "VRAM deduplication enabled: ~1.2GB reclaimable"
+  
+  notes:
+    - "Enable MPS for concurrent CUDA contexts"
+    - "Use gradient checkpointing for large models"
+    - "Consider bf16 mixed precision for training"
+
+---
+
+# =============================================================================
+# NVIDIA A10 (24 GB VRAM) - Data Center Configuration
+# =============================================================================
+# Target: NVIDIA data center GPU
+# Use case: Production inference, training
+
+nvidia_a10_24gb_safe:
+  gpu_spec:
+    vendor: nvidia
+    model: "NVIDIA A10"
+    vram_total_mb: 24576
+    vram_free_mb: 23000
+    driver: "535.154.05"
+    cuda_version: "12.2"
+    compute_capability: "8.6"
+    num_sm: 72
+    pci_bandwidth: "16 GT/s"
+    thermal_limits:
+      throttle_c: 90
+      shutdown_c: 98
+  
+  mode: safe
+  per_process_vram_cap_mb: 18432  # 75% of total
+  recommended_batch_size: 64      # Large batches for data center
+  tensor_chunk_size_mb: 128
+  
+  cooldown_threshold_c: 85
+  resume_threshold_c: 75
+  
+  fair_scheduling_policy: round_robin
+  max_concurrent_gpu_processes: 4
+  
+  preemptive_throttle:
+    enabled: false
+    throttle_pct: 40
+    grace_period_s: 5
+  
+  vram_deduplication_enabled: true
+  estimated_reclaimed_mb: 3686    # ~15% of 24GB
+  
+  nvidia_settings:
+    persistence_mode: true
+    power_limit_pct: 80
+    mps_enabled: true
+    ecc_enabled: true             # Enable ECC for data center
+    compute_mode: default
+  
+  confidence: 0.92
+  rationale:
+    vram_cap: "Data center GPU with 75% cap for reliability"
+    batch_size: "Batch 64 for high-throughput inference"
+    thermal: "Data center thermals with 85°C cooldown"
+    dedup: "VRAM dedup enabled: ~3.6GB reclaimable"
+  
+  notes:
+    - "A10 optimized for inference workloads"
+    - "Supports vGPU for multi-tenant scenarios"
+    - "TensorRT inference recommended"
+
+---
+
+# =============================================================================
+# AMD Radeon RX 7900 XTX (24 GB VRAM) - Safe Mode
+# =============================================================================
+# Target: AMD flagship consumer GPU
+# Use case: ML development, gaming, professional workloads
+
+amd_rx7900xtx_24gb_safe:
+  gpu_spec:
+    vendor: amd
+    model: "AMD Radeon RX 7900 XTX"
+    vram_total_mb: 24576
+    vram_free_mb: 23500
+    driver: "23.40.2"
+    compute_capability: "gfx1100"
+    pci_bandwidth: "16 GT/s"
+  
+  mode: safe
+  per_process_vram_cap_mb: 18432  # 75% of total
+  recommended_batch_size: 48      # Moderate for ROCm
+  tensor_chunk_size_mb: 96
+  
+  cooldown_threshold_c: 82        # AMD has higher thermal tolerance
+  resume_threshold_c: 68
+  
+  fair_scheduling_policy: round_robin
+  max_concurrent_gpu_processes: 3
+  
+  preemptive_throttle:
+    enabled: false
+    throttle_pct: 50
+    grace_period_s: 5
+  
+  vram_deduplication_enabled: true
+  estimated_reclaimed_mb: 3686
+  
+  # AMD-specific settings
+  amd_settings:
+    hip_visible_devices: "0"
+    rocm_gpu_id: 0
+    hsa_enable_sdma: true
+  
+  confidence: 0.80
+  rationale:
+    vram_cap: "24GB VRAM with conservative 75% cap"
+    batch_size: "Batch 48 for ROCm workloads"
+    thermal: "AMD thermal threshold: 82°C cooldown"
+    scheduling: "Round-robin for multi-workload environments"
+  
+  notes:
+    - "ROCm support required for ML workloads"
+    - "PyTorch ROCm builds available for training"
+    - "Monitor HBM temperature separately"
+
+---
+
+# =============================================================================
+# Generic Low-VRAM GPU (2-4 GB) - Conservative Mode
+# =============================================================================
+# Target: Older or entry-level GPUs
+# Use case: Light inference, development testing
+
+generic_low_vram_safe:
+  gpu_spec:
+    vendor: unknown
+    model: "Generic GPU"
+    vram_total_mb: 4096
+    vram_free_mb: 3500
+  
+  mode: safe
+  per_process_vram_cap_mb: 2048   # 50% cap - very conservative
+  recommended_batch_size: 4       # Minimal batches
+  tensor_chunk_size_mb: 32
+  
+  cooldown_threshold_c: 78
+  resume_threshold_c: 60
+  
+  fair_scheduling_policy: time_slice
+  max_concurrent_gpu_processes: 1
+  
+  preemptive_throttle:
+    enabled: false
+    throttle_pct: 60
+    grace_period_s: 10
+  
+  vram_deduplication_enabled: false
+  estimated_reclaimed_mb: 0
+  
+  confidence: 0.50
+  rationale:
+    vram_cap: "Limited VRAM requires 50% conservative cap"
+    batch_size: "Minimal batch (4) to prevent OOM"
+    thermal: "Conservative thermal limits for unknown GPU"
+    note: "Consider CPU-only inference for large models"
+  
+  notes:
+    - "May need to offload to CPU for larger models"
+    - "Gradient checkpointing highly recommended"
+    - "Consider quantized models (INT8, INT4)"

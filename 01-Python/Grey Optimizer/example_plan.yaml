@@ -1,0 +1,242 @@
+# Grey GPU Optimizer - Example Optimization Plans
+# ================================================
+#
+# This file contains example optimization plans for different GPU configurations.
+# Use these as templates or references when creating custom configurations.
+#
+# Usage:
+#   Copy relevant sections to ~/.grey_optimizer/gpu_plan.yaml
+#   Or use: grey-gpu-opt plan --mode [safe|aggressive]
+#
+# Note: All plans operate in dry-run mode by default for safety.
+
+# ==============================================================================
+# Intel Integrated GPU (6GB shared memory)
+# ==============================================================================
+
+intel_6gb_safe:
+  mode: safe
+  per_process_vram_cap_mb: 3072          # 50% of 6GB
+  recommended_batch_size: 4
+  tensor_chunk_size_mb: 64
+  cooldown_threshold_c: 75               # Intel runs hotter
+  resume_threshold_c: 60
+  fair_scheduling_policy: round_robin
+  preemptive_throttle:
+    enabled: false
+    throttle_pct: 50
+    grace_period_s: 5
+  vram_deduplication_enabled: false      # Too small for meaningful dedup
+  estimated_reclaimed_mb: 0
+  confidence: 0.65
+  rationale:
+    vram_cap: "Small shared VRAM (6GB): using 50% to prevent OOM and leave room for system"
+    batch_size: "Intel GPU: reduced batch to 4 (prefer CPU fallback for large models)"
+    tensor_chunk: "Chunk size 64MB for conservative memory patterns"
+    thermal: "Intel GPU: tighter thermal limits (75°C / 60°C)"
+    scheduling: "Round-robin scheduling for fair resource sharing"
+    throttle: "Preemptive throttle disabled in safe mode"
+    dedup: "VRAM dedup disabled (requires >=8GB VRAM)"
+  notes:
+    - "Intel integrated GPUs share memory with system RAM"
+    - "Consider CPU fallback for models larger than 2GB"
+    - "Thermal limits are conservative due to shared cooling"
+
+intel_6gb_aggressive:
+  mode: aggressive
+  per_process_vram_cap_mb: 4096          # 67% of 6GB
+  recommended_batch_size: 8
+  tensor_chunk_size_mb: 96
+  cooldown_threshold_c: 80
+  resume_threshold_c: 65
+  fair_scheduling_policy: priority_weighted
+  preemptive_throttle:
+    enabled: true
+    throttle_pct: 30
+    grace_period_s: 3
+  vram_deduplication_enabled: false
+  estimated_reclaimed_mb: 0
+  confidence: 0.60
+  rationale:
+    vram_cap: "Aggressive mode: using 67% of 6GB shared VRAM"
+    batch_size: "Intel GPU: batch 8 for aggressive throughput"
+    tensor_chunk: "Chunk size 96MB for aggressive mode"
+    thermal: "Intel GPU: raised limits (80°C / 65°C)"
+    scheduling: "Priority-weighted scheduling for maximum throughput"
+    throttle: "Preemptive throttle enabled at 30% with 3s grace period"
+    dedup: "VRAM dedup disabled (too small for meaningful savings)"
+  notes:
+    - "Monitor system memory when using aggressive mode"
+    - "May cause system slowdown if system RAM is constrained"
+
+# ==============================================================================
+# NVIDIA RTX (8GB dedicated VRAM)
+# ==============================================================================
+
+nvidia_8gb_safe:
+  mode: safe
+  per_process_vram_cap_mb: 5632          # 70% of 8GB
+  recommended_batch_size: 16
+  tensor_chunk_size_mb: 96
+  cooldown_threshold_c: 80
+  resume_threshold_c: 65
+  fair_scheduling_policy: round_robin
+  preemptive_throttle:
+    enabled: false
+    throttle_pct: 50
+    grace_period_s: 5
+  vram_deduplication_enabled: true
+  estimated_reclaimed_mb: 800            # ~10% typical duplication
+  confidence: 0.80
+  rationale:
+    vram_cap: "Medium VRAM (8GB): using 70% for safe headroom"
+    batch_size: "CUDA available: batch size 16 with tensor fusion enabled"
+    tensor_chunk: "Chunk size 96MB for safe mode"
+    thermal: "NVIDIA: cooldown at 80°C, resume at 65°C"
+    scheduling: "Round-robin scheduling for fair resource sharing"
+    throttle: "Preemptive throttle disabled in safe mode"
+    dedup: "VRAM dedup enabled: estimated 800MB reclaimable"
+  notes:
+    - "CUDA tensor fusion enabled for better throughput"
+    - "VRAM deduplication active for common layer patterns"
+
+nvidia_8gb_aggressive:
+  mode: aggressive
+  per_process_vram_cap_mb: 7168          # 90% of 8GB
+  recommended_batch_size: 32
+  tensor_chunk_size_mb: 128
+  cooldown_threshold_c: 83
+  resume_threshold_c: 70
+  fair_scheduling_policy: priority_weighted
+  preemptive_throttle:
+    enabled: true
+    throttle_pct: 30
+    grace_period_s: 3
+  vram_deduplication_enabled: true
+  estimated_reclaimed_mb: 1200           # 15% with aggressive dedup
+  confidence: 0.85
+  rationale:
+    vram_cap: "Medium VRAM (8GB): using 90% for maximum utilization"
+    batch_size: "CUDA available: batch size 32 for aggressive throughput"
+    tensor_chunk: "Chunk size 128MB for 256-bit bus"
+    thermal: "NVIDIA: standard limits (83°C / 70°C)"
+    scheduling: "Priority-weighted scheduling for maximum throughput"
+    throttle: "Preemptive throttle enabled at 30% with 3s grace period"
+    dedup: "VRAM dedup enabled: estimated 1200MB reclaimable"
+  notes:
+    - "Monitor VRAM closely to avoid OOM"
+    - "Aggressive deduplication may increase CPU overhead"
+    - "Suitable for single-model inference workloads"
+
+# ==============================================================================
+# NVIDIA Professional (24GB dedicated VRAM)
+# ==============================================================================
+
+nvidia_24gb_safe:
+  mode: safe
+  per_process_vram_cap_mb: 18432         # 75% of 24GB
+  recommended_batch_size: 64
+  tensor_chunk_size_mb: 128
+  cooldown_threshold_c: 80
+  resume_threshold_c: 65
+  fair_scheduling_policy: round_robin
+  preemptive_throttle:
+    enabled: false
+    throttle_pct: 50
+    grace_period_s: 5
+  vram_deduplication_enabled: true
+  estimated_reclaimed_mb: 2400           # 10% typical duplication
+  confidence: 0.88
+  rationale:
+    vram_cap: "Large VRAM (24GB): using 75% for optimal throughput"
+    batch_size: "Batch size 64 based on 24GB VRAM (scaled 1.2x for high SM count)"
+    tensor_chunk: "Chunk size 128MB for high bandwidth"
+    thermal: "NVIDIA: cooldown at 80°C, resume at 65°C"
+    scheduling: "Round-robin scheduling for fair resource sharing"
+    throttle: "Preemptive throttle disabled in safe mode"
+    dedup: "VRAM dedup enabled: estimated 2400MB reclaimable"
+  notes:
+    - "Can handle large language models (7B-13B parameters)"
+    - "Consider multi-GPU for 30B+ models"
+
+nvidia_24gb_aggressive:
+  mode: aggressive
+  per_process_vram_cap_mb: 21504         # 90% of 24GB
+  recommended_batch_size: 128
+  tensor_chunk_size_mb: 256
+  cooldown_threshold_c: 83
+  resume_threshold_c: 70
+  fair_scheduling_policy: priority_weighted
+  preemptive_throttle:
+    enabled: true
+    throttle_pct: 30
+    grace_period_s: 3
+  vram_deduplication_enabled: true
+  estimated_reclaimed_mb: 3600           # 15% with aggressive scanning
+  confidence: 0.90
+  rationale:
+    vram_cap: "Large VRAM (24GB): using 90% for aggressive throughput"
+    batch_size: "Batch size 128 for maximum throughput"
+    tensor_chunk: "Chunk size 256MB for high bandwidth with tensor fusion"
+    thermal: "NVIDIA: standard limits (83°C / 70°C)"
+    scheduling: "Priority-weighted scheduling for maximum throughput"
+    throttle: "Preemptive throttle enabled at 30% with 3s grace period"
+    dedup: "VRAM dedup enabled: estimated 3600MB reclaimable"
+  notes:
+    - "Maximum throughput mode for batch inference"
+    - "Monitor thermals during sustained load"
+    - "Ideal for model serving with high request volume"
+
+# ==============================================================================
+# AMD RDNA (12GB dedicated VRAM)
+# ==============================================================================
+
+amd_12gb_safe:
+  mode: safe
+  per_process_vram_cap_mb: 8448          # 70% of 12GB
+  recommended_batch_size: 24             # Slightly reduced for AMD
+  tensor_chunk_size_mb: 96
+  cooldown_threshold_c: 82
+  resume_threshold_c: 68
+  fair_scheduling_policy: round_robin
+  preemptive_throttle:
+    enabled: false
+    throttle_pct: 50
+    grace_period_s: 5
+  vram_deduplication_enabled: true
+  estimated_reclaimed_mb: 1200
+  confidence: 0.75
+  rationale:
+    vram_cap: "Medium VRAM (12GB): using 70%"
+    batch_size: "AMD GPU: batch 24, adjusted for memory management"
+    tensor_chunk: "Chunk size 96MB for safe mode"
+    thermal: "AMD GPU: cooldown at 82°C, resume at 68°C"
+    scheduling: "Round-robin scheduling for fair resource sharing"
+    throttle: "Preemptive throttle disabled in safe mode"
+    dedup: "VRAM dedup enabled: estimated 1200MB reclaimable"
+  notes:
+    - "ROCm support required for full functionality"
+    - "Some CUDA-only models may need porting"
+
+# ==============================================================================
+# Configuration Overrides
+# ==============================================================================
+# 
+# To apply custom overrides, create:
+#   /etc/grey_optimizer/gpu_config.yaml (system-wide)
+#   ~/.config/grey_optimizer/gpu_config.yaml (per-user)
+#
+# Example overrides:
+#
+# overrides:
+#   thermal:
+#     cooldown_threshold_c: 78
+#     resume_threshold_c: 62
+#   scheduling:
+#     policy: strict_priority
+#   dedup:
+#     enabled: true
+#     scan_interval_s: 60
+#   logging:
+#     level: DEBUG
+#     json_output: true

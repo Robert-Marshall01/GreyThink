@@ -1,0 +1,19 @@
+[Unit]
+Description=Grey Optimizer Periodic Enforcement Refresh
+Documentation=https://github.com/grey-optimizer/grey-optimizer
+
+[Timer]
+# Start 1 minute after boot
+OnBootSec=1min
+
+# Then run every 5 minutes
+OnUnitActiveSec=5min
+
+# Randomize start time slightly to avoid thundering herd
+RandomizedDelaySec=30
+
+# Run immediately if we missed the last scheduled time
+Persistent=true
+
+[Install]
+WantedBy=timers.target

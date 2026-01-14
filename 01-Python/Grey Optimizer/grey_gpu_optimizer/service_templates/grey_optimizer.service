@@ -1,0 +1,63 @@
+[Unit]
+Description=Grey GPU Optimizer Daemon
+Documentation=https://github.com/grey-optimizer/grey_gpu_optimizer
+After=network.target graphical.target nvidia-persistenced.service
+Wants=nvidia-persistenced.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+# Working directory for artifact storage
+WorkingDirectory=/var/lib/grey_optimizer
+
+# Main daemon command with safe defaults
+ExecStart=/usr/bin/python3 -m grey_gpu_optimizer.daemon \
+    --interval 30 \
+    --dry-run \
+    --log-level INFO
+
+# Reload configuration on SIGHUP
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Graceful shutdown
+ExecStop=/bin/kill -TERM $MAINPID
+TimeoutStopSec=30
+
+# Restart policy
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=3
+StartLimitIntervalSec=300
+
+# Environment variables
+Environment="GREY_CONFIG_DIR=/etc/grey_optimizer"
+Environment="GREY_LOG_DIR=/var/log/grey_optimizer"
+Environment="GREY_ARTIFACTS_DIR=/var/lib/grey_optimizer/artifacts"
+Environment="PYTHONUNBUFFERED=1"
+
+# Security hardening
+NoNewPrivileges=false
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=true
+ProtectKernelTunables=false
+ProtectControlGroups=false
+
+# Allow access to GPU devices
+DeviceAllow=/dev/nvidia*
+DeviceAllow=/dev/dri/*
+DeviceAllow=/dev/kfd
+
+# Resource limits
+MemoryLimit=512M
+CPUQuota=25%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=grey-gpu-opt
+
+[Install]
+WantedBy=multi-user.target

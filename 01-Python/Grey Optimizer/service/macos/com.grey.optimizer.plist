@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Grey Optimizer - macOS Launch Daemon
+  
+  Install to: /Library/LaunchDaemons/com.grey.optimizer.plist
+  
+  Commands:
+    Load:   sudo launchctl load /Library/LaunchDaemons/com.grey.optimizer.plist
+    Unload: sudo launchctl unload /Library/LaunchDaemons/com.grey.optimizer.plist
+    Status: sudo launchctl list | grep grey
+-->
+<plist version="1.0">
+<dict>
+    <!-- Service identifier -->
+    <key>Label</key>
+    <string>com.grey.optimizer</string>
+    
+    <!-- Human-readable description (macOS 10.10+) -->
+    <key>Comment</key>
+    <string>Grey Optimizer - Resource Optimization Daemon</string>
+    
+    <!-- Program to execute -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/grey-optimizer/venv/bin/python</string>
+        <string>-m</string>
+        <string>grey_optimizer.daemon</string>
+        <string>--immediate</string>
+    </array>
+    
+    <!-- Working directory -->
+    <key>WorkingDirectory</key>
+    <string>/opt/grey-optimizer</string>
+    
+    <!-- Environment variables -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>GREY_OPTIMIZER_CONFIG</key>
+        <string>/etc/grey-optimizer/config.yaml</string>
+        <key>GREY_OPTIMIZER_LOG_LEVEL</key>
+        <string>INFO</string>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+        <key>PATH</key>
+        <string>/opt/grey-optimizer/venv/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+    
+    <!-- Start immediately when loaded -->
+    <key>RunAtLoad</key>
+    <true/>
+    
+    <!-- Keep the daemon running -->
+    <key>KeepAlive</key>
+    <dict>
+        <!-- Restart if it exits with non-zero -->
+        <key>SuccessfulExit</key>
+        <false/>
+        
+        <!-- Restart if it crashes -->
+        <key>Crashed</key>
+        <true/>
+    </dict>
+    
+    <!-- Throttle restarts -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    
+    <!-- Log output -->
+    <key>StandardOutPath</key>
+    <string>/var/log/grey-optimizer/daemon.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>/var/log/grey-optimizer/daemon.error.log</string>
+    
+    <!-- Process settings -->
+    <key>ProcessType</key>
+    <string>Background</string>
+    
+    <!-- Nice value (lower priority) -->
+    <key>Nice</key>
+    <integer>5</integer>
+    
+    <!-- Resource limits -->
+    <key>HardResourceLimits</key>
+    <dict>
+        <key>NumberOfFiles</key>
+        <integer>65535</integer>
+    </dict>
+    
+    <key>SoftResourceLimits</key>
+    <dict>
+        <key>NumberOfFiles</key>
+        <integer>65535</integer>
+    </dict>
+    
+    <!-- Session type -->
+    <key>SessionCreate</key>
+    <false/>
+    
+    <!-- Sandboxing - disabled to allow system modifications -->
+    <key>EnablePressuredExit</key>
+    <false/>
+</dict>
+</plist>
