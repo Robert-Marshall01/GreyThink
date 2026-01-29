@@ -1,0 +1,75 @@
+name:                grey-sdk
+version:             1.0.0
+github:              "grey/grey-multi-tenant"
+license:             MIT
+author:              "Grey Team"
+maintainer:          "team@grey.io"
+copyright:           "2024 Grey"
+
+extra-source-files:
+- README.md
+- CHANGELOG.md
+
+synopsis:            Grey Multi-Tenant SDK for Haskell
+category:            Network
+description:         Please see the README on GitHub at <https://github.com/grey/grey-multi-tenant#readme>
+
+dependencies:
+- base >= 4.14 && < 5
+- text >= 1.2 && < 2.1
+- containers >= 0.6 && < 0.7
+- bytestring >= 0.10 && < 0.12
+- transformers >= 0.5 && < 0.7
+- mtl >= 2.2 && < 2.4
+- time >= 1.9 && < 1.13
+
+# gRPC dependencies - uncomment when integrating with grpc-haskell
+# - grpc-haskell >= 0.1.0
+# - proto-lens >= 0.7
+# - proto-lens-runtime >= 0.7
+
+ghc-options:
+- -Wall
+- -Wcompat
+- -Widentities
+- -Wincomplete-record-updates
+- -Wincomplete-uni-patterns
+- -Wmissing-export-lists
+- -Wmissing-home-modules
+- -Wpartial-fields
+- -Wredundant-constraints
+
+library:
+  source-dirs: src
+  exposed-modules:
+  - Grey
+  - Grey.Client
+  - Grey.Config.Options
+  - Grey.Error.Codes
+  - Grey.Error.GreyError
+  - Grey.Error.Result
+  - Grey.GRPC.Client
+  - Grey.GRPC.AuthService
+  - Grey.GRPC.UserService
+  - Grey.GRPC.ProjectsService
+  - Grey.GRPC.QueryService
+  - Grey.GRPC.MutationService
+  - Grey.Domain.AuthClient
+  - Grey.Domain.UserClient
+  - Grey.Domain.ProjectsClient
+  - Grey.Domain.QueryClient
+  - Grey.Domain.MutationClient
+
+tests:
+  grey-sdk-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - grey-sdk
+    - hspec >= 2.7 && < 2.12
+    - hspec-discover >= 2.7 && < 2.12
+    - QuickCheck >= 2.14 && < 2.15

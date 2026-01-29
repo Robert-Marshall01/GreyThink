@@ -1,0 +1,732 @@
+{
+  "$schema": "./integration_manifest.schema.json",
+  "version": "1.0.0",
+  "description": "Grey Multi-Tenant Platform - SDK Integration Manifest",
+  "generatedAt": "2026-01-26T00:00:00Z",
+  "adapterCore": {
+    "source": "packages/grey-adapters/src/adapter_core.ts",
+    "domains": ["auth", "user", "projects", "query", "mutation"]
+  },
+  "transports": {
+    "httpJson": {
+      "gateway": "packages/grey-adapters/src/http_gateway/index.ts",
+      "baseUrl": "/api/v1",
+      "contentType": "application/json"
+    },
+    "grpc": {
+      "service": "packages/grey-adapters/src/grpc_service/index.ts",
+      "protoPath": "packages/grey-adapters/src/grpc_service/proto",
+      "packages": [
+        "grey.auth.v1",
+        "grey.user.v1",
+        "grey.projects.v1",
+        "grey.query.v1",
+        "grey.mutation.v1"
+      ]
+    }
+  },
+  "domainSurface": {
+    "auth": {
+      "operations": [
+        { "name": "login", "method": "POST", "path": "/auth/login", "grpc": "AuthService/Login" },
+        { "name": "logout", "method": "POST", "path": "/auth/logout", "grpc": "AuthService/Logout" },
+        { "name": "refresh", "method": "POST", "path": "/auth/refresh", "grpc": "AuthService/Refresh" }
+      ]
+    },
+    "user": {
+      "operations": [
+        { "name": "getCurrentUser", "method": "GET", "path": "/users/me", "grpc": "UserService/GetCurrentUser" },
+        { "name": "getUser", "method": "GET", "path": "/users/:userId", "grpc": "UserService/GetUser" }
+      ]
+    },
+    "projects": {
+      "operations": [
+        { "name": "listProjects", "method": "GET", "path": "/projects", "grpc": "ProjectsService/ListProjects" },
+        { "name": "createProject", "method": "POST", "path": "/projects", "grpc": "ProjectsService/CreateProject" }
+      ]
+    },
+    "query": {
+      "operations": [
+        { "name": "query", "method": "POST", "path": "/query", "grpc": "QueryService/Query" }
+      ]
+    },
+    "mutation": {
+      "operations": [
+        { "name": "mutate", "method": "POST", "path": "/mutate", "grpc": "MutationService/Mutate" }
+      ]
+    }
+  },
+  "ecosystems": [
+    {
+      "id": "grey-angular",
+      "name": "Angular",
+      "package": "packages/grey-angular",
+      "transport": "http-json",
+      "language": "typescript",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "lib": {
+            "services": ["auth.service.ts", "user.service.ts", "projects.service.ts", "query.service.ts", "mutation.service.ts"],
+            "models": ["*.model.ts"],
+            "interceptors": ["auth.interceptor.ts", "error.interceptor.ts"]
+          }
+        }
+      },
+      "entrypoint": "src/public-api.ts"
+    },
+    {
+      "id": "grey-react",
+      "name": "React",
+      "package": "packages/grey-react",
+      "transport": "http-json",
+      "language": "typescript",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "hooks": ["useAuth.ts", "useUser.ts", "useProjects.ts", "useQuery.ts", "useMutation.ts"],
+          "client": ["grey-client.ts"],
+          "types": ["*.ts"]
+        }
+      },
+      "entrypoint": "src/index.ts"
+    },
+    {
+      "id": "grey-vue",
+      "name": "Vue",
+      "package": "packages/grey-vue",
+      "transport": "http-json",
+      "language": "typescript",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "composables": ["useAuth.ts", "useUser.ts", "useProjects.ts", "useQuery.ts", "useMutation.ts"],
+          "client": ["grey-client.ts"],
+          "types": ["*.ts"]
+        }
+      },
+      "entrypoint": "src/index.ts"
+    },
+    {
+      "id": "grey-svelte",
+      "name": "Svelte",
+      "package": "packages/grey-svelte",
+      "transport": "http-json",
+      "language": "typescript",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "stores": ["auth.ts", "user.ts", "projects.ts"],
+          "client": ["grey-client.ts"]
+        }
+      },
+      "entrypoint": "src/index.ts"
+    },
+    {
+      "id": "grey-solid",
+      "name": "Solid",
+      "package": "packages/grey-solid",
+      "transport": "http-json",
+      "language": "typescript",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "hooks": ["createAuth.ts", "createUser.ts", "createProjects.ts"],
+          "client": ["grey-client.ts"]
+        }
+      },
+      "entrypoint": "src/index.ts"
+    },
+    {
+      "id": "grey-qwik",
+      "name": "Qwik",
+      "package": "packages/grey-qwik",
+      "transport": "http-json",
+      "language": "typescript",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "hooks": ["use-auth.ts", "use-user.ts", "use-projects.ts"],
+          "client": ["grey-client.ts"]
+        }
+      },
+      "entrypoint": "src/index.ts"
+    },
+    {
+      "id": "grey-preact",
+      "name": "Preact",
+      "package": "packages/grey-preact",
+      "transport": "http-json",
+      "language": "typescript",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "hooks": ["useAuth.ts", "useUser.ts", "useProjects.ts"],
+          "client": ["grey-client.ts"]
+        }
+      },
+      "entrypoint": "src/index.ts"
+    },
+    {
+      "id": "grey-lit",
+      "name": "Lit",
+      "package": "packages/grey-lit",
+      "transport": "http-json",
+      "language": "typescript",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "controllers": ["auth-controller.ts", "user-controller.ts", "projects-controller.ts"],
+          "client": ["grey-client.ts"]
+        }
+      },
+      "entrypoint": "src/index.ts"
+    },
+    {
+      "id": "grey-stencil",
+      "name": "Stencil",
+      "package": "packages/grey-stencil",
+      "transport": "http-json",
+      "language": "typescript",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "services": ["auth-service.ts", "user-service.ts", "projects-service.ts"],
+          "client": ["grey-client.ts"]
+        }
+      },
+      "entrypoint": "src/index.ts"
+    },
+    {
+      "id": "grey-vanilla",
+      "name": "Vanilla JS",
+      "package": "packages/grey-vanilla",
+      "transport": "http-json",
+      "language": "typescript",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "client": ["grey-client.ts"],
+          "domain": ["auth-client.ts", "user-client.ts", "projects-client.ts", "query-client.ts", "mutation-client.ts"]
+        }
+      },
+      "entrypoint": "src/index.ts"
+    },
+    {
+      "id": "grey-next",
+      "name": "Next.js",
+      "package": "packages/grey-next",
+      "transport": "http-json",
+      "language": "typescript",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "client": ["grey-client.ts"],
+          "server": ["grey-server.ts"],
+          "hooks": ["useAuth.ts", "useUser.ts", "useProjects.ts"]
+        }
+      },
+      "entrypoint": "src/index.ts"
+    },
+    {
+      "id": "grey-nuxt",
+      "name": "Nuxt",
+      "package": "packages/grey-nuxt",
+      "transport": "http-json",
+      "language": "typescript",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "composables": ["useAuth.ts", "useUser.ts", "useProjects.ts"],
+          "plugins": ["grey.ts"]
+        }
+      },
+      "entrypoint": "src/module.ts"
+    },
+    {
+      "id": "grey-remix",
+      "name": "Remix",
+      "package": "packages/grey-remix",
+      "transport": "http-json",
+      "language": "typescript",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "client": ["grey-client.ts"],
+          "server": ["grey-server.ts"],
+          "hooks": ["useAuth.ts", "useUser.ts"]
+        }
+      },
+      "entrypoint": "src/index.ts"
+    },
+    {
+      "id": "grey-astro",
+      "name": "Astro",
+      "package": "packages/grey-astro",
+      "transport": "http-json",
+      "language": "typescript",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "client": ["grey-client.ts"],
+          "integration": ["index.ts"]
+        }
+      },
+      "entrypoint": "src/index.ts"
+    },
+    {
+      "id": "grey-sveltekit",
+      "name": "SvelteKit",
+      "package": "packages/grey-sveltekit",
+      "transport": "http-json",
+      "language": "typescript",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "lib": {
+            "stores": ["auth.ts", "user.ts", "projects.ts"],
+            "server": ["grey-server.ts"]
+          }
+        }
+      },
+      "entrypoint": "src/lib/index.ts"
+    },
+    {
+      "id": "grey-node",
+      "name": "Node.js",
+      "package": "packages/grey-node",
+      "transport": "grpc",
+      "language": "typescript",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "grpc": ["auth-service.ts", "user-service.ts", "projects-service.ts", "query-service.ts", "mutation-service.ts"],
+          "domain": ["auth-client.ts", "user-client.ts", "projects-client.ts", "query-client.ts", "mutation-client.ts"]
+        }
+      },
+      "entrypoint": "src/index.ts"
+    },
+    {
+      "id": "grey-react-native",
+      "name": "React Native",
+      "package": "packages/grey-react-native",
+      "transport": "http-json",
+      "language": "typescript",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "hooks": ["useAuth.ts", "useUser.ts", "useProjects.ts"],
+          "client": ["grey-client.ts"],
+          "storage": ["secure-storage.ts"]
+        }
+      },
+      "entrypoint": "src/index.ts"
+    },
+    {
+      "id": "grey-expo",
+      "name": "Expo",
+      "package": "packages/grey-expo",
+      "transport": "http-json",
+      "language": "typescript",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "hooks": ["useAuth.ts", "useUser.ts", "useProjects.ts"],
+          "client": ["grey-client.ts"],
+          "storage": ["expo-storage.ts"]
+        }
+      },
+      "entrypoint": "src/index.ts"
+    },
+    {
+      "id": "grey-electron",
+      "name": "Electron",
+      "package": "packages/grey-electron",
+      "transport": "grpc",
+      "language": "typescript",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "main": ["grey-main.ts"],
+          "renderer": ["grey-renderer.ts"],
+          "preload": ["grey-preload.ts"]
+        }
+      },
+      "entrypoint": "src/index.ts"
+    },
+    {
+      "id": "grey-capacitor",
+      "name": "Capacitor",
+      "package": "packages/grey-capacitor",
+      "transport": "http-json",
+      "language": "typescript",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "client": ["grey-client.ts"],
+          "plugins": ["grey-plugin.ts"],
+          "storage": ["capacitor-storage.ts"]
+        }
+      },
+      "entrypoint": "src/index.ts"
+    },
+    {
+      "id": "grey-flutter",
+      "name": "Flutter",
+      "package": "packages/grey-flutter",
+      "transport": "grpc",
+      "language": "dart",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "lib": {
+          "src": {
+            "grpc": ["auth_service.dart", "user_service.dart", "projects_service.dart"],
+            "domain": ["auth_client.dart", "user_client.dart", "projects_client.dart"]
+          }
+        }
+      },
+      "entrypoint": "lib/grey_flutter.dart"
+    },
+    {
+      "id": "grey-swift",
+      "name": "Swift",
+      "package": "packages/grey-swift",
+      "transport": "grpc",
+      "language": "swift",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "Sources": {
+          "GreySDK": {
+            "GRPC": ["AuthService.swift", "UserService.swift", "ProjectsService.swift"],
+            "Domain": ["AuthClient.swift", "UserClient.swift", "ProjectsClient.swift"]
+          }
+        }
+      },
+      "entrypoint": "Sources/GreySDK/GreySDK.swift"
+    },
+    {
+      "id": "grey-kotlin",
+      "name": "Kotlin",
+      "package": "packages/grey-kotlin",
+      "transport": "grpc",
+      "language": "kotlin",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src/main/kotlin/com/grey/sdk": {
+          "grpc": ["AuthService.kt", "UserService.kt", "ProjectsService.kt"],
+          "domain": ["AuthClient.kt", "UserClient.kt", "ProjectsClient.kt"]
+        }
+      },
+      "entrypoint": "src/main/kotlin/com/grey/sdk/GreySDK.kt"
+    },
+    {
+      "id": "grey-java",
+      "name": "Java",
+      "package": "packages/grey-java",
+      "transport": "grpc",
+      "language": "java",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src/main/java/com/grey/sdk": {
+          "grpc": ["AuthService.java", "UserService.java", "ProjectsService.java"],
+          "domain": ["AuthClient.java", "UserClient.java", "ProjectsClient.java"]
+        }
+      },
+      "entrypoint": "src/main/java/com/grey/sdk/GreySDK.java"
+    },
+    {
+      "id": "grey-go",
+      "name": "Go",
+      "package": "packages/grey-go",
+      "transport": "grpc",
+      "language": "go",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "pkg": {
+          "grpc": ["auth_service.go", "user_service.go", "projects_service.go"],
+          "domain": ["auth_client.go", "user_client.go", "projects_client.go"]
+        }
+      },
+      "entrypoint": "pkg/grey/client.go"
+    },
+    {
+      "id": "grey-rust",
+      "name": "Rust",
+      "package": "packages/grey-rust",
+      "transport": "grpc",
+      "language": "rust",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "grpc": ["auth_service.rs", "user_service.rs", "projects_service.rs"],
+          "domain": ["auth_client.rs", "user_client.rs", "projects_client.rs"]
+        }
+      },
+      "entrypoint": "src/lib.rs"
+    },
+    {
+      "id": "grey-python",
+      "name": "Python",
+      "package": "packages/grey-python",
+      "transport": "grpc",
+      "language": "python",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "grey_sdk": {
+          "grpc": ["auth_service.py", "user_service.py", "projects_service.py"],
+          "domain": ["auth_client.py", "user_client.py", "projects_client.py"]
+        }
+      },
+      "entrypoint": "grey_sdk/__init__.py"
+    },
+    {
+      "id": "grey-ruby",
+      "name": "Ruby",
+      "package": "packages/grey-ruby",
+      "transport": "grpc",
+      "language": "ruby",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "lib": {
+          "grey": {
+            "grpc": ["auth_service.rb", "user_service.rb", "projects_service.rb"],
+            "domain": ["auth_client.rb", "user_client.rb", "projects_client.rb"]
+          }
+        }
+      },
+      "entrypoint": "lib/grey.rb"
+    },
+    {
+      "id": "grey-php",
+      "name": "PHP",
+      "package": "packages/grey-php",
+      "transport": "http-json",
+      "language": "php",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "Http": ["AuthClient.php", "UserClient.php", "ProjectsClient.php"],
+          "Domain": ["AuthService.php", "UserService.php", "ProjectsService.php"]
+        }
+      },
+      "entrypoint": "src/GreySDK.php"
+    },
+    {
+      "id": "grey-csharp",
+      "name": "C#",
+      "package": "packages/grey-dotnet/Grey.MultiTenant.Core",
+      "transport": "grpc",
+      "language": "csharp",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "Grpc": ["AuthService.cs", "UserService.cs", "ProjectsService.cs"],
+          "Domain": ["AuthClient.cs", "UserClient.cs", "ProjectsClient.cs"]
+        }
+      },
+      "entrypoint": "src/GreyClient.cs"
+    },
+    {
+      "id": "grey-fsharp",
+      "name": "F#",
+      "package": "packages/grey-fsharp",
+      "transport": "grpc",
+      "language": "fsharp",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "Grpc": ["AuthService.fs", "UserService.fs", "ProjectsService.fs"],
+          "Domain": ["AuthClient.fs", "UserClient.fs", "ProjectsClient.fs"]
+        }
+      },
+      "entrypoint": "src/GreySDK.fs"
+    },
+    {
+      "id": "grey-scala",
+      "name": "Scala",
+      "package": "packages/grey-scala",
+      "transport": "grpc",
+      "language": "scala",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src/main/scala/com/grey/sdk": {
+          "grpc": ["AuthService.scala", "UserService.scala", "ProjectsService.scala"],
+          "domain": ["AuthClient.scala", "UserClient.scala", "ProjectsClient.scala"]
+        }
+      },
+      "entrypoint": "src/main/scala/com/grey/sdk/GreySDK.scala"
+    },
+    {
+      "id": "grey-clojure",
+      "name": "Clojure",
+      "package": "packages/grey-clojure",
+      "transport": "grpc",
+      "language": "clojure",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src/grey": {
+          "grpc": ["auth.clj", "user.clj", "projects.clj"],
+          "domain": ["auth_client.clj", "user_client.clj", "projects_client.clj"]
+        }
+      },
+      "entrypoint": "src/grey/core.clj"
+    },
+    {
+      "id": "grey-elixir",
+      "name": "Elixir",
+      "package": "packages/grey-elixir",
+      "transport": "grpc",
+      "language": "elixir",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "lib": {
+          "grey": {
+            "grpc": ["auth_service.ex", "user_service.ex", "projects_service.ex"],
+            "domain": ["auth_client.ex", "user_client.ex", "projects_client.ex"]
+          }
+        }
+      },
+      "entrypoint": "lib/grey.ex"
+    },
+    {
+      "id": "grey-erlang",
+      "name": "Erlang",
+      "package": "packages/grey-erlang",
+      "transport": "grpc",
+      "language": "erlang",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "grpc": ["grey_grpc_auth.erl", "grey_grpc_user.erl", "grey_grpc_projects.erl"],
+          "domain": ["grey_auth_client.erl", "grey_user_client.erl", "grey_projects_client.erl"]
+        }
+      },
+      "entrypoint": "src/grey.erl"
+    },
+    {
+      "id": "grey-haskell",
+      "name": "Haskell",
+      "package": "packages/grey-haskell",
+      "transport": "grpc",
+      "language": "haskell",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "Grey": {
+            "Grpc": ["Auth.hs", "User.hs", "Projects.hs"],
+            "Domain": ["AuthClient.hs", "UserClient.hs", "ProjectsClient.hs"]
+          }
+        }
+      },
+      "entrypoint": "src/Grey.hs"
+    },
+    {
+      "id": "grey-ocaml",
+      "name": "OCaml",
+      "package": "packages/grey-ocaml",
+      "transport": "grpc",
+      "language": "ocaml",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "lib": {
+          "grpc": ["auth_service.ml", "user_service.ml", "projects_service.ml"],
+          "domain": ["auth_client.ml", "user_client.ml", "projects_client.ml"]
+        }
+      },
+      "entrypoint": "lib/grey.ml"
+    },
+    {
+      "id": "grey-cpp",
+      "name": "C++",
+      "package": "packages/grey-cpp",
+      "transport": "grpc",
+      "language": "cpp",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "grpc": ["auth_service.cpp", "user_service.cpp", "projects_service.cpp"],
+          "domain": ["auth_client.cpp", "user_client.cpp", "projects_client.cpp"]
+        },
+        "include/grey": {
+          "grpc": ["auth_service.hpp", "user_service.hpp", "projects_service.hpp"],
+          "domain": ["auth_client.hpp", "user_client.hpp", "projects_client.hpp"]
+        }
+      },
+      "entrypoint": "include/grey/grey.hpp"
+    },
+    {
+      "id": "grey-c",
+      "name": "C",
+      "package": "packages/grey-c",
+      "transport": "http-json",
+      "language": "c",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": ["grey_auth.c", "grey_user.c", "grey_projects.c", "grey_query.c", "grey_mutation.c"],
+        "include": ["grey.h", "grey_auth.h", "grey_user.h", "grey_projects.h"]
+      },
+      "entrypoint": "include/grey.h"
+    },
+    {
+      "id": "grey-zig",
+      "name": "Zig",
+      "package": "packages/grey-zig",
+      "transport": "grpc",
+      "language": "zig",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "grpc": ["auth_service.zig", "user_service.zig", "projects_service.zig"],
+          "domain": ["auth_client.zig", "user_client.zig", "projects_client.zig"]
+        }
+      },
+      "entrypoint": "src/grey.zig"
+    },
+    {
+      "id": "grey-mojo",
+      "name": "Mojo",
+      "package": "packages/grey-mojo",
+      "transport": "grpc",
+      "language": "mojo",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "src": {
+          "grpc": ["auth_service.mojo", "user_service.mojo", "projects_service.mojo"],
+          "domain": ["auth_client.mojo", "user_client.mojo", "projects_client.mojo"]
+        }
+      },
+      "entrypoint": "src/grey.mojo"
+    },
+    {
+      "id": "grey-objc",
+      "name": "Objective-C",
+      "package": "packages/grey-objc",
+      "transport": "grpc",
+      "language": "objective-c",
+      "domainClients": ["auth", "user", "projects", "query", "mutation"],
+      "fileStructure": {
+        "GreySDK": {
+          "GRPC": ["GREYAuthService.m", "GREYUserService.m", "GREYProjectsService.m"],
+          "Domain": ["GREYAuthClient.m", "GREYUserClient.m", "GREYProjectsClient.m"]
+        }
+      },
+      "entrypoint": "GreySDK/GreySDK.h"
+    }
+  ],
+  "errorShape": {
+    "type": "object",
+    "properties": {
+      "code": {
+        "type": "string",
+        "enum": ["unauthorized", "forbidden", "not_found", "validation_error", "network_error", "timeout", "server_error", "unknown"]
+      },
+      "message": {
+        "type": "string"
+      },
+      "details": {
+        "type": "string"
+      }
+    },
+    "required": ["code", "message", "details"]
+  }
+}

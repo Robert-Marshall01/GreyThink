@@ -1,0 +1,111 @@
+@using Grey.MultiTenant.Blazor.Stores
+@inject AuthStore AuthStore
+@inject UserStore UserStore
+@inject ProjectsStore ProjectsStore
+@implements IAsyncDisposable
+
+@* 
+    GreyProvider is a headless component that initializes Grey Multi-Tenant stores
+    and provides cascading context for child components.
+*@
+
+<CascadingValue Value="AuthStore" Name="AuthStore">
+    <CascadingValue Value="UserStore" Name="UserStore">
+        <CascadingValue Value="ProjectsStore" Name="ProjectsStore">
+            @if (_initialized)
+            {
+                @ChildContent
+            }
+            else if (LoadingContent != null)
+            {
+                @LoadingContent
+            }
+        </CascadingValue>
+    </CascadingValue>
+</CascadingValue>
+
+@code {
+    private bool _initialized;
+    private bool _disposed;
+
+    /// <summary>
+    /// The content to render when stores are initialized.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// Optional content to render while initializing.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? LoadingContent { get; set; }
+
+    /// <summary>
+    /// Whether to automatically initialize auth state on mount.
+    /// </summary>
+    [Parameter]
+    public bool AutoInitialize { get; set; } = true;
+
+    /// <summary>
+    /// Whether to automatically fetch user on auth.
+    /// </summary>
+    [Parameter]
+    public bool AutoFetchUser { get; set; } = true;
+
+    /// <summary>
+    /// Event callback when initialization is complete.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnInitialized { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AutoInitialize)
+        {
+            await InitializeAsync();
+        }
+        else
+        {
+            _initialized = true;
+        }
+    }
+
+    /// <summary>
+    /// Manually initializes the stores.
+    /// </summary>
+    public async Task InitializeAsync()
+    {
+        if (_initialized) return;
+
+        try
+        {
+            // Initialize auth state
+            await AuthStore.InitializeAsync();
+
+            // Fetch user if authenticated and auto-fetch is enabled
+            if (AuthStore.IsAuthenticated && AutoFetchUser)
+            {
+                await UserStore.FetchUserAsync();
+            }
+
+            _initialized = true;
+            await OnInitialized.InvokeAsync();
+            StateHasChanged();
+        }
+        catch
+        {
+            // Continue even if initialization fails
+            _initialized = true;
+            StateHasChanged();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        // Stores are disposed by DI container
+        await Task.CompletedTask;
+    }
+}

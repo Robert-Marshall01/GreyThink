@@ -1,0 +1,23 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#1d4ed8"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="512" height="512" rx="80" fill="url(#bgGradient)"/>
+  
+  <!-- Diamond shape -->
+  <path d="M256 80 L432 256 L256 432 L80 256 Z" 
+        fill="none" 
+        stroke="white" 
+        stroke-width="24" 
+        stroke-linejoin="round"/>
+  
+  <!-- Inner diamond -->
+  <path d="M256 160 L352 256 L256 352 L160 256 Z" 
+        fill="white" 
+        opacity="0.9"/>
+</svg>

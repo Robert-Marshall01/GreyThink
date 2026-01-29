@@ -1,0 +1,46 @@
+{
+  "name": "@grey/nuxt",
+  "version": "0.1.0",
+  "description": "Grey Multi-Tenant Nuxt bindings with SSR support",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@grey/adapters": "workspace:*",
+    "@grey/core-client": "workspace:*",
+    "@grey/vue": "workspace:*"
+  },
+  "peerDependencies": {
+    "nuxt": "^3.9.0",
+    "vue": "^3.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "nuxt": "^3.9.0",
+    "vue": "^3.4.0",
+    "vue-tsc": "^1.8.0",
+    "typescript": "^5.3.0",
+    "rimraf": "^5.0.0"
+  },
+  "files": ["dist"],
+  "license": "MIT"
+}

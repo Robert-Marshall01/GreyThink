@@ -1,0 +1,74 @@
+# Grey Multi-Tenant Platform - systemd Service Definition
+#
+# Installation:
+#   sudo cp grey-multitenant.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable grey-multitenant
+#   sudo systemctl start grey-multitenant
+#
+# Commands:
+#   sudo systemctl start grey-multitenant
+#   sudo systemctl stop grey-multitenant
+#   sudo systemctl restart grey-multitenant
+#   sudo systemctl status grey-multitenant
+#   sudo journalctl -u grey-multitenant -f
+
+[Unit]
+Description=Grey Multi-Tenant Platform
+Documentation=https://github.com/grey/multi-tenant
+After=network-online.target postgresql.service
+Wants=network-online.target postgresql.service
+
+[Service]
+Type=simple
+User=grey
+Group=grey
+ExecStart=/usr/local/bin/grey-core-api
+ExecReload=/bin/kill -HUP $MAINPID
+WorkingDirectory=/etc/grey-multitenant
+EnvironmentFile=-/etc/grey-multitenant/.env
+Environment="GREY_CONFIG_PATH=/etc/grey-multitenant/.env"
+
+# Restart configuration
+Restart=on-failure
+RestartSec=5
+StartLimitInterval=60
+StartLimitBurst=3
+
+# Logging
+StandardOutput=append:/var/log/grey-multitenant/grey-multitenant.log
+StandardError=append:/var/log/grey-multitenant/grey-multitenant.error.log
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+# Allow binding to privileged ports (80, 443) if needed
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Timeout
+TimeoutStartSec=30
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

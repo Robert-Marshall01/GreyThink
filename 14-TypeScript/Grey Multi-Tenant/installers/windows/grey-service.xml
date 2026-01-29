@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Grey Multi-Tenant Platform - Windows Service Configuration
+  
+  This file is used with WinSW (Windows Service Wrapper) as an alternative
+  to native Windows service registration.
+  
+  Usage:
+    1. Download WinSW from https://github.com/winsw/winsw/releases
+    2. Rename winsw.exe to grey-core-api-service.exe
+    3. Place this file alongside as grey-core-api-service.xml
+    4. Run: grey-core-api-service.exe install
+-->
+<service>
+  <id>GreyMultiTenant</id>
+  <name>Grey Multi-Tenant Platform</name>
+  <description>Grey Multi-Tenant operational platform backend service providing HTTP and gRPC endpoints.</description>
+  
+  <executable>%BASE%\bin\grey-core-api.exe</executable>
+  <arguments></arguments>
+  
+  <workingdirectory>%BASE%</workingdirectory>
+  
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>8</keepFiles>
+  </log>
+  
+  <onfailure action="restart" delay="5 sec"/>
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  
+  <resetfailure>1 day</resetfailure>
+  
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>true</delayedAutoStart>
+  
+  <env name="GREY_CONFIG_PATH" value="%BASE%\config\.env"/>
+  
+  <!-- PostgreSQL dependency removed - app now retries connection -->
+  <!-- <depend>postgresql-x64-15</depend> -->
+  
+  <priority>Normal</priority>
+  
+  <stopparentprocessfirst>false</stopparentprocessfirst>
+  <stoptimeout>30 sec</stoptimeout>
+</service>

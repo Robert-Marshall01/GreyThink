@@ -1,0 +1,42 @@
+// Grey Multi-Tenant Platform
+// User Service
+
+syntax = "proto3";
+
+package grey.user.v1;
+
+option java_multiple_files = true;
+option java_package = "com.grey.user.v1";
+option go_package = "github.com/grey-systems/grey-go/user/v1;userv1";
+
+import "common.proto";
+
+// User service for user operations.
+service UserService {
+  // Get the current authenticated user.
+  rpc GetCurrentUser(grey.common.v1.Empty) returns (User);
+  
+  // Get a user by ID.
+  rpc GetUser(GetUserRequest) returns (User);
+}
+
+// Get user request.
+message GetUserRequest {
+  // User ID to retrieve
+  string user_id = 1;
+}
+
+// User data.
+message User {
+  // Unique user identifier
+  string user_id = 1;
+  
+  // User email address
+  string email = 2;
+  
+  // Display name
+  optional string display_name = 3;
+  
+  // Tenant ID the user belongs to
+  optional string tenant_id = 4;
+}

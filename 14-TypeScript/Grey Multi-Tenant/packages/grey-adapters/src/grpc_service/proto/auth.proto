@@ -1,0 +1,60 @@
+// Grey Multi-Tenant Platform
+// Authentication Service
+
+syntax = "proto3";
+
+package grey.auth.v1;
+
+option java_multiple_files = true;
+option java_package = "com.grey.auth.v1";
+option go_package = "github.com/grey-systems/grey-go/auth/v1;authv1";
+
+import "common.proto";
+
+// Authentication service for login, logout, and token refresh.
+service AuthService {
+  // Login with email and password.
+  rpc Login(LoginRequest) returns (LoginResponse);
+  
+  // Logout current session.
+  rpc Logout(LogoutRequest) returns (grey.common.v1.Empty);
+  
+  // Refresh authentication token.
+  rpc Refresh(RefreshRequest) returns (LoginResponse);
+}
+
+// Login request.
+message LoginRequest {
+  // User email address
+  string email = 1;
+  
+  // User password
+  string password = 2;
+  
+  // Optional tenant ID for multi-tenant login
+  optional string tenant_id = 3;
+}
+
+// Login response with tokens.
+message LoginResponse {
+  // JWT access token
+  string access_token = 1;
+  
+  // Refresh token for obtaining new access tokens
+  string refresh_token = 2;
+  
+  // Token expiration time in seconds
+  int64 expires_in = 3;
+}
+
+// Logout request.
+message LogoutRequest {
+  // Optional access token to invalidate
+  optional string access_token = 1;
+}
+
+// Token refresh request.
+message RefreshRequest {
+  // Refresh token to exchange for new access token
+  string refresh_token = 1;
+}

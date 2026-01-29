@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Grey Multi-Tenant Platform - launchd Service Definition
+  
+  This plist file configures the Grey Multi-Tenant service for macOS.
+  
+  Installation:
+    System-wide: /Library/LaunchDaemons/com.grey.multitenant.plist
+    User-level:  ~/Library/LaunchAgents/com.grey.multitenant.plist
+  
+  Commands:
+    Load:   sudo launchctl load /Library/LaunchDaemons/com.grey.multitenant.plist
+    Unload: sudo launchctl unload /Library/LaunchDaemons/com.grey.multitenant.plist
+    Start:  sudo launchctl start com.grey.multitenant
+    Stop:   sudo launchctl stop com.grey.multitenant
+-->
+<plist version="1.0">
+<dict>
+    <!-- Service identifier -->
+    <key>Label</key>
+    <string>com.grey.multitenant</string>
+    
+    <!-- Executable and arguments -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Applications/GreyMultiTenant.app/Contents/MacOS/grey-core-api</string>
+    </array>
+    
+    <!-- Working directory -->
+    <key>WorkingDirectory</key>
+    <string>/etc/grey-multitenant</string>
+    
+    <!-- Environment variables -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>GREY_CONFIG_PATH</key>
+        <string>/etc/grey-multitenant/.env</string>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+    
+    <!-- Start at boot -->
+    <key>RunAtLoad</key>
+    <true/>
+    
+    <!-- Restart on crash -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+    
+    <!-- Throttle restarts -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    
+    <!-- Logging -->
+    <key>StandardOutPath</key>
+    <string>/var/log/grey-multitenant/grey-multitenant.log</string>
+    <key>StandardErrorPath</key>
+    <string>/var/log/grey-multitenant/grey-multitenant.error.log</string>
+    
+    <!-- Run as dedicated user (for system install) -->
+    <key>UserName</key>
+    <string>_grey</string>
+    <key>GroupName</key>
+    <string>staff</string>
+    
+    <!-- Resource limits -->
+    <key>SoftResourceLimits</key>
+    <dict>
+        <key>NumberOfFiles</key>
+        <integer>65536</integer>
+    </dict>
+    <key>HardResourceLimits</key>
+    <dict>
+        <key>NumberOfFiles</key>
+        <integer>65536</integer>
+    </dict>
+    
+    <!-- Nice level -->
+    <key>Nice</key>
+    <integer>0</integer>
+    
+    <!-- Process type -->
+    <key>ProcessType</key>
+    <string>Interactive</string>
+</dict>
+</plist>

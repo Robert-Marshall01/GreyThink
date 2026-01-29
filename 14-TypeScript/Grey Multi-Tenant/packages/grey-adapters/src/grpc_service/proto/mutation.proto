@@ -1,0 +1,45 @@
+// Grey Multi-Tenant Platform
+// Mutation Service
+
+syntax = "proto3";
+
+package grey.mutation.v1;
+
+option java_multiple_files = true;
+option java_package = "com.grey.mutation.v1";
+option go_package = "github.com/grey-systems/grey-go/mutation/v1;mutationv1";
+
+import "google/protobuf/struct.proto";
+
+// Mutation service for executing mutations.
+service MutationService {
+  // Execute a mutation.
+  rpc Mutate(MutationRequest) returns (MutationResponse);
+}
+
+// Mutation request.
+message MutationRequest {
+  // Name of the mutation to execute
+  string mutation_name = 1;
+  
+  // Mutation parameters as key-value pairs
+  google.protobuf.Struct parameters = 2;
+  
+  // Optional tenant ID
+  optional string tenant_id = 3;
+}
+
+// Mutation response.
+message MutationResponse {
+  // Whether the mutation succeeded
+  bool success = 1;
+  
+  // Optional message describing the result
+  optional string message = 2;
+  
+  // Optional result data
+  optional google.protobuf.Struct data = 3;
+  
+  // Optional metadata about the mutation execution
+  optional google.protobuf.Struct metadata = 4;
+}

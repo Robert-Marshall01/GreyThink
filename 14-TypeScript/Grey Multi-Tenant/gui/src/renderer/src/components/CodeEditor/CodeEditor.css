@@ -1,0 +1,46 @@
+/**
+ * Code Editor Styles
+ */
+.code-editor {
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  overflow: hidden;
+}
+
+.code-editor-textarea {
+  width: 100%;
+  padding: var(--space-3);
+  font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Consolas', monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  border: none;
+  resize: vertical;
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  tab-size: 2;
+}
+
+.code-editor-textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-primary) inset;
+}
+
+.code-editor-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.code-editor-textarea:read-only {
+  background-color: var(--bg-secondary);
+  cursor: default;
+}
+
+/* Language-specific styling */
+.code-editor--json .code-editor-textarea {
+  /* JSON specific */
+}
+
+.code-editor--graphql .code-editor-textarea {
+  /* GraphQL specific */
+}

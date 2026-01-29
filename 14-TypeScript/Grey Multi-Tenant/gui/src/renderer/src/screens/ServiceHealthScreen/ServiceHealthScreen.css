@@ -1,0 +1,354 @@
+/**
+ * Service Health Screen Styles
+ */
+
+.service-health-screen {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.screen-header {
+  margin-bottom: 24px;
+}
+
+.screen-header h1 {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a1a);
+  margin: 0 0 8px 0;
+}
+
+.screen-header p {
+  color: var(--text-secondary, #666);
+  margin: 0;
+}
+
+/* Overall Status Banner */
+.overall-status {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 24px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.overall-status .status-icon {
+  font-size: 48px;
+}
+
+.overall-status .status-text h2 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+}
+
+.overall-status .status-text p {
+  margin: 0;
+  opacity: 0.85;
+}
+
+.overall-status .timestamp {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-top: 8px !important;
+}
+
+.overall-healthy {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+.overall-degraded {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+}
+
+.overall-unhealthy {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+}
+
+.overall-checking {
+  background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+  color: white;
+}
+
+/* Actions Bar */
+.actions-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--primary-color, #3b82f6);
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover, #2563eb);
+}
+
+.btn-success {
+  background: #10b981;
+  color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+  background: #059669;
+}
+
+.btn-danger {
+  background: #ef4444;
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+/* Services Grid */
+.services-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.service-card {
+  background: var(--card-bg, white);
+  border-radius: 12px;
+  padding: 20px;
+  border-left: 4px solid;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.service-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.service-healthy {
+  border-color: #10b981;
+}
+
+.service-unhealthy {
+  border-color: #ef4444;
+}
+
+.service-unknown {
+  border-color: #6b7280;
+}
+
+.service-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.service-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a1a);
+}
+
+.service-details {
+  font-size: 13px;
+  color: var(--text-secondary, #666);
+}
+
+.service-details p {
+  margin: 4px 0;
+}
+
+.service-response-time {
+  font-family: monospace;
+}
+
+/* Status Badge */
+.status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.status-healthy {
+  background: rgba(16, 185, 129, 0.15);
+  color: #059669;
+}
+
+.status-unhealthy {
+  background: rgba(239, 68, 68, 0.15);
+  color: #dc2626;
+}
+
+.status-stopped {
+  background: rgba(107, 114, 128, 0.15);
+  color: #4b5563;
+}
+
+.status-unknown {
+  background: rgba(107, 114, 128, 0.1);
+  color: #6b7280;
+}
+
+/* Troubleshooting Section */
+.troubleshooting {
+  background: var(--card-bg, white);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 32px;
+  border: 1px solid var(--border-color, #e5e7eb);
+}
+
+.troubleshooting h2 {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  color: var(--text-primary, #1a1a1a);
+}
+
+.troubleshooting-tips {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+}
+
+.tip {
+  padding: 16px;
+  background: var(--bg-secondary, #f9fafb);
+  border-radius: 8px;
+}
+
+.tip h3 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tip p {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: var(--text-secondary, #666);
+}
+
+.tip code {
+  display: block;
+  padding: 8px 12px;
+  background: var(--code-bg, #1f2937);
+  color: var(--code-color, #f9fafb);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  overflow-x: auto;
+}
+
+/* Service Details Table */
+.service-details-table {
+  background: var(--card-bg, white);
+  border-radius: 12px;
+  padding: 24px;
+  border: 1px solid var(--border-color, #e5e7eb);
+}
+
+.service-details-table h2 {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  color: var(--text-primary, #1a1a1a);
+}
+
+.service-details-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.service-details-table th,
+.service-details-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+
+.service-details-table th {
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--text-secondary, #666);
+  background: var(--bg-secondary, #f9fafb);
+}
+
+.service-details-table td {
+  font-size: 14px;
+}
+
+.row-running td {
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.row-stopped td {
+  background: rgba(107, 114, 128, 0.05);
+}
+
+.row-error td {
+  background: rgba(239, 68, 68, 0.05);
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .service-card {
+    background: #1f2937;
+  }
+  
+  .service-header h3 {
+    color: #f9fafb;
+  }
+  
+  .troubleshooting {
+    background: #1f2937;
+    border-color: #374151;
+  }
+  
+  .tip {
+    background: #111827;
+  }
+  
+  .service-details-table {
+    background: #1f2937;
+    border-color: #374151;
+  }
+  
+  .service-details-table th {
+    background: #111827;
+    color: #9ca3af;
+  }
+  
+  .service-details-table th,
+  .service-details-table td {
+    border-color: #374151;
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "@grey/packages",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r build",
+    "build:core": "pnpm --filter @grey/core-client build && pnpm --filter @grey/adapters build",
+    "build:frameworks": "pnpm -r --filter './packages/grey-*' build",
+    "dev": "pnpm -r dev",
+    "clean": "pnpm -r clean",
+    "typecheck": "pnpm -r exec tsc --noEmit"
+  }
+}

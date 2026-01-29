@@ -1,0 +1,105 @@
+/**
+ * Mutation Screen Styles
+ */
+.mutation-screen {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.mutation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-6);
+}
+
+.mutation-header h1 {
+  font-size: 1.5rem;
+  margin-bottom: var(--space-1);
+}
+
+.mutation-header p {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.mutation-warning {
+  padding: var(--space-2) var(--space-3);
+  background-color: rgba(245, 158, 11, 0.1);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--border-radius);
+  color: var(--color-warning);
+  font-size: 0.75rem;
+}
+
+.mutation-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+
+.mutation-input-card,
+.mutation-result-card {
+  width: 100%;
+}
+
+.mutation-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.mutation-execute {
+  margin-top: var(--space-4);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.mutation-error {
+  padding: var(--space-4);
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--color-error);
+  border-radius: var(--border-radius);
+  color: var(--color-error);
+  font-size: 0.875rem;
+}
+
+.mutation-placeholder {
+  padding: var(--space-8);
+  text-align: center;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.mutation-logs h2 {
+  font-size: 1rem;
+  margin-bottom: var(--space-3);
+}
+
+/* Confirmation Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: var(--space-4);
+}
+
+.confirm-modal {
+  width: 100%;
+  max-width: 400px;
+}
+
+.confirm-modal p {
+  margin-bottom: var(--space-4);
+  color: var(--text-secondary);
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}

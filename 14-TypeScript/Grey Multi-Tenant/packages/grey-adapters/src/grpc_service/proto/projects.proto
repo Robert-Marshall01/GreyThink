@@ -1,0 +1,84 @@
+// Grey Multi-Tenant Platform
+// Projects Service
+
+syntax = "proto3";
+
+package grey.projects.v1;
+
+option java_multiple_files = true;
+option java_package = "com.grey.projects.v1";
+option go_package = "github.com/grey-systems/grey-go/projects/v1;projectsv1";
+
+import "common.proto";
+
+// Projects service for project operations.
+service ProjectsService {
+  // List projects with pagination.
+  rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
+  
+  // Create a new project.
+  rpc CreateProject(CreateProjectRequest) returns (Project);
+  
+  // Get a project by ID.
+  rpc GetProject(GetProjectRequest) returns (Project);
+}
+
+// List projects request.
+message ListProjectsRequest {
+  // Maximum number of projects to return
+  int32 limit = 1;
+  
+  // Number of projects to skip
+  int32 offset = 2;
+  
+  // Optional tenant ID filter
+  optional string tenant_id = 3;
+}
+
+// List projects response.
+message ListProjectsResponse {
+  // List of projects
+  repeated Project projects = 1;
+  
+  // Total number of projects available
+  int32 total = 2;
+}
+
+// Create project request.
+message CreateProjectRequest {
+  // Project name
+  string name = 1;
+  
+  // Optional project description
+  optional string description = 2;
+  
+  // Optional tenant ID
+  optional string tenant_id = 3;
+}
+
+// Get project request.
+message GetProjectRequest {
+  // Project ID to retrieve
+  string project_id = 1;
+}
+
+// Project data.
+message Project {
+  // Unique project identifier
+  string project_id = 1;
+  
+  // Project name
+  string name = 2;
+  
+  // Project description
+  optional string description = 3;
+  
+  // Tenant ID the project belongs to
+  optional string tenant_id = 4;
+  
+  // Creation timestamp (ISO 8601)
+  optional string created_at = 5;
+  
+  // Last update timestamp (ISO 8601)
+  optional string updated_at = 6;
+}

@@ -1,0 +1,13 @@
+[project]
+name = "grey-mojo"
+version = "0.0.1"
+description = "Grey Multi-Tenant SDK for Mojo"
+authors = ["Grey Systems"]
+license = "MIT"
+
+[dependencies]
+# Mojo packages would go here
+
+[python-dependencies]
+grpcio = ">=1.60.0"
+grpcio-tools = ">=1.60.0"

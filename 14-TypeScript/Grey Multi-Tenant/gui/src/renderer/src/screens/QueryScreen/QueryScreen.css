@@ -1,0 +1,65 @@
+/**
+ * Query Screen Styles
+ */
+.query-screen {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.query-header {
+  margin-bottom: var(--space-6);
+}
+
+.query-header h1 {
+  font-size: 1.5rem;
+  margin-bottom: var(--space-1);
+}
+
+.query-header p {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.query-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+
+.query-input-card,
+.query-result-card {
+  width: 100%;
+}
+
+.query-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.query-execute {
+  margin-top: var(--space-4);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.query-error {
+  padding: var(--space-4);
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--color-error);
+  border-radius: var(--border-radius);
+  color: var(--color-error);
+  font-size: 0.875rem;
+}
+
+.query-placeholder {
+  padding: var(--space-8);
+  text-align: center;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.query-logs h2 {
+  font-size: 1rem;
+  margin-bottom: var(--space-3);
+}
