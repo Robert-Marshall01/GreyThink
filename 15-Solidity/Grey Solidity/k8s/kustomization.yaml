@@ -1,0 +1,49 @@
+# Grey Solidity - Kustomize Configuration
+# Deploy all resources: kubectl apply -k k8s/
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: grey-solidity
+
+namespace: grey-solidity
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: grey-solidity
+  app.kubernetes.io/managed-by: kustomize
+
+# Resources to deploy
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+# Optional: Include jobs for one-time operations
+# resources:
+#   - jobs/compile-job.yaml
+#   - jobs/test-job.yaml
+#   - jobs/deploy-job.yaml
+
+# Image customization
+images:
+  - name: grey-solidity
+    newName: grey-solidity
+    newTag: "2.0.0"
+
+# Config generation (alternative to manual configmap.yaml)
+# configMapGenerator:
+#   - name: grey-solidity-config
+#     literals:
+#       - NODE_ENV=production
+#       - HARDHAT_NETWORK=localhost
+
+# Secret generation (for development only - use external secrets in production)
+# secretGenerator:
+#   - name: grey-solidity-secrets
+#     literals:
+#       - DEPLOYER_PRIVATE_KEY=your-key-here

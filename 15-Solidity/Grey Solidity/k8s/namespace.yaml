@@ -1,0 +1,9 @@
+# Grey Solidity - Kubernetes Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: grey-solidity
+  labels:
+    app.kubernetes.io/name: grey-solidity
+    app.kubernetes.io/component: namespace
+    environment: production

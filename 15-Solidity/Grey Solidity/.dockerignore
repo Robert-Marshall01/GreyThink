@@ -1,0 +1,58 @@
+# Dependencies
+node_modules/
+.npm
+
+# Build outputs (rebuilt in container)
+artifacts/
+cache/
+coverage/
+coverage.json
+typechain/
+typechain-types/
+
+# Environment files (contain secrets)
+.env
+.env.*
+!.env.example
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation (not needed in container)
+docs/
+
+# Test artifacts
+.nyc_output/
+
+# Docker files (avoid recursive builds)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Kubernetes manifests
+k8s/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Misc
+*.md
+!README.md
+LICENSE
+.editorconfig
+.prettierrc
+.solhint.json
+.eslintrc*

@@ -1,0 +1,41 @@
+# Grey Solidity - Contract Compilation Job
+# Run: kubectl apply -f k8s/jobs/compile-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: grey-compile-contracts
+  namespace: grey-solidity
+  labels:
+    app.kubernetes.io/name: grey-solidity
+    app.kubernetes.io/component: compile-job
+spec:
+  ttlSecondsAfterFinished: 3600  # Clean up after 1 hour
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grey-solidity
+        app.kubernetes.io/component: compile-job
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+      containers:
+        - name: compiler
+          image: grey-solidity:2.0.0
+          command: ["npm", "run", "compile"]
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "4Gi"
+              cpu: "2000m"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL

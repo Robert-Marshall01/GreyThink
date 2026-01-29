@@ -1,0 +1,70 @@
+# Grey Solidity - Kubernetes Services
+apiVersion: v1
+kind: Service
+metadata:
+  name: grey-hardhat-node
+  namespace: grey-solidity
+  labels:
+    app.kubernetes.io/name: grey-solidity
+    app.kubernetes.io/component: hardhat-node
+spec:
+  type: ClusterIP
+  ports:
+    - name: rpc
+      port: 8545
+      targetPort: 8545
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: grey-solidity
+    app.kubernetes.io/component: hardhat-node
+
+---
+# NodePort Service (for external access in development)
+apiVersion: v1
+kind: Service
+metadata:
+  name: grey-hardhat-node-external
+  namespace: grey-solidity
+  labels:
+    app.kubernetes.io/name: grey-solidity
+    app.kubernetes.io/component: hardhat-node
+    app.kubernetes.io/exposure: external
+spec:
+  type: NodePort
+  ports:
+    - name: rpc
+      port: 8545
+      targetPort: 8545
+      nodePort: 30545
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: grey-solidity
+    app.kubernetes.io/component: hardhat-node
+
+---
+# LoadBalancer Service (for cloud deployments)
+# Uncomment when deploying to cloud providers (AWS, GCP, Azure)
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: grey-hardhat-node-lb
+#   namespace: grey-solidity
+#   labels:
+#     app.kubernetes.io/name: grey-solidity
+#     app.kubernetes.io/component: hardhat-node
+#   annotations:
+#     # AWS annotations
+#     # service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+#     # service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+#     # GCP annotations
+#     # cloud.google.com/load-balancer-type: "Internal"
+# spec:
+#   type: LoadBalancer
+#   ports:
+#     - name: rpc
+#       port: 8545
+#       targetPort: 8545
+#       protocol: TCP
+#   selector:
+#     app.kubernetes.io/name: grey-solidity
+#     app.kubernetes.io/component: hardhat-node

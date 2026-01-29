@@ -1,0 +1,44 @@
+# Grey Solidity - Test Runner Job
+# Run: kubectl apply -f k8s/jobs/test-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: grey-run-tests
+  namespace: grey-solidity
+  labels:
+    app.kubernetes.io/name: grey-solidity
+    app.kubernetes.io/component: test-job
+spec:
+  ttlSecondsAfterFinished: 3600  # Clean up after 1 hour
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grey-solidity
+        app.kubernetes.io/component: test-job
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+      containers:
+        - name: test-runner
+          image: grey-solidity:2.0.0
+          command: ["npm", "run", "test"]
+          env:
+            - name: NODE_ENV
+              value: "test"
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1000m"
+            limits:
+              memory: "8Gi"
+              cpu: "4000m"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL

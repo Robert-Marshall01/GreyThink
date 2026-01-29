@@ -1,0 +1,43 @@
+# Grey Solidity - Persistent Volume Claims
+# Use these for persistent storage of artifacts and cache
+# Uncomment the corresponding volume mounts in deployment.yaml
+
+---
+# Artifacts PVC - Store compiled contract artifacts
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grey-artifacts-pvc
+  namespace: grey-solidity
+  labels:
+    app.kubernetes.io/name: grey-solidity
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  # Uncomment and set storage class for your cluster
+  # storageClassName: standard
+  # storageClassName: gp2        # AWS EBS
+  # storageClassName: pd-ssd     # GCP Persistent Disk
+  # storageClassName: managed    # Azure Managed Disk
+
+---
+# Cache PVC - Store Hardhat compilation cache
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grey-cache-pvc
+  namespace: grey-solidity
+  labels:
+    app.kubernetes.io/name: grey-solidity
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 500Mi
+  # storageClassName: standard
