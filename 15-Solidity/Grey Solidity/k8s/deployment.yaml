@@ -1,0 +1,128 @@
+# Grey Solidity - Kubernetes Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grey-hardhat-node
+  namespace: grey-solidity
+  labels:
+    app.kubernetes.io/name: grey-solidity
+    app.kubernetes.io/component: hardhat-node
+    app.kubernetes.io/version: "2.0.0"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # Use Recreate since Hardhat node maintains state
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grey-solidity
+      app.kubernetes.io/component: hardhat-node
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grey-solidity
+        app.kubernetes.io/component: hardhat-node
+        app.kubernetes.io/version: "2.0.0"
+      annotations:
+        prometheus.io/scrape: "false"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      
+      containers:
+        - name: hardhat-node
+          image: grey-solidity:2.0.0
+          imagePullPolicy: IfNotPresent
+          
+          ports:
+            - name: rpc
+              containerPort: 8545
+              protocol: TCP
+          
+          envFrom:
+            - configMapRef:
+                name: grey-solidity-config
+            - secretRef:
+                name: grey-solidity-secrets
+                optional: true
+          
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8545
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8545
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+          
+          volumeMounts:
+            - name: artifacts-cache
+              mountPath: /app/artifacts
+            - name: hardhat-cache
+              mountPath: /app/cache
+      
+      volumes:
+        - name: artifacts-cache
+          emptyDir: {}
+        - name: hardhat-cache
+          emptyDir: {}
+      
+      # Optional: Use persistent volumes for state persistence
+      # volumes:
+      #   - name: artifacts-cache
+      #     persistentVolumeClaim:
+      #       claimName: grey-artifacts-pvc
+      #   - name: hardhat-cache
+      #     persistentVolumeClaim:
+      #       claimName: grey-cache-pvc
+
+---
+# Horizontal Pod Autoscaler (optional, for production workloads)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: grey-hardhat-node-hpa
+  namespace: grey-solidity
+  labels:
+    app.kubernetes.io/name: grey-solidity
+    app.kubernetes.io/component: hardhat-node
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: grey-hardhat-node
+  minReplicas: 1
+  maxReplicas: 1  # Keep at 1 for development node
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80

@@ -1,0 +1,59 @@
+# Grey Solidity - Contract Deployment Job
+# Run: kubectl apply -f k8s/jobs/deploy-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: grey-deploy-contracts
+  namespace: grey-solidity
+  labels:
+    app.kubernetes.io/name: grey-solidity
+    app.kubernetes.io/component: deploy-job
+spec:
+  ttlSecondsAfterFinished: 7200  # Clean up after 2 hours
+  backoffLimit: 1  # Limited retries for deployments
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grey-solidity
+        app.kubernetes.io/component: deploy-job
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+      containers:
+        - name: deployer
+          image: grey-solidity:2.0.0
+          command: 
+            - npx
+            - hardhat
+            - run
+            - scripts/deploy.js
+            - --network
+            - $(NETWORK)
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: NETWORK
+              valueFrom:
+                configMapKeyRef:
+                  name: grey-solidity-config
+                  key: HARDHAT_NETWORK
+                  optional: true
+          envFrom:
+            - secretRef:
+                name: grey-solidity-secrets
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL

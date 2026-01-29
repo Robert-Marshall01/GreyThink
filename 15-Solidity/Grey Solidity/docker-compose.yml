@@ -1,0 +1,141 @@
+# Grey Solidity - Docker Compose Configuration
+# Use: docker-compose up -d
+
+version: "3.9"
+
+services:
+  # ============================================
+  # Hardhat Local Node
+  # ============================================
+  hardhat-node:
+    build:
+      context: .
+      target: development
+    container_name: grey-hardhat-node
+    ports:
+      - "8545:8545"
+    volumes:
+      - ./contracts:/app/contracts:ro
+      - ./scripts:/app/scripts:ro
+      - ./test:/app/test:ro
+      - ./hardhat.config.js:/app/hardhat.config.js:ro
+      - node_modules:/app/node_modules
+      - artifacts:/app/artifacts
+      - cache:/app/cache
+    environment:
+      - NODE_ENV=development
+    networks:
+      - grey-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8545"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # ============================================
+  # Contract Compiler Service
+  # ============================================
+  compiler:
+    build:
+      context: .
+      target: development
+    container_name: grey-compiler
+    volumes:
+      - ./contracts:/app/contracts:ro
+      - ./hardhat.config.js:/app/hardhat.config.js:ro
+      - artifacts:/app/artifacts
+      - cache:/app/cache
+    command: ["npm", "run", "compile"]
+    networks:
+      - grey-network
+    profiles:
+      - tools
+
+  # ============================================
+  # Test Runner Service
+  # ============================================
+  test-runner:
+    build:
+      context: .
+      target: test
+    container_name: grey-test-runner
+    volumes:
+      - ./contracts:/app/contracts:ro
+      - ./test:/app/test:ro
+      - ./hardhat.config.js:/app/hardhat.config.js:ro
+      - artifacts:/app/artifacts
+      - cache:/app/cache
+    environment:
+      - NODE_ENV=test
+    networks:
+      - grey-network
+    depends_on:
+      hardhat-node:
+        condition: service_healthy
+    profiles:
+      - test
+
+  # ============================================
+  # Coverage Runner Service
+  # ============================================
+  coverage:
+    build:
+      context: .
+      target: development
+    container_name: grey-coverage
+    volumes:
+      - ./contracts:/app/contracts:ro
+      - ./test:/app/test:ro
+      - ./hardhat.config.js:/app/hardhat.config.js:ro
+      - ./coverage:/app/coverage
+      - artifacts:/app/artifacts
+      - cache:/app/cache
+    command: ["npm", "run", "test:coverage"]
+    environment:
+      - NODE_ENV=test
+    networks:
+      - grey-network
+    profiles:
+      - coverage
+
+  # ============================================
+  # Deployment Service
+  # ============================================
+  deployer:
+    build:
+      context: .
+      target: development
+    container_name: grey-deployer
+    volumes:
+      - ./contracts:/app/contracts:ro
+      - ./scripts:/app/scripts:ro
+      - ./hardhat.config.js:/app/hardhat.config.js:ro
+      - artifacts:/app/artifacts
+      - cache:/app/cache
+    environment:
+      - NODE_ENV=production
+      - DEPLOYER_PRIVATE_KEY=${DEPLOYER_PRIVATE_KEY:-}
+      - NETWORK=${NETWORK:-localhost}
+    command: ["npx", "hardhat", "run", "scripts/deploy.js", "--network", "${NETWORK:-localhost}"]
+    networks:
+      - grey-network
+    depends_on:
+      hardhat-node:
+        condition: service_healthy
+    profiles:
+      - deploy
+
+networks:
+  grey-network:
+    driver: bridge
+    name: grey-solidity-network
+
+volumes:
+  node_modules:
+    name: grey-node-modules
+  artifacts:
+    name: grey-artifacts
+  cache:
+    name: grey-cache

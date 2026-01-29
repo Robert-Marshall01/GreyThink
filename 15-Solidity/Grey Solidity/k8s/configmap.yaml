@@ -1,0 +1,48 @@
+# Grey Solidity - ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grey-solidity-config
+  namespace: grey-solidity
+  labels:
+    app.kubernetes.io/name: grey-solidity
+    app.kubernetes.io/component: config
+data:
+  NODE_ENV: "production"
+  HARDHAT_NETWORK: "localhost"
+  LOG_LEVEL: "info"
+  # Hardhat configuration
+  hardhat.config.js: |
+    require("@nomicfoundation/hardhat-toolbox");
+    
+    module.exports = {
+      solidity: {
+        compilers: [
+          {
+            version: "0.8.28",
+            settings: {
+              evmVersion: "cancun",
+              viaIR: true,
+              optimizer: {
+                enabled: true,
+                runs: 1,
+              },
+            },
+          },
+        ],
+      },
+      networks: {
+        localhost: {
+          url: "http://127.0.0.1:8545",
+        },
+        hardhat: {
+          chainId: 31337,
+        },
+      },
+      paths: {
+        sources: "./contracts",
+        tests: "./test",
+        cache: "./cache",
+        artifacts: "./artifacts",
+      },
+    };
