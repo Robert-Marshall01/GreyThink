@@ -1,0 +1,30 @@
+{
+  "name": "@grey/flutter",
+  "version": "0.1.0",
+  "description": "Grey Multi-Tenant Flutter Web TypeScript interop layer",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc && pnpm run build:bundle",
+    "build:bundle": "echo 'Bundle for Flutter: dist/grey.js'",
+    "dev": "tsc --watch",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@grey/adapters": "workspace:*",
+    "@grey/core-client": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "rimraf": "^5.0.0"
+  },
+  "files": ["dist"],
+  "license": "MIT"
+}

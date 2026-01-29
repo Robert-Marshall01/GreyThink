@@ -1,0 +1,125 @@
+/**
+ * Projects Screen Styles
+ */
+.projects-screen {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.projects-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-6);
+}
+
+.projects-header h1 {
+  font-size: 1.5rem;
+  margin-bottom: var(--space-1);
+}
+
+.projects-header p {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.projects-error {
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--color-error);
+  border-radius: var(--border-radius);
+  color: var(--color-error);
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: var(--space-4);
+}
+
+.create-modal {
+  width: 100%;
+  max-width: 400px;
+}
+
+.create-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.create-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+/* Projects List */
+.projects-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.project-card {
+  transition: box-shadow var(--transition-fast);
+}
+
+.project-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.project-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.project-info h3 {
+  font-size: 1.125rem;
+  margin-bottom: var(--space-1);
+}
+
+.project-info p {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.project-meta {
+  display: flex;
+  gap: var(--space-4);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.project-id {
+  font-family: monospace;
+}
+
+.project-actions {
+  display: flex;
+  gap: var(--space-2);
+  border-top: 1px solid var(--border-color);
+  padding-top: var(--space-3);
+  margin-top: var(--space-1);
+}
+
+/* States */
+.loading-state,
+.empty-state {
+  text-align: center;
+  padding: var(--space-10);
+  color: var(--text-muted);
+}
+
+.empty-state p {
+  margin-bottom: var(--space-4);
+}

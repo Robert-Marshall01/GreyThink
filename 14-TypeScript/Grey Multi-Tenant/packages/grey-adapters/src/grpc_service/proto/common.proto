@@ -1,0 +1,60 @@
+// Grey Multi-Tenant Platform
+// Common message definitions
+
+syntax = "proto3";
+
+package grey.common.v1;
+
+option java_multiple_files = true;
+option java_package = "com.grey.common.v1";
+option go_package = "github.com/grey-systems/grey-go/common/v1;commonv1";
+
+// Normalized error type used across all services.
+message Error {
+  // Error code (e.g., "unauthorized", "not_found", "validation_error")
+  string code = 1;
+  
+  // Human-readable error message
+  string message = 2;
+  
+  // Additional error details (e.g., field name for validation errors)
+  string details = 3;
+}
+
+// Pagination request parameters.
+message PaginationRequest {
+  // Maximum number of items to return
+  int32 limit = 1;
+  
+  // Number of items to skip
+  int32 offset = 2;
+}
+
+// Pagination response metadata.
+message PaginationResponse {
+  // Total number of items available
+  int32 total = 1;
+  
+  // Number of items returned
+  int32 count = 2;
+  
+  // Offset used in the request
+  int32 offset = 3;
+}
+
+// Generic key-value metadata.
+message Metadata {
+  map<string, string> values = 1;
+}
+
+// Timestamp wrapper.
+message Timestamp {
+  // Unix timestamp in seconds
+  int64 seconds = 1;
+  
+  // Additional nanoseconds
+  int32 nanos = 2;
+}
+
+// Empty message for void responses.
+message Empty {}

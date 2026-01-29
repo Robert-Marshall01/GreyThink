@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Grey.MultiTenant.Maui</RootNamespace>
+    <Version>1.0.0</Version>
+    <Authors>Grey</Authors>
+    <Description>MAUI support for Grey Multi-Tenant system</Description>
+    <UseMaui>false</UseMaui>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- MAUI Essentials for SecureStorage -->
+    <PackageReference Include="Microsoft.Maui.Essentials" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Grey.MultiTenant.Core\Grey.MultiTenant.Core.csproj" />
+    <ProjectReference Include="..\Grey.MultiTenant.Http\Grey.MultiTenant.Http.csproj" />
+    <ProjectReference Include="..\Grey.MultiTenant.Blazor\Grey.MultiTenant.Blazor.csproj" />
+  </ItemGroup>
+
+</Project>

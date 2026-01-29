@@ -1,0 +1,7 @@
+%{
+  "castore": {:hex, :castore, "1.0.5"},
+  "grpc": {:hex, :grpc, "0.7.0"},
+  "jason": {:hex, :jason, "1.4.1"},
+  "mint": {:hex, :mint, "1.5.2"},
+  "protobuf": {:hex, :protobuf, "0.12.0"}
+}

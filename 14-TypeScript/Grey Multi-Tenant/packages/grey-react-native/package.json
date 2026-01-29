@@ -1,0 +1,41 @@
+{
+  "name": "@grey/react-native",
+  "version": "0.1.0",
+  "description": "Grey Multi-Tenant React Native bindings",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@grey/adapters": "workspace:*",
+    "@grey/core-client": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "react-native": "^0.73.0"
+  },
+  "peerDependenciesMeta": {
+    "@react-native-async-storage/async-storage": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "react": "^18.2.0",
+    "react-native": "^0.73.0",
+    "@types/react": "^18.2.0",
+    "typescript": "^5.3.0",
+    "rimraf": "^5.0.0"
+  },
+  "files": ["dist"],
+  "license": "MIT"
+}

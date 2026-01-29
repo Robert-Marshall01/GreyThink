@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Grey.MultiTenant.Blazor</RootNamespace>
+    <Version>1.0.0</Version>
+    <Authors>Grey</Authors>
+    <Description>Blazor components and stores for Grey Multi-Tenant system</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Grey.MultiTenant.Core\Grey.MultiTenant.Core.csproj" />
+    <ProjectReference Include="..\Grey.MultiTenant.Http\Grey.MultiTenant.Http.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,27 @@
+{
+  "name": "grey-multi-tenant",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Grey Multi-Tenant - A multi-tenant operational platform",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "dev:api": "cd services/grey-core-api && go run main.go",
+    "dev:app": "cd apps/grey-reference-app && pnpm run dev",
+    "dev:local": "concurrently \"pnpm run dev:api\" \"pnpm run dev:app\"",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "generate": "turbo run generate",
+    "clean": "turbo run clean"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "turbo": "^2.0.0",
+    "typescript": "^5.3.0"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

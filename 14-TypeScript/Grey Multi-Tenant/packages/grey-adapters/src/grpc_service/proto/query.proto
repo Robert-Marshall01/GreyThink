@@ -1,0 +1,39 @@
+// Grey Multi-Tenant Platform
+// Query Service
+
+syntax = "proto3";
+
+package grey.query.v1;
+
+option java_multiple_files = true;
+option java_package = "com.grey.query.v1";
+option go_package = "github.com/grey-systems/grey-go/query/v1;queryv1";
+
+import "google/protobuf/struct.proto";
+
+// Query service for executing queries.
+service QueryService {
+  // Execute a query.
+  rpc Query(QueryRequest) returns (QueryResponse);
+}
+
+// Query request.
+message QueryRequest {
+  // Name of the query to execute
+  string query_name = 1;
+  
+  // Query parameters as key-value pairs
+  google.protobuf.Struct parameters = 2;
+  
+  // Optional tenant ID
+  optional string tenant_id = 3;
+}
+
+// Query response.
+message QueryResponse {
+  // Query result data
+  google.protobuf.Struct data = 1;
+  
+  // Optional metadata about the query execution
+  optional google.protobuf.Struct metadata = 2;
+}

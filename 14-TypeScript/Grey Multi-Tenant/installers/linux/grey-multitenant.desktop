@@ -1,0 +1,34 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Grey Multi-Tenant Backend
+GenericName=Multi-Tenant Platform Backend
+Comment=Grey Multi-Tenant operational platform providing HTTP and gRPC services
+Exec=/usr/local/bin/grey-launcher
+Icon=/usr/share/icons/hicolor/256x256/apps/grey-multitenant.png
+Terminal=true
+Categories=Development;Network;WebDevelopment;
+Keywords=api;server;multi-tenant;grpc;rest;
+StartupNotify=true
+StartupWMClass=grey-multitenant
+Actions=start;stop;restart;status;
+
+[Desktop Action start]
+Name=Start Service
+Exec=pkexec systemctl start grey-multitenant
+Icon=media-playback-start
+
+[Desktop Action stop]
+Name=Stop Service
+Exec=pkexec systemctl stop grey-multitenant
+Icon=media-playback-stop
+
+[Desktop Action restart]
+Name=Restart Service
+Exec=pkexec systemctl restart grey-multitenant
+Icon=view-refresh
+
+[Desktop Action status]
+Name=View Status
+Exec=x-terminal-emulator -e "systemctl status grey-multitenant; read -p 'Press Enter to close'"
+Icon=dialog-information

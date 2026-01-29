@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Grey Multi-Tenant GUI
+GenericName=Multi-Tenant Platform
+Comment=Desktop application for Grey Multi-Tenant Platform
+Exec=/opt/grey-multitenant-gui/grey-multitenant-gui.AppImage %U
+Icon=/opt/grey-multitenant-gui/icons/grey-gui.png
+Terminal=false
+Categories=Utility;Development;Network;
+Keywords=multi-tenant;platform;gui;desktop;
+StartupNotify=true
+StartupWMClass=grey-multitenant-gui
+MimeType=x-scheme-handler/grey;

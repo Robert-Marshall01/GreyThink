@@ -1,0 +1,22 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# Framework adapters
+# - packages/grey-adapters      - Framework-agnostic core
+# - packages/grey-react         - React hooks
+# - packages/grey-vue           - Vue 3 composables
+# - packages/grey-svelte        - Svelte stores
+# - packages/grey-angular       - Angular services
+
+# Frontend apps
+# - apps/grey-reference-app     - Reference SvelteKit implementation
+# - apps/grey-react-app         - React (Vite) placeholder
+# - apps/grey-nextjs-app        - Next.js placeholder
+# - apps/grey-vue-app           - Vue 3 (Vite) placeholder
+# - apps/grey-nuxt-app          - Nuxt 3 placeholder
+# - apps/grey-angular-app       - Angular placeholder
+# - apps/grey-remix-app         - Remix placeholder
+# - apps/grey-astro-app         - Astro placeholder
+# - apps/grey-solid-app         - SolidJS placeholder
+# - apps/grey-qwik-app          - Qwik placeholder

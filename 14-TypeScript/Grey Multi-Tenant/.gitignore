@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+/services/grey-core-api/tmp/
+/services/grey-core-api/bin/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+*.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+coverage/
+*.out
+
+# Turbo
+.turbo/
+
+# Generated files (keep tracked but ignore local changes)
+# packages/grey-core-client/src/generated/
+
+# Docker
+.docker/
+
+# Temporary files
+tmp/
+temp/

@@ -1,0 +1,119 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Grey Integration Manifest Schema",
+  "description": "Schema for the Grey Multi-Tenant Platform SDK integration manifest",
+  "type": "object",
+  "required": ["version", "adapterCore", "transports", "domainSurface", "ecosystems", "errorShape"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "description": {
+      "type": "string"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "adapterCore": {
+      "type": "object",
+      "required": ["source", "domains"],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "domains": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["auth", "user", "projects", "query", "mutation"]
+          }
+        }
+      }
+    },
+    "transports": {
+      "type": "object",
+      "properties": {
+        "httpJson": {
+          "type": "object",
+          "required": ["gateway", "baseUrl", "contentType"],
+          "properties": {
+            "gateway": { "type": "string" },
+            "baseUrl": { "type": "string" },
+            "contentType": { "type": "string" }
+          }
+        },
+        "grpc": {
+          "type": "object",
+          "required": ["service", "protoPath", "packages"],
+          "properties": {
+            "service": { "type": "string" },
+            "protoPath": { "type": "string" },
+            "packages": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "domainSurface": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["operations"],
+        "properties": {
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "method", "path", "grpc"],
+              "properties": {
+                "name": { "type": "string" },
+                "method": { "type": "string", "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"] },
+                "path": { "type": "string" },
+                "grpc": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "ecosystems": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "package", "transport", "language", "domainClients", "fileStructure", "entrypoint"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "package": { "type": "string" },
+          "transport": { "type": "string", "enum": ["http-json", "grpc"] },
+          "language": { "type": "string" },
+          "domainClients": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["auth", "user", "projects", "query", "mutation"]
+            }
+          },
+          "fileStructure": { "type": "object" },
+          "entrypoint": { "type": "string" }
+        }
+      }
+    },
+    "errorShape": {
+      "type": "object",
+      "required": ["type", "properties", "required"],
+      "properties": {
+        "type": { "type": "string" },
+        "properties": { "type": "object" },
+        "required": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

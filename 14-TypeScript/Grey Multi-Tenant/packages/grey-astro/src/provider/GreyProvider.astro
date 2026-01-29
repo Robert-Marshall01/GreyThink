@@ -1,0 +1,26 @@
+---
+/**
+ * Grey Astro - GreyProvider
+ *
+ * Astro component provider for client islands.
+ * Provides stores to client islands via props or context.
+ * SSR-safe, no UI logic.
+ *
+ * Usage:
+ * ---
+ * import { GreyProvider } from '@grey/astro';
+ * ---
+ * <GreyProvider>
+ *   <YourContent />
+ * </GreyProvider>
+ */
+
+// Re-export stores for islands to import
+export { authStore, createAuthStore } from '../stores/auth';
+export { userStore, createUserStore } from '../stores/user';
+export { projectsStore, createProjectsStore } from '../stores/projects';
+export { queryStore, createQueryStore } from '../stores/query';
+export { mutationStore, createMutationStore } from '../stores/mutation';
+---
+
+<slot />

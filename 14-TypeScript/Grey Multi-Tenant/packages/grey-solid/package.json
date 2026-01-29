@@ -1,0 +1,33 @@
+{
+  "name": "@grey/solid",
+  "version": "0.1.0",
+  "description": "Grey Multi-Tenant SolidJS bindings",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@grey/adapters": "workspace:*",
+    "@grey/core-client": "workspace:*"
+  },
+  "peerDependencies": {
+    "solid-js": "^1.8.0"
+  },
+  "devDependencies": {
+    "solid-js": "^1.8.0",
+    "typescript": "^5.3.0",
+    "rimraf": "^5.0.0"
+  },
+  "files": ["dist"],
+  "license": "MIT"
+}

@@ -1,0 +1,79 @@
+cabal-version: 2.0
+
+name:           grey-sdk
+version:        1.0.0
+synopsis:       Grey Multi-Tenant SDK for Haskell
+description:    Please see the README on GitHub at <https://github.com/grey/grey-multi-tenant#readme>
+category:       Network
+homepage:       https://github.com/grey/grey-multi-tenant#readme
+bug-reports:    https://github.com/grey/grey-multi-tenant/issues
+author:         Grey Team
+maintainer:     team@grey.io
+copyright:      2024 Grey
+license:        MIT
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    CHANGELOG.md
+
+source-repository head
+  type: git
+  location: https://github.com/grey/grey-multi-tenant
+
+library
+  exposed-modules:
+      Grey
+      Grey.Client
+      Grey.Config.Options
+      Grey.Error.Codes
+      Grey.Error.GreyError
+      Grey.Error.Result
+      Grey.GRPC.Client
+      Grey.GRPC.AuthService
+      Grey.GRPC.UserService
+      Grey.GRPC.ProjectsService
+      Grey.GRPC.QueryService
+      Grey.GRPC.MutationService
+      Grey.Domain.AuthClient
+      Grey.Domain.UserClient
+      Grey.Domain.ProjectsClient
+      Grey.Domain.QueryClient
+      Grey.Domain.MutationClient
+  hs-source-dirs:
+      src
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
+  build-depends:
+      base >=4.14 && <5
+    , bytestring >=0.10 && <0.12
+    , containers >=0.6 && <0.7
+    , mtl >=2.2 && <2.4
+    , text >=1.2 && <2.1
+    , time >=1.9 && <1.13
+    , transformers >=0.5 && <0.7
+  default-language: Haskell2010
+
+test-suite grey-sdk-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      ErrorCodesSpec
+      ResultSpec
+      OptionsSpec
+      ValidationSpec
+  hs-source-dirs:
+      test
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      QuickCheck >=2.14 && <2.15
+    , base >=4.14 && <5
+    , bytestring >=0.10 && <0.12
+    , containers >=0.6 && <0.7
+    , grey-sdk
+    , hspec >=2.7 && <2.12
+    , hspec-discover >=2.7 && <2.12
+    , mtl >=2.2 && <2.4
+    , text >=1.2 && <2.1
+    , time >=1.9 && <1.13
+    , transformers >=0.5 && <0.7
+  default-language: Haskell2010

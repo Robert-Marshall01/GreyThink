@@ -1,0 +1,101 @@
+{
+  "name": "grey-multitenant-gui",
+  "version": "1.0.0",
+  "description": "Grey Multi-Tenant Platform Desktop Application",
+  "main": "out/main/index.js",
+  "author": "Grey Platform Team",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "package": "electron-builder",
+    "package:win": "electron-builder --win",
+    "package:mac": "electron-builder --mac",
+    "package:linux": "electron-builder --linux",
+    "package:all": "electron-builder --win --mac --linux",
+    "lint": "eslint . --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.10.0",
+    "@grpc/proto-loader": "^0.7.10",
+    "electron-store": "^8.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.0",
+    "zustand": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "electron": "^28.2.0",
+    "electron-builder": "^24.9.0",
+    "electron-vite": "^2.0.0",
+    "typescript": "^5.3.0",
+    "vite": "^5.0.0"
+  },
+  "build": {
+    "appId": "com.grey.multitenant.gui",
+    "productName": "Grey Multi-Tenant GUI",
+    "directories": {
+      "output": "C:/Temp/grey-gui-release"
+    },
+    "asar": true,
+    "files": [
+      "out/main/**/*",
+      "out/preload/**/*",
+      "out/renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/",
+        "to": "resources/"
+      }
+    ],
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "resources/icon.ico",
+      "artifactName": "Grey-Multi-Tenant-GUI-Setup-${version}.${ext}"
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "icon": "resources/icon.icns",
+      "category": "public.app-category.developer-tools",
+      "artifactName": "Grey-Multi-Tenant-GUI-${version}.${ext}"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon": "resources/icons",
+      "category": "Development",
+      "artifactName": "Grey-Multi-Tenant-GUI-${version}.${ext}",
+      "desktop": {
+        "Name": "Grey Multi-Tenant GUI",
+        "Comment": "Desktop application for Grey Multi-Tenant Platform",
+        "Categories": "Utility;Development;",
+        "StartupNotify": "true"
+      }
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Grey Multi-Tenant GUI",
+      "menuCategory": "Grey Platform"
+    },
+    "dmg": {
+      "title": "Grey Multi-Tenant GUI",
+      "artifactName": "Grey-Multi-Tenant-GUI-${version}.dmg"
+    },
+    "appImage": {
+      "artifactName": "Grey-Multi-Tenant-GUI-${version}.AppImage"
+    },
+    "deb": {
+      "artifactName": "grey-multitenant-gui_${version}_${arch}.deb"
+    }
+  }
+}

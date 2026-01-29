@@ -1,0 +1,33 @@
+{application, grey_sdk,
+ [{description, "Grey Multi-Tenant SDK for Erlang"},
+  {vsn, "0.1.0"},
+  {registered, [grey_sdk_sup]},
+  {mod, {grey_sdk_app, []}},
+  {applications,
+   [kernel,
+    stdlib,
+    grpcbox,
+    jsx
+   ]},
+  {env,[]},
+  {modules, [
+    grey_sdk_app,
+    grey_sdk_sup,
+    grey_client,
+    grey_channel,
+    grey_error,
+    grey_options,
+    grey_auth,
+    grey_user,
+    grey_projects,
+    grey_query,
+    grey_mutation,
+    grey_grpc_auth,
+    grey_grpc_user,
+    grey_grpc_projects,
+    grey_grpc_query,
+    grey_grpc_mutation
+  ]},
+  {licenses, ["MIT"]},
+  {links, []}
+ ]}.
