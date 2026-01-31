@@ -1,0 +1,11 @@
+# This directory contains Alembic migration scripts.
+# Migrations are ordered by timestamp prefix (YYYYMMDD_HHMM_).
+#
+# To create a new migration:
+#   alembic revision --autogenerate -m "description"
+#
+# To apply all migrations:
+#   alembic upgrade head
+#
+# To rollback one migration:
+#   alembic downgrade -1

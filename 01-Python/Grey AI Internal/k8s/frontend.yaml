@@ -1,0 +1,145 @@
+# =============================================================================
+# Grey AI Internal - React Frontend (Nginx)
+# =============================================================================
+# Deployment for the React frontend with nginx + Ingress for external access
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: grey-ai
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: grey-ai-internal
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+        app.kubernetes.io/name: frontend
+        app.kubernetes.io/part-of: grey-ai-internal
+    spec:
+      containers:
+        - name: frontend
+          # Build and push to your registry:
+          # docker build -t your-registry/grey-ai-frontend:latest ./frontend
+          # docker push your-registry/grey-ai-frontend:latest
+          image: grey-ai-frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+              name: http
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: grey-ai
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: grey-ai-internal
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http
+  selector:
+    app: frontend
+---
+# =============================================================================
+# Ingress - External Access
+# =============================================================================
+# Configure your domain and TLS certificate
+# Requires an Ingress Controller (nginx-ingress, traefik, etc.)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grey-ai-ingress
+  namespace: grey-ai
+  labels:
+    app.kubernetes.io/name: grey-ai-ingress
+    app.kubernetes.io/part-of: grey-ai-internal
+  annotations:
+    # Nginx Ingress Controller annotations
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    # Uncomment for automatic TLS with cert-manager
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx  # Change based on your ingress controller
+  # Uncomment for TLS
+  # tls:
+  #   - hosts:
+  #       - grey-ai.example.com
+  #     secretName: grey-ai-tls
+  rules:
+    - host: grey-ai.example.com  # Change to your domain
+      http:
+        paths:
+          # API routes to backend
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-service
+                port:
+                  number: 8000
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: backend-service
+                port:
+                  number: 8000
+          - path: /docs
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-service
+                port:
+                  number: 8000
+          - path: /openapi.json
+            pathType: Exact
+            backend:
+              service:
+                name: backend-service
+                port:
+                  number: 8000
+          # All other routes to frontend
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-service
+                port:
+                  number: 80

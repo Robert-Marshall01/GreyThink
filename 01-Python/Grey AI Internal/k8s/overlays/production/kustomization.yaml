@@ -1,0 +1,95 @@
+# =============================================================================
+# Grey AI Internal - Production Kustomize Overlay
+# =============================================================================
+# Production-specific configurations with increased resources and GPU support
+#
+# Usage:
+#   kubectl apply -k k8s/overlays/production
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: grey-ai
+
+resources:
+  - ../../
+
+# Production image tags (update with your registry)
+images:
+  - name: grey-ai-backend
+    newName: your-registry.com/grey-ai-backend
+    newTag: v1.0.0
+  - name: grey-ai-frontend
+    newName: your-registry.com/grey-ai-frontend
+    newTag: v1.0.0
+  - name: grey-ai-sd
+    newName: your-registry.com/grey-ai-sd
+    newTag: v1.0.0
+
+# Production labels
+commonLabels:
+  environment: production
+
+# Production replica counts
+replicas:
+  - name: backend
+    count: 3
+  - name: frontend
+    count: 3
+
+# Production config patches
+patches:
+  # Enable GPU for Stable Diffusion
+  - target:
+      kind: Deployment
+      name: stable-diffusion
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits
+        value:
+          memory: "16Gi"
+          cpu: "8000m"
+          nvidia.com/gpu: 1
+      - op: add
+        path: /spec/template/spec/nodeSelector
+        value:
+          nvidia.com/gpu: "true"
+      - op: add
+        path: /spec/template/spec/tolerations
+        value:
+          - key: nvidia.com/gpu
+            operator: Exists
+            effect: NoSchedule
+  
+  # Enable GPU for Ollama
+  - target:
+      kind: Deployment
+      name: ollama
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits
+        value:
+          memory: "16Gi"
+          cpu: "8000m"
+          nvidia.com/gpu: 1
+      - op: add
+        path: /spec/template/spec/nodeSelector
+        value:
+          nvidia.com/gpu: "true"
+      - op: add
+        path: /spec/template/spec/tolerations
+        value:
+          - key: nvidia.com/gpu
+            operator: Exists
+            effect: NoSchedule
+  
+  # Increase backend resources
+  - target:
+      kind: Deployment
+      name: backend
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits
+        value:
+          memory: "2Gi"
+          cpu: "2000m"

@@ -1,0 +1,56 @@
+# Grey AI Internal - Backend Dependencies
+# ========================================
+# Install: pip install -r requirements.txt
+
+# =============================================================================
+# Core Framework
+# =============================================================================
+fastapi==0.109.0                # Web framework
+uvicorn[standard]==0.27.0       # ASGI server with hot reload
+python-multipart==0.0.6         # File upload support
+
+# =============================================================================
+# Database & ORM
+# =============================================================================
+sqlalchemy[asyncio]==2.0.25     # Async ORM with type hints
+aiosqlite==0.19.0               # Async SQLite driver (development)
+asyncpg==0.29.0                 # Async PostgreSQL driver (production)
+alembic==1.13.1                 # Database migrations
+greenlet==3.0.3                 # Required for SQLAlchemy async
+
+# =============================================================================
+# Data Validation & Settings
+# =============================================================================
+pydantic==2.5.3                 # Data validation
+pydantic-settings==2.1.0        # Environment-based settings
+email-validator==2.1.0          # Email validation for User model
+
+# =============================================================================
+# AI Integration
+# =============================================================================
+httpx==0.26.0                   # Async HTTP client for Ollama
+
+# =============================================================================
+# Data Processing
+# =============================================================================
+pandas==2.1.4                   # DataFrame operations for CSV parsing
+numpy==1.26.3                   # Numerical operations
+
+# =============================================================================
+# Utilities
+# =============================================================================
+python-dotenv==1.0.0            # Load .env files
+python-dateutil==2.8.2          # Date parsing utilities
+
+# =============================================================================
+# Testing (required for pytest)
+# =============================================================================
+pytest==7.4.4                   # Testing framework
+pytest-asyncio==0.23.3          # Async test support
+pytest-cov==4.1.0               # Coverage reporting
+
+# =============================================================================
+# Development (optional - comment out for production)
+# =============================================================================
+# black==24.1.0                 # Code formatting
+# ruff==0.1.13                  # Fast linting
