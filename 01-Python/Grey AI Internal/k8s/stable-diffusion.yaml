@@ -1,0 +1,120 @@
+# =============================================================================
+# Grey AI Internal - Stable Diffusion Service
+# =============================================================================
+# Deployment for custom lightweight SD API using HuggingFace diffusers
+# NOTE: First startup downloads ~4GB of model weights
+# =============================================================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sd-cache-pvc
+  namespace: grey-ai
+  labels:
+    app.kubernetes.io/name: stable-diffusion
+    app.kubernetes.io/part-of: grey-ai-internal
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi  # Model cache
+  # Uncomment and specify storage class for your cluster
+  # storageClassName: standard
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stable-diffusion
+  namespace: grey-ai
+  labels:
+    app.kubernetes.io/name: stable-diffusion
+    app.kubernetes.io/part-of: grey-ai-internal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stable-diffusion
+  template:
+    metadata:
+      labels:
+        app: stable-diffusion
+        app.kubernetes.io/name: stable-diffusion
+        app.kubernetes.io/part-of: grey-ai-internal
+    spec:
+      containers:
+        - name: stable-diffusion
+          # Build and push to your registry:
+          # docker build -t your-registry/grey-ai-sd:latest ./stable-diffusion
+          # docker push your-registry/grey-ai-sd:latest
+          image: grey-ai-sd:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 7860
+              name: http
+          env:
+            - name: SD_MODEL_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: grey-ai-config
+                  key: SD_MODEL_ID
+            - name: USE_CPU
+              valueFrom:
+                configMapKeyRef:
+                  name: grey-ai-config
+                  key: USE_CPU
+          volumeMounts:
+            - name: sd-cache
+              mountPath: /root/.cache/huggingface
+          resources:
+            requests:
+              memory: "4Gi"
+              cpu: "2000m"
+            limits:
+              memory: "16Gi"
+              cpu: "8000m"
+              # Uncomment for GPU support (highly recommended for SD)
+              # nvidia.com/gpu: 1
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 7860
+            initialDelaySeconds: 300  # Model download + load takes time
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 7860
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 20
+      volumes:
+        - name: sd-cache
+          persistentVolumeClaim:
+            claimName: sd-cache-pvc
+      # Uncomment for GPU nodes (recommended for SD)
+      # nodeSelector:
+      #   nvidia.com/gpu: "true"
+      # tolerations:
+      #   - key: nvidia.com/gpu
+      #     operator: Exists
+      #     effect: NoSchedule
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stable-diffusion-service
+  namespace: grey-ai
+  labels:
+    app.kubernetes.io/name: stable-diffusion
+    app.kubernetes.io/part-of: grey-ai-internal
+spec:
+  type: ClusterIP
+  ports:
+    - port: 7860
+      targetPort: 7860
+      name: http
+  selector:
+    app: stable-diffusion

@@ -1,0 +1,99 @@
+# =============================================================================
+# Grey AI Internal - Development Kustomize Overlay
+# =============================================================================
+# Development-specific configurations with reduced resources
+#
+# Usage:
+#   kubectl apply -k k8s/overlays/development
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: grey-ai
+
+resources:
+  - ../../
+
+# Development labels
+commonLabels:
+  environment: development
+
+# Development replica counts (minimal)
+replicas:
+  - name: backend
+    count: 1
+  - name: frontend
+    count: 1
+
+# Development config patches
+patches:
+  # Reduce resources for development
+  - target:
+      kind: Deployment
+      name: backend
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests
+        value:
+          memory: "128Mi"
+          cpu: "100m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits
+        value:
+          memory: "512Mi"
+          cpu: "500m"
+  
+  - target:
+      kind: Deployment
+      name: ollama
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests
+        value:
+          memory: "1Gi"
+          cpu: "500m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits
+        value:
+          memory: "4Gi"
+          cpu: "2000m"
+  
+  - target:
+      kind: Deployment
+      name: stable-diffusion
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests
+        value:
+          memory: "2Gi"
+          cpu: "1000m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits
+        value:
+          memory: "8Gi"
+          cpu: "4000m"
+
+  # Reduce PVC sizes for development
+  - target:
+      kind: PersistentVolumeClaim
+      name: postgres-pvc
+    patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: 1Gi
+  
+  - target:
+      kind: PersistentVolumeClaim
+      name: ollama-pvc
+    patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: 10Gi
+  
+  - target:
+      kind: PersistentVolumeClaim
+      name: sd-cache-pvc
+    patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: 10Gi

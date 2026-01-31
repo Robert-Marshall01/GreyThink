@@ -1,0 +1,28 @@
+Weekly Operations Report
+Date: January 5, 2024
+Prepared by: Operations Team
+
+SUMMARY:
+This week showed strong performance across all regions with total revenue exceeding targets by 12%.
+
+KEY METRICS:
+- Total Units Sold: 2,159
+- Total Revenue: $79,820
+- Average Order Value: $36.97
+- Customer Satisfaction Score: 4.7/5.0
+
+HIGHLIGHTS:
+Widget C continues to be our best performer, accounting for 48% of total revenue.
+North region leads in sales volume with 802 units this week.
+New customer acquisition up 15% compared to last week.
+
+CONCERNS:
+Widget B showing declining interest in East region.
+Shipping delays affected 3% of orders this week.
+Inventory levels for Widget A running low in South warehouse.
+
+ACTION ITEMS:
+1. Increase Widget A production by 20%
+2. Investigate Widget B marketing strategy for East region
+3. Review shipping partner SLA compliance
+4. Schedule quarterly business review for next week

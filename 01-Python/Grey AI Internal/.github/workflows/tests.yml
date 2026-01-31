@@ -1,0 +1,230 @@
+# =============================================================================
+# Grey AI Internal - GitHub Actions CI Workflow
+# =============================================================================
+# Automated testing pipeline that runs on every push and pull request.
+#
+# Jobs:
+#   1. Lint - Code quality checks
+#   2. Test - Run pytest suite
+#   3. Build - Verify Docker builds (optional)
+#
+# Triggers:
+#   - Push to main/develop branches
+#   - Pull requests to main/develop
+# =============================================================================
+
+name: CI - Test Suite
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - '.github/workflows/tests.yml'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+
+# Cancel in-progress runs when a new run is triggered
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "18"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Backend Linting
+  # ---------------------------------------------------------------------------
+  lint-backend:
+    name: Lint Backend
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+      
+      - name: Install linting tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff black
+      
+      - name: Run Ruff (linter)
+        working-directory: backend
+        run: ruff check . --output-format=github
+        continue-on-error: true
+      
+      - name: Check Black formatting
+        working-directory: backend
+        run: black --check --diff .
+        continue-on-error: true
+
+  # ---------------------------------------------------------------------------
+  # Backend Unit & Integration Tests
+  # ---------------------------------------------------------------------------
+  test-backend:
+    name: Test Backend
+    runs-on: ubuntu-latest
+    needs: lint-backend
+    
+    env:
+      DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+      OLLAMA_BASE_URL: "http://localhost:11434"
+      OLLAMA_MODEL: "llama3"
+      DEBUG: "true"
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+      
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov httpx
+      
+      - name: Run unit tests
+        working-directory: backend
+        run: |
+          pytest tests/unit -v --tb=short \
+            --junitxml=test-results/unit-results.xml
+      
+      - name: Run integration tests
+        working-directory: backend
+        run: |
+          pytest tests/integration -v --tb=short \
+            --junitxml=test-results/integration-results.xml
+      
+      - name: Run all tests with coverage
+        working-directory: backend
+        run: |
+          pytest tests/ -v \
+            --cov=. \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term-missing \
+            --cov-fail-under=50
+        continue-on-error: true
+      
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: backend/test-results/
+          retention-days: 30
+      
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: backend/coverage.xml
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # Frontend Lint & Build
+  # ---------------------------------------------------------------------------
+  test-frontend:
+    name: Test Frontend
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      
+      - name: Run build
+        working-directory: frontend
+        run: npm run build
+        env:
+          VITE_API_URL: "http://localhost:8000"
+
+  # ---------------------------------------------------------------------------
+  # Docker Build Verification
+  # ---------------------------------------------------------------------------
+  build-docker:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend]
+    if: github.event_name == 'push'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: false
+          tags: grey-ai-backend:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Build frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: false
+          tags: grey-ai-frontend:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VITE_API_URL=http://localhost:8000
+
+  # ---------------------------------------------------------------------------
+  # Summary Job
+  # ---------------------------------------------------------------------------
+  ci-complete:
+    name: CI Complete
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend]
+    if: always()
+    
+    steps:
+      - name: Check job statuses
+        run: |
+          if [[ "${{ needs.test-backend.result }}" == "failure" ]] || \
+             [[ "${{ needs.test-frontend.result }}" == "failure" ]]; then
+            echo "❌ CI failed"
+            exit 1
+          else
+            echo "✅ CI passed"
+          fi

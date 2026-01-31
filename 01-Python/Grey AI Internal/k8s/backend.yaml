@@ -1,0 +1,157 @@
+# =============================================================================
+# Grey AI Internal - FastAPI Backend
+# =============================================================================
+# Deployment for the FastAPI backend service
+# =============================================================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backend-uploads-pvc
+  namespace: grey-ai
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: grey-ai-internal
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  # Uncomment and specify storage class for your cluster
+  # storageClassName: standard
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: grey-ai
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: grey-ai-internal
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        app.kubernetes.io/name: backend
+        app.kubernetes.io/part-of: grey-ai-internal
+    spec:
+      containers:
+        - name: backend
+          # Build and push to your registry:
+          # docker build -t your-registry/grey-ai-backend:latest ./backend
+          # docker push your-registry/grey-ai-backend:latest
+          image: grey-ai-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: DATABASE_URL
+              value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-service:5432/$(POSTGRES_DB)"
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: grey-ai-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: grey-ai-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grey-ai-secrets
+                  key: POSTGRES_PASSWORD
+            - name: OLLAMA_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: grey-ai-config
+                  key: OLLAMA_BASE_URL
+            - name: OLLAMA_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: grey-ai-config
+                  key: OLLAMA_MODEL
+            - name: SD_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: grey-ai-config
+                  key: SD_BASE_URL
+            - name: SD_TIMEOUT
+              valueFrom:
+                configMapKeyRef:
+                  name: grey-ai-config
+                  key: SD_TIMEOUT
+            - name: DEBUG
+              valueFrom:
+                configMapKeyRef:
+                  name: grey-ai-config
+                  key: DEBUG
+            - name: CORS_ORIGINS
+              valueFrom:
+                configMapKeyRef:
+                  name: grey-ai-config
+                  key: CORS_ORIGINS
+            - name: MAX_FILE_SIZE_MB
+              valueFrom:
+                configMapKeyRef:
+                  name: grey-ai-config
+                  key: MAX_FILE_SIZE_MB
+            - name: ALLOWED_EXTENSIONS
+              valueFrom:
+                configMapKeyRef:
+                  name: grey-ai-config
+                  key: ALLOWED_EXTENSIONS
+          volumeMounts:
+            - name: uploads
+              mountPath: /app/uploads
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: backend-uploads-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: grey-ai
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: grey-ai-internal
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http
+  selector:
+    app: backend

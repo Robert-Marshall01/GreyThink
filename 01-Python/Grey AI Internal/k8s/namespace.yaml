@@ -1,0 +1,10 @@
+# =============================================================================
+# Grey AI Internal - Kubernetes Namespace
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: grey-ai
+  labels:
+    app.kubernetes.io/name: grey-ai
+    app.kubernetes.io/part-of: grey-ai-internal

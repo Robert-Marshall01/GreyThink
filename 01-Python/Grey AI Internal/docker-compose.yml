@@ -1,0 +1,173 @@
+# =============================================================================
+# Grey AI Internal - Docker Compose
+# =============================================================================
+# Production-ready multi-service deployment with:
+# - FastAPI backend
+# - React frontend (nginx)
+# - PostgreSQL database
+# - Ollama LLM service
+#
+# Usage:
+#   docker-compose up -d              # Start all services
+#   docker-compose up -d --build      # Rebuild and start
+#   docker-compose logs -f backend    # View backend logs
+#   docker-compose down               # Stop all services
+# =============================================================================
+
+version: "3.9"
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Database
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: grey-ai-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-greyai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-greyai_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-greyai}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"  # Using 5433 on host to avoid conflict with existing postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-greyai} -d ${POSTGRES_DB:-greyai}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Ollama LLM Service
+  # ---------------------------------------------------------------------------
+  # Runs the local LLM. Models are persisted in a volume.
+  # Access at: http://localhost:11434
+  ollama:
+    image: ollama/ollama:latest
+    container_name: grey-ai-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    # GPU support (uncomment for NVIDIA GPU)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # ---------------------------------------------------------------------------
+  # Stable Diffusion API (Lightweight)
+  # ---------------------------------------------------------------------------
+  # Custom lightweight SD API using Hugging Face diffusers.
+  # Much smaller and more reliable than AUTOMATIC1111 WebUI.
+  # API available at: http://localhost:7860/sdapi/v1/
+  # 
+  # NOTE: First startup downloads ~4GB of model weights. Be patient.
+  stable-diffusion:
+    build:
+      context: ./stable-diffusion
+      dockerfile: Dockerfile
+    container_name: grey-ai-sd
+    restart: unless-stopped
+    environment:
+      # Model to use (default: stable-diffusion-v1-5)
+      SD_MODEL_ID: ${SD_MODEL_ID:-runwayml/stable-diffusion-v1-5}
+      # Use CPU for inference (slower but works without GPU)
+      USE_CPU: ${USE_CPU:-true}
+    volumes:
+      - sd_cache:/root/.cache/huggingface
+    ports:
+      - "7860:7860"
+    # GPU support (uncomment for NVIDIA GPU - recommended for production)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s  # Model download + load takes time
+
+  # ---------------------------------------------------------------------------
+  # FastAPI Backend
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: grey-ai-backend
+    restart: unless-stopped
+    environment:
+      # Database - uses PostgreSQL in Docker
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-greyai}:${POSTGRES_PASSWORD:-greyai_secret}@db:5432/${POSTGRES_DB:-greyai}
+      # Ollama - points to Ollama container
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3}
+      # Stable Diffusion - points to SD container
+      SD_BASE_URL: http://stable-diffusion:7860
+      SD_TIMEOUT: ${SD_TIMEOUT:-600}  # 10 min for CPU inference
+      # App settings
+      DEBUG: ${DEBUG:-false}
+      CORS_ORIGINS: http://localhost:3000,http://frontend:80
+      MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-10}
+      ALLOWED_EXTENSIONS: ${ALLOWED_EXTENSIONS:-.csv,.txt,.png,.jpg,.jpeg}
+    volumes:
+      - backend_uploads:/app/uploads
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # React Frontend (Nginx)
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    container_name: grey-ai-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+# =============================================================================
+# Named Volumes for Data Persistence
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  ollama_data:
+    driver: local
+  backend_uploads:
+    driver: local
+  sd_cache:
+    driver: local
+
+# =============================================================================
+# Networks (default bridge network used)
+# =============================================================================
+# All services are on the same default network and can communicate by name.
+# e.g., backend can reach db at "db:5432" and ollama at "ollama:11434"

@@ -1,0 +1,37 @@
+# =============================================================================
+# Grey AI Internal - Kustomize Base Configuration
+# =============================================================================
+# Usage:
+#   kubectl apply -k k8s/                     # Apply base
+#   kubectl apply -k k8s/overlays/production  # Apply production overlay
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: grey-ai
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  - postgres.yaml
+  - ollama.yaml
+  - stable-diffusion.yaml
+  - backend.yaml
+  - frontend.yaml
+
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize
+  app.kubernetes.io/version: "1.0.0"
+
+# Image customization (override in overlays)
+images:
+  - name: grey-ai-backend
+    newName: grey-ai-backend
+    newTag: latest
+  - name: grey-ai-frontend
+    newName: grey-ai-frontend
+    newTag: latest
+  - name: grey-ai-sd
+    newName: grey-ai-sd
+    newTag: latest

@@ -1,0 +1,33 @@
+# =============================================================================
+# Grey AI Internal - ConfigMap
+# =============================================================================
+# Non-sensitive configuration for all services
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grey-ai-config
+  namespace: grey-ai
+  labels:
+    app.kubernetes.io/name: grey-ai
+    app.kubernetes.io/part-of: grey-ai-internal
+data:
+  # Database
+  POSTGRES_USER: "greyai"
+  POSTGRES_DB: "greyai"
+  
+  # Ollama
+  OLLAMA_MODEL: "llama3"
+  OLLAMA_BASE_URL: "http://ollama-service:11434"
+  
+  # Stable Diffusion
+  SD_MODEL_ID: "runwayml/stable-diffusion-v1-5"
+  SD_BASE_URL: "http://stable-diffusion-service:7860"
+  SD_TIMEOUT: "600"
+  USE_CPU: "true"
+  
+  # Backend
+  DEBUG: "false"
+  CORS_ORIGINS: "http://localhost:3000,http://frontend-service:80"
+  MAX_FILE_SIZE_MB: "10"
+  ALLOWED_EXTENSIONS: ".csv,.txt,.png,.jpg,.jpeg"
