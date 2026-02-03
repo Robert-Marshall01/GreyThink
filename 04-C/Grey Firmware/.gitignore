@@ -1,0 +1,79 @@
+# Build artifacts
+build/
+*.o
+*.d
+*.a
+*.so
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.bin
+*.elf
+*.hex
+*.map
+
+# Editor and IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.cproject
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Debug files
+*.dSYM/
+core
+*.core
+
+# Documentation build
+docs/_build/
+html/
+latex/
+doxygen/
+
+# Test coverage
+*.gcov
+*.gcda
+*.gcno
+coverage/
+lcov.info
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.bak
+
+# Archives
+*.tar
+*.tar.gz
+*.zip
+*.7z
+
+# Python (if any scripts)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile.cmake
+compile_commands.json
+
+# Clangd
+.cache/
+.clangd/
