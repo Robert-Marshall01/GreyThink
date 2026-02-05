@@ -1,0 +1,408 @@
+{
+  "dashboard": {
+    "title": "Grey Distributed — Interstellar Federation",
+    "description": "Monitoring of interstellar federation health, multi-year consensus, fork tracking, and civilizational coordination",
+    "refresh_interval_seconds": 86400,
+    "note": "Interstellar timescales mean most data is months to years old",
+    "tags": ["cosmic", "interstellar", "federation"]
+  },
+  
+  "sections": [
+    {
+      "title": "Federation Overview",
+      "layout": "grid-4",
+      "panels": [
+        {
+          "title": "Member Systems",
+          "type": "stat",
+          "metric": "interstellar.federation.members.count",
+          "format": "integer"
+        },
+        {
+          "title": "Reachable Systems",
+          "type": "stat",
+          "metric": "interstellar.federation.reachable.count",
+          "format": "integer",
+          "description": "Systems with contact in last 10 years"
+        },
+        {
+          "title": "Active Forks",
+          "type": "stat",
+          "metric": "interstellar.federation.forks.active.count",
+          "format": "integer",
+          "thresholds": {
+            "critical": 5,
+            "warning": 2,
+            "normal": 0
+          }
+        },
+        {
+          "title": "Federation Health",
+          "type": "gauge",
+          "metric": "interstellar.federation.health.score",
+          "format": "percent",
+          "thresholds": {
+            "critical": 0.5,
+            "warning": 0.7,
+            "normal": 0.85
+          }
+        }
+      ]
+    },
+    
+    {
+      "title": "Star System Map",
+      "layout": "full-width",
+      "panels": [
+        {
+          "title": "Federation Star Map",
+          "type": "3d-network-graph",
+          "metric": "interstellar.systems.coordinates",
+          "nodes": {
+            "source": "interstellar.systems.list",
+            "position": "coordinates_ly",
+            "color": {
+              "field": "federation_status",
+              "values": {
+                "founder": "gold",
+                "member": "green",
+                "observer": "blue",
+                "applicant": "cyan",
+                "independent": "gray",
+                "unknown": "dark-gray",
+                "seceded": "red"
+              }
+            },
+            "size": {
+              "field": "population_log",
+              "min": 5,
+              "max": 50
+            }
+          },
+          "edges": {
+            "source": "interstellar.communication.links",
+            "color": {
+              "field": "link_health",
+              "gradient": ["red", "yellow", "green"]
+            }
+          },
+          "center": "sol",
+          "initial_range_ly": 50
+        }
+      ]
+    },
+    
+    {
+      "title": "Communication Status",
+      "layout": "grid-2",
+      "panels": [
+        {
+          "title": "Last Contact by System",
+          "type": "table",
+          "metric": "interstellar.systems.contact",
+          "columns": [
+            { "name": "System", "field": "system_name" },
+            { "name": "Distance (ly)", "field": "distance_ly" },
+            { "name": "Last Contact", "field": "last_contact_date" },
+            { "name": "Years Ago", "field": "years_since_contact" },
+            { "name": "Expected RTT", "field": "expected_rtt_years" }
+          ],
+          "sort": "years_since_contact",
+          "limit": 15
+        },
+        {
+          "title": "Message Queue Status",
+          "type": "stat-group",
+          "metrics": [
+            { "name": "Outgoing", "metric": "interstellar.messages.outgoing.count", "format": "integer" },
+            { "name": "In Transit", "metric": "interstellar.messages.in_transit.count", "format": "integer" },
+            { "name": "Awaiting Response", "metric": "interstellar.messages.awaiting_response.count", "format": "integer" }
+          ]
+        }
+      ]
+    },
+    
+    {
+      "title": "Governance",
+      "layout": "grid-2",
+      "panels": [
+        {
+          "title": "Active Proposals",
+          "type": "table",
+          "metric": "interstellar.governance.proposals.active",
+          "columns": [
+            { "name": "Proposal", "field": "proposal_title" },
+            { "name": "Type", "field": "proposal_type" },
+            { "name": "Proposed By", "field": "proposer_system" },
+            { "name": "Epoch", "field": "proposed_epoch" },
+            { "name": "Votes Received", "field": "votes_count" },
+            { "name": "Expected Total", "field": "expected_votes" },
+            { "name": "Status", "field": "status" }
+          ]
+        },
+        {
+          "title": "Voting Status",
+          "type": "bar-stacked",
+          "metric": "interstellar.governance.proposals.votes",
+          "categories": ["Approve", "Reject", "Abstain", "Pending"],
+          "colors": ["green", "red", "gray", "blue"],
+          "group_by": "proposal_id"
+        },
+        {
+          "title": "Treaties in Force",
+          "type": "stat",
+          "metric": "interstellar.governance.treaties.active.count",
+          "format": "integer"
+        },
+        {
+          "title": "Constitutional Amendments (All Time)",
+          "type": "stat",
+          "metric": "interstellar.governance.amendments.total.count",
+          "format": "integer"
+        }
+      ]
+    },
+    
+    {
+      "title": "Fork Tracking",
+      "layout": "grid-2",
+      "panels": [
+        {
+          "title": "Fork Status",
+          "type": "table",
+          "metric": "interstellar.forks.list",
+          "columns": [
+            { "name": "Fork ID", "field": "fork_id" },
+            { "name": "Systems", "field": "system_count" },
+            { "name": "Cause", "field": "cause" },
+            { "name": "Detected Epoch", "field": "detected_epoch" },
+            { "name": "Status", "field": "status" },
+            { "name": "Reconciliation Attempts", "field": "reconciliation_count" }
+          ]
+        },
+        {
+          "title": "Fork Timeline",
+          "type": "timeline",
+          "metric": "interstellar.forks.timeline",
+          "events": [
+            { "type": "detected", "color": "red" },
+            { "type": "reconciliation_started", "color": "yellow" },
+            { "type": "reconciled", "color": "green" },
+            { "type": "permanent", "color": "gray" }
+          ],
+          "time_range": "100y"
+        }
+      ]
+    },
+    
+    {
+      "title": "Resource Sharing",
+      "layout": "grid-3",
+      "panels": [
+        {
+          "title": "Knowledge Exchange Volume",
+          "type": "timeseries",
+          "metric": "interstellar.resources.knowledge.volume",
+          "unit": "petabytes",
+          "time_range": "50y"
+        },
+        {
+          "title": "Federation Credit Balance",
+          "type": "table",
+          "metric": "interstellar.resources.credits.balance",
+          "columns": [
+            { "name": "System", "field": "system_name" },
+            { "name": "Credit Balance (FRC)", "field": "balance" },
+            { "name": "30y Change", "field": "change_30y_percent" }
+          ],
+          "limit": 10
+        },
+        {
+          "title": "Active Bilateral Agreements",
+          "type": "stat",
+          "metric": "interstellar.resources.agreements.active.count",
+          "format": "integer"
+        }
+      ]
+    },
+    
+    {
+      "title": "Security Attestation",
+      "layout": "grid-3",
+      "panels": [
+        {
+          "title": "Valid Identities",
+          "type": "gauge",
+          "metric": "interstellar.security.identities.valid.percent",
+          "format": "percent",
+          "thresholds": {
+            "critical": 0.7,
+            "warning": 0.85,
+            "normal": 0.95
+          }
+        },
+        {
+          "title": "Trust Graph Connectivity",
+          "type": "gauge",
+          "metric": "interstellar.security.trust.connectivity",
+          "format": "percent"
+        },
+        {
+          "title": "Key Revocations (This Century)",
+          "type": "stat",
+          "metric": "interstellar.security.revocations.century.count",
+          "format": "integer"
+        }
+      ]
+    },
+    
+    {
+      "title": "Civilizational Health",
+      "layout": "grid-2",
+      "panels": [
+        {
+          "title": "Population by System (Est.)",
+          "type": "bar-horizontal",
+          "metric": "interstellar.systems.population",
+          "unit": "billions",
+          "sort": "descending",
+          "limit": 10
+        },
+        {
+          "title": "Cultural Divergence Index",
+          "type": "heatmap",
+          "metric": "interstellar.culture.divergence_matrix",
+          "x_axis": "interstellar.systems.list",
+          "y_axis": "interstellar.systems.list",
+          "color_scale": {
+            "low": "green",
+            "medium": "yellow",
+            "high": "red"
+          },
+          "description": "Higher values indicate greater cultural drift"
+        }
+      ]
+    },
+    
+    {
+      "title": "Deep Time Metrics",
+      "layout": "grid-4",
+      "panels": [
+        {
+          "title": "Federation Age",
+          "type": "stat",
+          "metric": "interstellar.federation.age.years",
+          "format": "integer",
+          "unit": "years"
+        },
+        {
+          "title": "Oldest Active Node",
+          "type": "stat",
+          "metric": "interstellar.nodes.oldest.age_years",
+          "format": "integer",
+          "unit": "years"
+        },
+        {
+          "title": "Succession Events (Century)",
+          "type": "stat",
+          "metric": "interstellar.security.successions.century.count",
+          "format": "integer"
+        },
+        {
+          "title": "Constitution Version",
+          "type": "stat",
+          "metric": "interstellar.governance.constitution.version",
+          "format": "integer"
+        }
+      ]
+    }
+  ],
+  
+  "alerts": [
+    {
+      "name": "interstellar_system_lost",
+      "description": "Member system has not responded in 3x expected RTT",
+      "condition": "interstellar.systems.*.years_since_contact > interstellar.systems.*.expected_rtt_years * 3",
+      "severity": "warning",
+      "duration": "0",
+      "actions": ["classify_as_unknown", "notify_governance"]
+    },
+    {
+      "name": "interstellar_fork_detected",
+      "description": "State divergence detected indicating possible fork",
+      "condition": "interstellar.forks.detected.new == 1",
+      "severity": "critical",
+      "duration": "0",
+      "actions": ["notify_all_systems", "initiate_reconciliation"]
+    },
+    {
+      "name": "interstellar_secession",
+      "description": "System has declared secession from federation",
+      "condition": "interstellar.systems.*.federation_status == 'seceded'",
+      "severity": "critical",
+      "duration": "0",
+      "actions": ["notify_governance", "activate_secession_protocol"]
+    },
+    {
+      "name": "interstellar_proposal_stalled",
+      "description": "Proposal has not received votes in 2x expected time",
+      "condition": "interstellar.governance.proposals.*.epochs_waiting > interstellar.governance.proposals.*.expected_epochs * 2",
+      "severity": "warning",
+      "duration": "0",
+      "actions": ["send_reminder", "evaluate_status"]
+    },
+    {
+      "name": "interstellar_key_compromise",
+      "description": "Federation-level key compromise detected",
+      "condition": "interstellar.security.key_compromise.detected == 1",
+      "severity": "critical",
+      "duration": "0",
+      "actions": ["broadcast_revocation", "notify_all_systems", "initiate_key_rotation"]
+    },
+    {
+      "name": "interstellar_trust_degradation",
+      "description": "Trust graph connectivity falling below threshold",
+      "condition": "interstellar.security.trust.connectivity < 0.7",
+      "severity": "warning",
+      "duration": "0",
+      "actions": ["analyze_trust_gaps", "recommend_attestations"]
+    },
+    {
+      "name": "interstellar_cultural_drift_extreme",
+      "description": "Cultural divergence between systems exceeds threshold",
+      "condition": "interstellar.culture.divergence_max > 0.8",
+      "severity": "info",
+      "duration": "0",
+      "actions": ["recommend_cultural_exchange", "update_translation_protocols"]
+    }
+  ],
+  
+  "variables": [
+    {
+      "name": "system",
+      "type": "query",
+      "query": "interstellar.systems.list",
+      "multi": true,
+      "include_all": true
+    },
+    {
+      "name": "distance_range",
+      "type": "custom",
+      "options": [
+        { "label": "Proximate (<5 ly)", "value": "proximate" },
+        { "label": "Near (5-20 ly)", "value": "near" },
+        { "label": "Medium (20-100 ly)", "value": "medium" },
+        { "label": "Far (100-1000 ly)", "value": "far" },
+        { "label": "Deep (>1000 ly)", "value": "deep" }
+      ],
+      "multi": true,
+      "include_all": true
+    },
+    {
+      "name": "time_range",
+      "type": "interval",
+      "options": ["1y", "10y", "50y", "100y", "500y"],
+      "default": "50y"
+    }
+  ]
+}

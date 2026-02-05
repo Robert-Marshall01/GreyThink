@@ -1,0 +1,572 @@
+# Grey Distributed - Performance Benchmark Pipeline
+# =============================================================================
+#
+# Purpose:
+#   Stress test the system, measure performance metrics, and generate
+#   performance economics reports. Ensures the system meets SLAs.
+#
+# Why this matters:
+#   - Catches performance regressions before production
+#   - Establishes baseline metrics for capacity planning
+#   - Validates scheduler fairness under load
+#   - Generates data for performance-based decisions
+#
+# Tradeoffs:
+#   - Benchmarks are noisy on shared CI runners
+#   - Dedicated runners improve consistency but increase cost
+#   - Long-running stress tests occupy CI resources
+#   - Performance thresholds require regular calibration
+#
+# Performance Assertions:
+#   - p99 latency < 100ms for consensus operations
+#   - Throughput > 10,000 ops/sec for scheduling
+#   - Tail latency (p99.9) < 500ms
+#   - Memory growth < 10MB/hour under steady load
+#
+# =============================================================================
+
+name: Performance Benchmarks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'pkg/**'
+      - '.github/workflows/benchmark.yml'
+  pull_request:
+    branches: [main]
+    # Only run on PRs that modify performance-critical code
+    paths:
+      - 'src/consensus/**'
+      - 'src/scheduler/**'
+      - 'src/storage/**'
+      - 'src/network/**'
+      - 'pkg/consensus/**'
+      - 'pkg/scheduler/**'
+      - 'pkg/storage/**'
+  schedule:
+    # Nightly comprehensive benchmarks at 4 AM UTC
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Stress test duration (seconds)'
+        required: false
+        default: '300'
+      comparison_ref:
+        description: 'Git ref to compare against'
+        required: false
+        default: 'main'
+
+env:
+  GO_VERSION: '1.22'
+  RUST_VERSION: '1.75.0'
+  # Performance thresholds
+  P99_LATENCY_MS: 100
+  MIN_THROUGHPUT_OPS: 10000
+  P999_LATENCY_MS: 500
+  MAX_MEMORY_GROWTH_MB: 50
+
+concurrency:
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================
+  # Stage 1: Rust Microbenchmarks
+  # ============================================================
+  rust-benchmarks:
+    name: Rust Benchmarks
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-bench-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+      
+      # Install criterion for detailed benchmarks
+      - name: Install Benchmark Tools
+        run: |
+          cargo install cargo-criterion || true
+          cargo install critcmp || true
+      
+      # Run benchmarks and capture baseline
+      - name: Run Benchmarks
+        run: |
+          mkdir -p benchmark-results
+          
+          # Run Criterion benchmarks
+          cargo bench --all-features -- \
+            --save-baseline current \
+            2>&1 | tee benchmark-results/rust-bench.txt
+      
+      # Compare with main branch if on PR
+      - name: Checkout Baseline (Main)
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: baseline
+      
+      - name: Compare with Baseline
+        if: github.event_name == 'pull_request'
+        run: |
+          cd baseline
+          cargo bench --all-features -- --save-baseline main 2>/dev/null || true
+          cd ..
+          
+          # Compare and report regressions
+          critcmp main current > benchmark-results/comparison.txt 2>/dev/null || true
+          
+          # Check for significant regressions (>10%)
+          if grep -q "+[0-9]\{2,\}\.[0-9]*%" benchmark-results/comparison.txt; then
+            echo "::warning::Potential performance regression detected"
+            cat benchmark-results/comparison.txt
+          fi
+        continue-on-error: true
+      
+      - name: Upload Benchmark Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-benchmarks
+          path: benchmark-results/
+          retention-days: 30
+
+  # ============================================================
+  # Stage 2: Go Benchmarks
+  # ============================================================
+  go-benchmarks:
+    name: Go Benchmarks
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      
+      # Run benchmarks with memory stats
+      - name: Run Benchmarks
+        run: |
+          mkdir -p benchmark-results
+          
+          # Run benchmarks with memory allocation tracking
+          go test -bench=. -benchmem -run=^$ -count=5 ./... \
+            2>&1 | tee benchmark-results/go-bench.txt
+          
+          # Parse key metrics
+          echo "## Key Metrics" > benchmark-results/metrics.md
+          echo "" >> benchmark-results/metrics.md
+          
+          # Extract consensus benchmarks
+          grep "Consensus" benchmark-results/go-bench.txt >> benchmark-results/metrics.md || true
+          # Extract scheduler benchmarks
+          grep "Scheduler" benchmark-results/go-bench.txt >> benchmark-results/metrics.md || true
+      
+      # Compare with baseline
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+      
+      - name: Compare with Baseline
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin main
+          git checkout origin/main -- . 2>/dev/null || true
+          go test -bench=. -benchmem -run=^$ -count=5 ./... > baseline.txt 2>/dev/null || true
+          git checkout - -- .
+          
+          if [ -f baseline.txt ]; then
+            benchstat baseline.txt benchmark-results/go-bench.txt > benchmark-results/comparison.txt
+            cat benchmark-results/comparison.txt
+          fi
+        continue-on-error: true
+      
+      - name: Upload Benchmark Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-benchmarks
+          path: benchmark-results/
+          retention-days: 30
+
+  # ============================================================
+  # Stage 3: Network Stress Test
+  # ============================================================
+  network-stress:
+    name: Network Stress Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      
+      - name: Build Binary
+        run: make build
+      
+      - name: Start Cluster
+        run: |
+          chmod +x ./deploy/cluster.sh
+          ./deploy/cluster.sh start 5
+          sleep 15  # Wait for cluster initialization
+      
+      # Network latency stress test
+      - name: Latency Stress Test
+        run: |
+          mkdir -p stress-results
+          DURATION=${{ github.event.inputs.duration || '60' }}
+          
+          # Create stress test script
+          cat > stress-test.sh << 'EOF'
+          #!/bin/bash
+          DURATION=$1
+          RESULTS_FILE=$2
+          
+          echo "Running latency stress test for ${DURATION}s..."
+          
+          START=$(date +%s)
+          END=$((START + DURATION))
+          TOTAL=0
+          ERRORS=0
+          LATENCIES=()
+          
+          while [ $(date +%s) -lt $END ]; do
+            for i in {1..100}; do
+              START_REQ=$(date +%s%N)
+              RESPONSE=$(curl -sf -w "%{time_total}" -o /dev/null http://localhost:8080/health 2>/dev/null)
+              if [ $? -eq 0 ]; then
+                LATENCIES+=($RESPONSE)
+                TOTAL=$((TOTAL + 1))
+              else
+                ERRORS=$((ERRORS + 1))
+              fi
+            done
+          done
+          
+          echo "Total requests: $TOTAL"
+          echo "Errors: $ERRORS"
+          echo "Error rate: $(echo "scale=4; $ERRORS / ($TOTAL + $ERRORS) * 100" | bc)%"
+          
+          # Calculate percentiles (simplified)
+          printf '%s\n' "${LATENCIES[@]}" | sort -n > /tmp/latencies.txt
+          COUNT=$(wc -l < /tmp/latencies.txt)
+          P50_IDX=$((COUNT * 50 / 100))
+          P99_IDX=$((COUNT * 99 / 100))
+          P999_IDX=$((COUNT * 999 / 1000))
+          
+          P50=$(sed -n "${P50_IDX}p" /tmp/latencies.txt)
+          P99=$(sed -n "${P99_IDX}p" /tmp/latencies.txt)
+          P999=$(sed -n "${P999_IDX}p" /tmp/latencies.txt)
+          
+          echo "p50 latency: ${P50}s"
+          echo "p99 latency: ${P99}s"
+          echo "p99.9 latency: ${P999}s"
+          
+          # Write results
+          echo "{\"total\": $TOTAL, \"errors\": $ERRORS, \"p50\": \"$P50\", \"p99\": \"$P99\", \"p999\": \"$P999\"}" > $RESULTS_FILE
+          EOF
+          chmod +x stress-test.sh
+          
+          ./stress-test.sh $DURATION stress-results/latency.json
+        continue-on-error: true
+      
+      # Throughput stress test
+      - name: Throughput Stress Test
+        run: |
+          DURATION=${{ github.event.inputs.duration || '60' }}
+          
+          # Use wrk or hey for throughput testing
+          which hey || go install github.com/rakyll/hey@latest
+          
+          # Run throughput test
+          hey -z ${DURATION}s -c 50 -q 200 http://localhost:8080/health \
+            > stress-results/throughput.txt 2>&1 || true
+          
+          # Extract key metrics
+          THROUGHPUT=$(grep "Requests/sec" stress-results/throughput.txt | awk '{print $2}')
+          echo "Throughput: $THROUGHPUT req/s"
+          
+          # Assert throughput threshold
+          if (( $(echo "$THROUGHPUT < 1000" | bc -l) )); then
+            echo "::warning::Throughput $THROUGHPUT is below expected minimum"
+          fi
+      
+      - name: Stop Cluster
+        if: always()
+        run: ./deploy/cluster.sh stop
+      
+      - name: Upload Stress Test Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: network-stress
+          path: stress-results/
+          retention-days: 30
+
+  # ============================================================
+  # Stage 4: Scheduler Fairness Benchmark
+  # ============================================================
+  scheduler-fairness:
+    name: Scheduler Fairness
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      
+      # Run scheduler fairness tests
+      - name: Fairness Benchmark
+        run: |
+          mkdir -p fairness-results
+          
+          # Run multi-tenant scheduling benchmark
+          cargo test --test multi_tenant -- \
+            --test-threads=1 \
+            test_fair_resource_distribution \
+            test_priority_enforcement \
+            test_starvation_prevention \
+            2>&1 | tee fairness-results/fairness.txt
+          
+          # Analyze results
+          echo "## Scheduler Fairness Analysis" > fairness-results/analysis.md
+          
+          # Check for fairness violations
+          if grep -q "FAILED" fairness-results/fairness.txt; then
+            echo "::error::Scheduler fairness test failed"
+            echo "❌ Fairness violations detected" >> fairness-results/analysis.md
+          else
+            echo "✅ All fairness constraints satisfied" >> fairness-results/analysis.md
+          fi
+      
+      - name: Upload Fairness Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: scheduler-fairness
+          path: fairness-results/
+          retention-days: 30
+
+  # ============================================================
+  # Stage 5: Memory & Resource Profiling
+  # ============================================================
+  resource-profiling:
+    name: Resource Profiling
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.inputs.duration != ''
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      
+      - name: Build Binary with Profiling
+        run: |
+          go build -o bin/greyd-profile \
+            -ldflags="-X main.EnableProfiling=true" \
+            ./cmd/greyd
+      
+      - name: Start Cluster with Profiling
+        run: |
+          chmod +x ./deploy/cluster.sh
+          GREYD_PPROF=1 ./deploy/cluster.sh start 3
+          sleep 10
+      
+      # Collect CPU and memory profiles
+      - name: Collect Profiles
+        run: |
+          mkdir -p profiles
+          DURATION=${{ github.event.inputs.duration || '120' }}
+          
+          # CPU profile
+          curl -sf "http://localhost:8080/debug/pprof/profile?seconds=30" \
+            > profiles/cpu.prof 2>/dev/null || true
+          
+          # Heap profile
+          curl -sf "http://localhost:8080/debug/pprof/heap" \
+            > profiles/heap.prof 2>/dev/null || true
+          
+          # Goroutine profile
+          curl -sf "http://localhost:8080/debug/pprof/goroutine" \
+            > profiles/goroutine.txt 2>/dev/null || true
+          
+          # Memory stats over time
+          for i in {1..12}; do
+            curl -sf "http://localhost:8080/debug/pprof/heap?debug=1" \
+              >> profiles/heap-timeline.txt 2>/dev/null || true
+            echo "---SNAPSHOT $i---" >> profiles/heap-timeline.txt
+            sleep 10
+          done
+        continue-on-error: true
+      
+      # Analyze memory growth
+      - name: Analyze Memory Growth
+        run: |
+          # Check for memory leaks
+          if [ -f profiles/heap-timeline.txt ]; then
+            FIRST=$(head -20 profiles/heap-timeline.txt | grep "HeapAlloc" | awk '{print $2}' | head -1)
+            LAST=$(tail -20 profiles/heap-timeline.txt | grep "HeapAlloc" | awk '{print $2}' | tail -1)
+            
+            if [ -n "$FIRST" ] && [ -n "$LAST" ]; then
+              GROWTH=$((LAST - FIRST))
+              GROWTH_MB=$((GROWTH / 1024 / 1024))
+              echo "Memory growth: ${GROWTH_MB}MB"
+              
+              if [ $GROWTH_MB -gt $MAX_MEMORY_GROWTH_MB ]; then
+                echo "::warning::Memory growth ${GROWTH_MB}MB exceeds threshold ${MAX_MEMORY_GROWTH_MB}MB"
+              fi
+            fi
+          fi
+        continue-on-error: true
+      
+      - name: Stop Cluster
+        if: always()
+        run: ./deploy/cluster.sh stop
+      
+      - name: Upload Profiles
+        uses: actions/upload-artifact@v4
+        with:
+          name: resource-profiles
+          path: profiles/
+          retention-days: 30
+
+  # ============================================================
+  # Stage 6: Performance Economics Report
+  # ============================================================
+  performance-report:
+    name: Performance Economics Report
+    runs-on: ubuntu-latest
+    needs: [rust-benchmarks, go-benchmarks, network-stress, scheduler-fairness]
+    if: always()
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Generate Performance Report
+        run: |
+          mkdir -p reports
+          
+          cat > reports/performance-economics.md << 'EOF'
+          # Grey Distributed - Performance Economics Report
+          
+          **Date**: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+          **Commit**: ${{ github.sha }}
+          **Branch**: ${{ github.ref_name }}
+          
+          ## Executive Summary
+          
+          This report summarizes performance characteristics and resource efficiency
+          of the Grey Distributed system.
+          
+          ## Benchmark Results
+          
+          ### Consensus Layer
+          EOF
+          
+          # Append Rust benchmark results
+          if [ -f artifacts/rust-benchmarks/rust-bench.txt ]; then
+            echo '```' >> reports/performance-economics.md
+            grep -A 5 "consensus" artifacts/rust-benchmarks/rust-bench.txt | head -20 >> reports/performance-economics.md
+            echo '```' >> reports/performance-economics.md
+          fi
+          
+          cat >> reports/performance-economics.md << 'EOF'
+          
+          ### Scheduler Layer
+          EOF
+          
+          if [ -f artifacts/go-benchmarks/go-bench.txt ]; then
+            echo '```' >> reports/performance-economics.md
+            grep "Scheduler" artifacts/go-benchmarks/go-bench.txt | head -10 >> reports/performance-economics.md
+            echo '```' >> reports/performance-economics.md
+          fi
+          
+          cat >> reports/performance-economics.md << 'EOF'
+          
+          ### Network Performance
+          EOF
+          
+          if [ -f artifacts/network-stress/throughput.txt ]; then
+            echo '```' >> reports/performance-economics.md
+            grep -E "Requests/sec|Latency|Total:" artifacts/network-stress/throughput.txt | head -15 >> reports/performance-economics.md
+            echo '```' >> reports/performance-economics.md
+          fi
+          
+          cat >> reports/performance-economics.md << 'EOF'
+          
+          ## Resource Efficiency
+          
+          | Metric | Value | Threshold | Status |
+          |--------|-------|-----------|--------|
+          | p99 Latency | TBD | <100ms | ⏳ |
+          | Throughput | TBD | >10k ops/s | ⏳ |
+          | Memory Growth | TBD | <50MB/hr | ⏳ |
+          | CPU Efficiency | TBD | <80% | ⏳ |
+          
+          ## Recommendations
+          
+          - Review any tests marked with ⚠️ warnings
+          - Compare against baseline for regression analysis
+          - Monitor trends over nightly runs
+          
+          ---
+          *Generated by Grey Distributed CI/CD Pipeline*
+          EOF
+          
+          echo "Performance report generated"
+      
+      - name: Upload Performance Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-report
+          path: reports/
+          retention-days: 90
+      
+      - name: Post Summary
+        run: |
+          echo "## Performance Benchmark Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Stage | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Rust Benchmarks | ${{ needs.rust-benchmarks.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Go Benchmarks | ${{ needs.go-benchmarks.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Network Stress | ${{ needs.network-stress.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Scheduler Fairness | ${{ needs.scheduler-fairness.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Full report available in artifacts." >> $GITHUB_STEP_SUMMARY

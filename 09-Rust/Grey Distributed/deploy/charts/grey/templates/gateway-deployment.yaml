@@ -1,0 +1,270 @@
+{{/*
+=============================================================================
+Grey Distributed — Gateway Deployment
+=============================================================================
+
+Gateways handle external traffic ingress and routing. Features:
+- Load balancing across coordinator/worker nodes
+- TLS termination
+- Rate limiting and authentication
+
+=============================================================================
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "grey.fullname" . }}-gateway
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grey.gateway.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.gateway.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: {{ .Values.gateway.maxUnavailable | default 1 }}
+      maxSurge: {{ .Values.gateway.maxSurge | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "grey.gateway.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "grey.gateway.labels" . | nindent 8 }}
+        {{- with .Values.gateway.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        grey.io/config-checksum: {{ include "grey.configChecksum" . }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.monitoring.prometheus.port | default "9090" | quote }}
+        prometheus.io/path: "/metrics"
+        {{- with .Values.gateway.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "grey.gateway.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.gateway.terminationGracePeriodSeconds | default 30 }}
+      
+      {{- with .Values.global.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      
+      {{- if .Values.gateway.priorityClassName }}
+      priorityClassName: {{ .Values.gateway.priorityClassName }}
+      {{- end }}
+      
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      
+      # Anti-affinity: spread gateways across nodes/zones
+      affinity:
+        {{- if .Values.gateway.affinity }}
+        {{- toYaml .Values.gateway.affinity | nindent 8 }}
+        {{- else }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "grey.gateway.selectorLabels" . | nindent 20 }}
+                topologyKey: kubernetes.io/hostname
+            - weight: 50
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "grey.gateway.selectorLabels" . | nindent 20 }}
+                topologyKey: topology.kubernetes.io/zone
+        {{- end }}
+      
+      {{- with .Values.gateway.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      
+      {{- with .Values.gateway.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      
+      containers:
+        - name: gateway
+          image: {{ include "grey.image" . }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          
+          command:
+            - /usr/bin/grey-gateway
+          args:
+            - --config=/etc/grey/config.yaml
+            - --coordinator-service={{ include "grey.fullname" . }}-coordinator.{{ .Release.Namespace }}.svc.cluster.local
+            - --http-port={{ .Values.gateway.service.httpPort }}
+            - --grpc-port={{ .Values.gateway.service.grpcPort }}
+            {{- if .Values.security.mtls.enabled }}
+            - --tls-cert=/etc/grey/certs/tls.crt
+            - --tls-key=/etc/grey/certs/tls.key
+            - --tls-ca=/etc/grey/certs/ca.crt
+            {{- end }}
+            {{- range .Values.gateway.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          
+          env:
+            {{- include "grey.commonEnv" . | nindent 12 }}
+            - name: GREY_ROLE
+              value: "gateway"
+            - name: GREY_CLUSTER_NAME
+              value: {{ .Values.global.clusterName | default "grey-cluster" | quote }}
+            # Rate limiting configuration
+            - name: GREY_RATE_LIMIT_RPS
+              value: {{ .Values.gateway.rateLimit.rps | default "10000" | quote }}
+            - name: GREY_RATE_LIMIT_BURST
+              value: {{ .Values.gateway.rateLimit.burst | default "1000" | quote }}
+            {{- with .Values.gateway.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          
+          ports:
+            - name: http
+              containerPort: {{ .Values.gateway.service.httpPort }}
+              protocol: TCP
+            - name: grpc
+              containerPort: {{ .Values.gateway.service.grpcPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.monitoring.prometheus.port | default 9090 }}
+              protocol: TCP
+          
+          resources:
+            {{- toYaml .Values.gateway.resources | nindent 12 }}
+          
+          livenessProbe:
+            {{- if .Values.gateway.livenessProbe }}
+            {{- toYaml .Values.gateway.livenessProbe | nindent 12 }}
+            {{- else }}
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+            {{- end }}
+          
+          readinessProbe:
+            {{- if .Values.gateway.readinessProbe }}
+            {{- toYaml .Values.gateway.readinessProbe | nindent 12 }}
+            {{- else }}
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+            {{- end }}
+          
+          volumeMounts:
+            {{- include "grey.commonVolumeMounts" . | nindent 12 }}
+            {{- with .Values.gateway.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      
+      volumes:
+        {{- include "grey.commonVolumes" . | nindent 8 }}
+        {{- with .Values.gateway.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+
+---
+# HorizontalPodAutoscaler for gateways
+{{- if .Values.gateway.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "grey.fullname" . }}-gateway
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grey.gateway.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "grey.fullname" . }}-gateway
+  minReplicas: {{ .Values.gateway.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.gateway.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.gateway.autoscaling.targetCPU | default 70 }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.gateway.autoscaling.targetMemory | default 80 }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 25
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 15
+{{- end }}
+
+---
+# PodDisruptionBudget for gateways
+{{- if .Values.gateway.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "grey.fullname" . }}-gateway
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grey.gateway.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.gateway.pdb.minAvailable | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "grey.gateway.selectorLabels" . | nindent 6 }}
+{{- end }}
+
+---
+# ServiceAccount for gateway pods
+{{- if .Values.gateway.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "grey.gateway.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grey.gateway.labels" . | nindent 4 }}
+  {{- with .Values.gateway.serviceAccount.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+automountServiceAccountToken: {{ .Values.gateway.serviceAccount.automountServiceAccountToken | default true }}
+{{- end }}

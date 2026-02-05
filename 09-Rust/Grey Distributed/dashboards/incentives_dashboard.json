@@ -1,0 +1,582 @@
+{
+  "title": "Grey Distributed - Incentives Dashboard",
+  "description": "Monitor rewards, penalties, fairness metrics, and incentive sustainability",
+  "version": "1.0.0",
+  "refresh_interval": "30s",
+  "time_range": {
+    "default": "24h",
+    "options": ["1h", "6h", "24h", "7d", "30d"]
+  },
+  "variables": [
+    {
+      "name": "cluster",
+      "type": "query",
+      "label": "Cluster",
+      "query": "label_values(grey_cluster_info, cluster_id)",
+      "multi": true,
+      "include_all": true
+    },
+    {
+      "name": "tenant",
+      "type": "query",
+      "label": "Tenant",
+      "query": "label_values(grey_tenant_info, tenant_id)",
+      "multi": true,
+      "include_all": true
+    },
+    {
+      "name": "reward_type",
+      "type": "custom",
+      "label": "Reward Type",
+      "options": ["all", "task_completion", "fairness", "federation", "attestation"],
+      "default": "all"
+    }
+  ],
+  "rows": [
+    {
+      "title": "Incentive Overview",
+      "height": "100px",
+      "panels": [
+        {
+          "title": "Total Rewards (24h)",
+          "type": "stat",
+          "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+          "targets": [
+            {
+              "expr": "sum(increase(grey_rewards_distributed_total[$__range]))",
+              "legendFormat": "Rewards"
+            }
+          ],
+          "format": "short",
+          "colorMode": "background",
+          "thresholds": [{"value": 0, "color": "green"}]
+        },
+        {
+          "title": "Total Penalties (24h)",
+          "type": "stat",
+          "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+          "targets": [
+            {
+              "expr": "sum(increase(grey_penalties_assessed_total[$__range]))",
+              "legendFormat": "Penalties"
+            }
+          ],
+          "format": "short",
+          "colorMode": "background",
+          "thresholds": [{"value": 0, "color": "red"}]
+        },
+        {
+          "title": "Net Incentive Flow",
+          "type": "stat",
+          "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
+          "targets": [
+            {
+              "expr": "sum(increase(grey_rewards_distributed_total[$__range])) - sum(increase(grey_penalties_assessed_total[$__range]))",
+              "legendFormat": "Net Flow"
+            }
+          ],
+          "format": "short",
+          "colorMode": "value",
+          "thresholds": [
+            {"value": -1000, "color": "red"},
+            {"value": 0, "color": "yellow"},
+            {"value": 1000, "color": "green"}
+          ]
+        },
+        {
+          "title": "Fairness Index",
+          "type": "gauge",
+          "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
+          "targets": [
+            {
+              "expr": "grey_jain_fairness_index",
+              "legendFormat": "Jain's Index"
+            }
+          ],
+          "min": 0,
+          "max": 1,
+          "thresholds": [
+            {"value": 0, "color": "red"},
+            {"value": 0.7, "color": "yellow"},
+            {"value": 0.9, "color": "green"}
+          ]
+        },
+        {
+          "title": "Active Suspensions",
+          "type": "stat",
+          "gridPos": {"x": 16, "y": 0, "w": 4, "h": 4},
+          "targets": [
+            {
+              "expr": "sum(grey_tenant_suspensions_active)",
+              "legendFormat": "Suspensions"
+            }
+          ],
+          "format": "short",
+          "colorMode": "background",
+          "thresholds": [
+            {"value": 0, "color": "green"},
+            {"value": 1, "color": "yellow"},
+            {"value": 5, "color": "red"}
+          ]
+        },
+        {
+          "title": "Cooperation Score",
+          "type": "gauge",
+          "gridPos": {"x": 20, "y": 0, "w": 4, "h": 4},
+          "targets": [
+            {
+              "expr": "avg(grey_cluster_cooperation_score{cluster=~\"$cluster\"})",
+              "legendFormat": "Avg Score"
+            }
+          ],
+          "min": 0,
+          "max": 3,
+          "thresholds": [
+            {"value": 0, "color": "red"},
+            {"value": 1, "color": "yellow"},
+            {"value": 2, "color": "green"}
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Reward Distribution",
+      "height": "300px",
+      "panels": [
+        {
+          "title": "Rewards by Type",
+          "type": "timeseries",
+          "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+          "targets": [
+            {
+              "expr": "sum(rate(grey_rewards_distributed_total{reward_type=\"task_completion\"}[5m])) * 300",
+              "legendFormat": "Task Completion"
+            },
+            {
+              "expr": "sum(rate(grey_rewards_distributed_total{reward_type=\"fairness\"}[5m])) * 300",
+              "legendFormat": "Fairness Bonus"
+            },
+            {
+              "expr": "sum(rate(grey_rewards_distributed_total{reward_type=\"federation\"}[5m])) * 300",
+              "legendFormat": "Federation"
+            },
+            {
+              "expr": "sum(rate(grey_rewards_distributed_total{reward_type=\"attestation\"}[5m])) * 300",
+              "legendFormat": "Attestation"
+            }
+          ],
+          "unit": "tokens",
+          "stackMode": "normal",
+          "legend": {"show": true, "placement": "bottom"}
+        },
+        {
+          "title": "Top Reward Recipients",
+          "type": "barchart",
+          "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+          "targets": [
+            {
+              "expr": "topk(10, sum(increase(grey_rewards_distributed_total{tenant=~\"$tenant\"}[$__range])) by (tenant))",
+              "legendFormat": "{{tenant}}"
+            }
+          ],
+          "unit": "short",
+          "orientation": "horizontal"
+        }
+      ]
+    },
+    {
+      "title": "Task Rewards",
+      "height": "300px",
+      "panels": [
+        {
+          "title": "Task Completion Rewards",
+          "type": "timeseries",
+          "gridPos": {"x": 0, "y": 12, "w": 8, "h": 8},
+          "targets": [
+            {
+              "expr": "sum(rate(grey_task_rewards_total[5m])) by (tenant) * 300",
+              "legendFormat": "{{tenant}}"
+            }
+          ],
+          "unit": "tokens",
+          "legend": {"show": true, "placement": "bottom"}
+        },
+        {
+          "title": "Timeliness Factor Distribution",
+          "type": "histogram",
+          "gridPos": {"x": 8, "y": 12, "w": 8, "h": 8},
+          "targets": [
+            {
+              "expr": "grey_task_timeliness_factor_bucket",
+              "legendFormat": "{{le}}"
+            }
+          ],
+          "buckets": [0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+          "legend": {"show": true, "placement": "bottom"}
+        },
+        {
+          "title": "Quality Multiplier",
+          "type": "timeseries",
+          "gridPos": {"x": 16, "y": 12, "w": 8, "h": 8},
+          "targets": [
+            {
+              "expr": "avg(grey_task_quality_multiplier{tenant=~\"$tenant\"}) by (tenant)",
+              "legendFormat": "{{tenant}}"
+            }
+          ],
+          "unit": "short",
+          "yAxisLabel": "Multiplier",
+          "legend": {"show": true, "placement": "bottom"}
+        }
+      ]
+    },
+    {
+      "title": "Penalty Analysis",
+      "height": "300px",
+      "panels": [
+        {
+          "title": "Penalties by Type",
+          "type": "timeseries",
+          "gridPos": {"x": 0, "y": 20, "w": 8, "h": 8},
+          "targets": [
+            {
+              "expr": "sum(rate(grey_penalties_assessed_total{resource_type=\"cpu\"}[5m])) * 300",
+              "legendFormat": "CPU Quota"
+            },
+            {
+              "expr": "sum(rate(grey_penalties_assessed_total{resource_type=\"memory\"}[5m])) * 300",
+              "legendFormat": "Memory Quota"
+            },
+            {
+              "expr": "sum(rate(grey_penalties_assessed_total{resource_type=\"network\"}[5m])) * 300",
+              "legendFormat": "Network"
+            },
+            {
+              "expr": "sum(rate(grey_penalties_assessed_total{resource_type=\"api_rate\"}[5m])) * 300",
+              "legendFormat": "API Rate"
+            }
+          ],
+          "unit": "tokens",
+          "stackMode": "normal",
+          "legend": {"show": true, "placement": "bottom"}
+        },
+        {
+          "title": "Penalty Escalation",
+          "type": "timeseries",
+          "gridPos": {"x": 8, "y": 20, "w": 8, "h": 8},
+          "targets": [
+            {
+              "expr": "grey_penalty_escalation_factor{tenant=~\"$tenant\"}",
+              "legendFormat": "{{tenant}}"
+            }
+          ],
+          "unit": "short",
+          "yAxisLabel": "Escalation Factor",
+          "thresholds": [
+            {"value": 1.0, "color": "green", "op": "lt"},
+            {"value": 2.0, "color": "yellow", "op": "lt"},
+            {"value": 3.0, "color": "red", "op": "gte"}
+          ],
+          "legend": {"show": true, "placement": "bottom"}
+        },
+        {
+          "title": "Repeat Offenders",
+          "type": "table",
+          "gridPos": {"x": 16, "y": 20, "w": 8, "h": 8},
+          "targets": [
+            {
+              "expr": "topk(10, grey_violation_count_24h)",
+              "format": "table"
+            }
+          ],
+          "columns": [
+            {"field": "tenant", "title": "Tenant"},
+            {"field": "value", "title": "Violations (24h)"},
+            {"field": "resource_type", "title": "Resource"}
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Federation Incentives",
+      "height": "300px",
+      "panels": [
+        {
+          "title": "Resource Sharing Rewards",
+          "type": "timeseries",
+          "gridPos": {"x": 0, "y": 28, "w": 8, "h": 8},
+          "targets": [
+            {
+              "expr": "sum(rate(grey_federation_sharing_rewards_total[5m])) by (provider_cluster) * 300",
+              "legendFormat": "{{provider_cluster}}"
+            }
+          ],
+          "unit": "tokens",
+          "legend": {"show": true, "placement": "bottom"}
+        },
+        {
+          "title": "Attestation Participation",
+          "type": "timeseries",
+          "gridPos": {"x": 8, "y": 28, "w": 8, "h": 8},
+          "targets": [
+            {
+              "expr": "sum(rate(grey_attestation_rewards_total[5m])) by (cluster) * 300",
+              "legendFormat": "{{cluster}}"
+            }
+          ],
+          "unit": "tokens",
+          "legend": {"show": true, "placement": "bottom"}
+        },
+        {
+          "title": "Cooperation Multiplier by Cluster",
+          "type": "barchart",
+          "gridPos": {"x": 16, "y": 28, "w": 8, "h": 8},
+          "targets": [
+            {
+              "expr": "grey_cluster_cooperation_multiplier{cluster=~\"$cluster\"}",
+              "legendFormat": "{{cluster}}"
+            }
+          ],
+          "unit": "short",
+          "orientation": "horizontal",
+          "thresholds": [
+            {"value": 0.5, "color": "red"},
+            {"value": 1.0, "color": "yellow"},
+            {"value": 2.0, "color": "green"}
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Fairness Metrics",
+      "height": "300px",
+      "panels": [
+        {
+          "title": "Jain's Fairness Index Over Time",
+          "type": "timeseries",
+          "gridPos": {"x": 0, "y": 36, "w": 12, "h": 8},
+          "targets": [
+            {
+              "expr": "grey_jain_fairness_index{resource_type=\"cpu\"}",
+              "legendFormat": "CPU"
+            },
+            {
+              "expr": "grey_jain_fairness_index{resource_type=\"memory\"}",
+              "legendFormat": "Memory"
+            },
+            {
+              "expr": "grey_jain_fairness_index{resource_type=\"network\"}",
+              "legendFormat": "Network"
+            }
+          ],
+          "unit": "short",
+          "yAxisLabel": "Fairness Index",
+          "min": 0,
+          "max": 1,
+          "thresholds": [
+            {"value": 0.7, "color": "red", "op": "lt"},
+            {"value": 0.9, "color": "yellow", "op": "lt"},
+            {"value": 0.9, "color": "green", "op": "gte"}
+          ],
+          "legend": {"show": true, "placement": "bottom"}
+        },
+        {
+          "title": "DRF Allocation Ratio",
+          "type": "timeseries",
+          "gridPos": {"x": 12, "y": 36, "w": 12, "h": 8},
+          "targets": [
+            {
+              "expr": "grey_drf_dominant_share{tenant=~\"$tenant\"}",
+              "legendFormat": "{{tenant}}"
+            }
+          ],
+          "unit": "percentunit",
+          "yAxisLabel": "Dominant Share",
+          "legend": {"show": true, "placement": "bottom"}
+        }
+      ]
+    },
+    {
+      "title": "Incentive Sustainability",
+      "height": "300px",
+      "panels": [
+        {
+          "title": "Reward vs Consumption Ratio",
+          "type": "timeseries",
+          "gridPos": {"x": 0, "y": 44, "w": 8, "h": 8},
+          "targets": [
+            {
+              "expr": "sum(rate(grey_rewards_distributed_total[1h])) / sum(rate(grey_token_consumed_total[1h]))",
+              "legendFormat": "Reward/Consumption Ratio"
+            }
+          ],
+          "unit": "short",
+          "thresholds": [
+            {"value": 0.05, "color": "red", "op": "lt"},
+            {"value": 0.1, "color": "yellow", "op": "lt"},
+            {"value": 0.1, "color": "green", "op": "gte"}
+          ],
+          "legend": {"show": true, "placement": "bottom"}
+        },
+        {
+          "title": "Incentive Budget Utilization",
+          "type": "gauge",
+          "gridPos": {"x": 8, "y": 44, "w": 8, "h": 8},
+          "targets": [
+            {
+              "expr": "sum(increase(grey_rewards_distributed_total[24h])) / grey_daily_incentive_budget * 100",
+              "legendFormat": "Budget Used"
+            }
+          ],
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": [
+            {"value": 0, "color": "blue"},
+            {"value": 70, "color": "green"},
+            {"value": 90, "color": "yellow"},
+            {"value": 100, "color": "red"}
+          ]
+        },
+        {
+          "title": "Penalty Recovery Rate",
+          "type": "timeseries",
+          "gridPos": {"x": 16, "y": 44, "w": 8, "h": 8},
+          "targets": [
+            {
+              "expr": "sum(rate(grey_penalty_recovered_total[5m])) / sum(rate(grey_penalties_assessed_total[5m]))",
+              "legendFormat": "Recovery Rate"
+            }
+          ],
+          "unit": "percentunit",
+          "thresholds": [
+            {"value": 0.5, "color": "red", "op": "lt"},
+            {"value": 0.8, "color": "yellow", "op": "lt"},
+            {"value": 0.8, "color": "green", "op": "gte"}
+          ],
+          "legend": {"show": true, "placement": "bottom"}
+        }
+      ]
+    },
+    {
+      "title": "Attestation Activity",
+      "height": "300px",
+      "panels": [
+        {
+          "title": "Attestation Success Rate",
+          "type": "timeseries",
+          "gridPos": {"x": 0, "y": 52, "w": 8, "h": 8},
+          "targets": [
+            {
+              "expr": "sum(rate(grey_attestation_verified_total[5m])) / sum(rate(grey_attestation_total[5m]))",
+              "legendFormat": "Success Rate"
+            }
+          ],
+          "unit": "percentunit",
+          "thresholds": [
+            {"value": 0.9, "color": "red", "op": "lt"},
+            {"value": 0.95, "color": "yellow", "op": "lt"},
+            {"value": 0.95, "color": "green", "op": "gte"}
+          ],
+          "legend": {"show": true, "placement": "bottom"}
+        },
+        {
+          "title": "Witness Participation",
+          "type": "barchart",
+          "gridPos": {"x": 8, "y": 52, "w": 8, "h": 8},
+          "targets": [
+            {
+              "expr": "sum(increase(grey_witness_signatures_total[$__range])) by (witness_cluster)",
+              "legendFormat": "{{witness_cluster}}"
+            }
+          ],
+          "unit": "short",
+          "orientation": "horizontal"
+        },
+        {
+          "title": "Attestation Latency",
+          "type": "timeseries",
+          "gridPos": {"x": 16, "y": 52, "w": 8, "h": 8},
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, rate(grey_attestation_duration_seconds_bucket[5m]))",
+              "legendFormat": "p50"
+            },
+            {
+              "expr": "histogram_quantile(0.95, rate(grey_attestation_duration_seconds_bucket[5m]))",
+              "legendFormat": "p95"
+            },
+            {
+              "expr": "histogram_quantile(0.99, rate(grey_attestation_duration_seconds_bucket[5m]))",
+              "legendFormat": "p99"
+            }
+          ],
+          "unit": "s",
+          "legend": {"show": true, "placement": "bottom"}
+        }
+      ]
+    }
+  ],
+  "alerts": [
+    {
+      "name": "Low Fairness Index",
+      "condition": "grey_jain_fairness_index < 0.7",
+      "for": "10m",
+      "severity": "warning",
+      "annotations": {
+        "summary": "Fairness index below 0.7",
+        "description": "Resource allocation is becoming unfair. Review tenant quotas and scheduling policies"
+      }
+    },
+    {
+      "name": "High Penalty Rate",
+      "condition": "sum(rate(grey_penalties_assessed_total[5m])) > sum(rate(grey_rewards_distributed_total[5m]))",
+      "for": "15m",
+      "severity": "warning",
+      "annotations": {
+        "summary": "Penalties exceed rewards",
+        "description": "System is penalizing more than rewarding. Review quota settings or investigate abuse"
+      }
+    },
+    {
+      "name": "Incentive Budget Exceeded",
+      "condition": "sum(increase(grey_rewards_distributed_total[24h])) > grey_daily_incentive_budget",
+      "for": "1m",
+      "severity": "critical",
+      "annotations": {
+        "summary": "Daily incentive budget exceeded",
+        "description": "Reward distribution has exceeded the daily budget. This may indicate gaming or misconfiguration"
+      }
+    },
+    {
+      "name": "Attestation Failures Spike",
+      "condition": "sum(rate(grey_attestation_failed_total[5m])) > 0.1",
+      "for": "5m",
+      "severity": "warning",
+      "annotations": {
+        "summary": "High attestation failure rate",
+        "description": "More than 10% of attestations are failing. Investigate witness availability or claim validity"
+      }
+    },
+    {
+      "name": "Cooperation Score Dropping",
+      "condition": "delta(grey_cluster_cooperation_score[1h]) < -0.2",
+      "for": "30m",
+      "severity": "warning",
+      "annotations": {
+        "summary": "Cluster cooperation score declining",
+        "description": "Federation cooperation is degrading. Review cross-cluster interactions"
+      }
+    },
+    {
+      "name": "Tenant Suspension",
+      "condition": "increase(grey_tenant_suspensions_total[5m]) > 0",
+      "for": "1m",
+      "severity": "info",
+      "annotations": {
+        "summary": "Tenant suspended",
+        "description": "A tenant has been suspended due to repeated violations"
+      }
+    }
+  ]
+}

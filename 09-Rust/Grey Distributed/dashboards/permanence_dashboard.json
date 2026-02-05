@@ -1,0 +1,941 @@
+{{
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+}  ]    { "title": "Myth-Tier Overview", "url": "../docs/myth_tier_overview.md" }    { "title": "Grey Constitution", "url": "../myth/codex/grey_constitution.md" },    { "title": "Self-Governance Logic", "url": "../myth/permanence/self_governance.rs" },    { "title": "Self-Evolution Logic", "url": "../myth/permanence/self_evolution.rs" },    { "title": "Self-Repair Logic", "url": "../myth/permanence/self_repair.rs" },  "links": [  ],    }      "notifications": ["council", "stewards"]      "for": "30d",      },        "threshold": -0.05        "operator": "<",        "metric": "grey_sustainability_trend_slope",      "condition": {      "severity": "high",      "description": "Long-term sustainability metrics trending down",      "name": "Sustainability Declining",      "id": "sustainability-declining",    {    },      "notifications": ["stewards"]      "for": "7d",      },        "threshold": 365        "operator": ">",        "metric": "grey_days_since_last_evolution",      "condition": {      "severity": "medium",      "description": "No successful evolutions in extended period",      "name": "Evolution Stalled",      "id": "evolution-stalled",    {    },      "notifications": ["council"]      "for": "24h",      },        "threshold": 0.5        "operator": ">",        "metric": "grey_power_concentration_risk",      "condition": {      "severity": "high",      "description": "Power concentration risk exceeds safe threshold",      "name": "Power Concentration High",      "id": "power-concentration-high",    {    },      "notifications": ["council", "all-maintainers", "emergency"]      "for": "1m",      },        "threshold": 0        "operator": ">",        "metric": "grey_issues_by_severity{severity=\"existential\"}",      "condition": {      "severity": "existential",      "description": "An existential-level issue has been detected",      "name": "Existential Issue Detected",      "id": "existential-issue-detected",    {    },      "notifications": ["stewards"]      "for": "1h",      },        "threshold": 0.8        "operator": "<",        "metric": "grey_self_repair_health_score",      "condition": {      "severity": "high",      "description": "Self-repair system health has degraded",      "name": "Self-Repair Degraded",      "id": "self-repair-degraded",    {    },      "notifications": ["council"]      "for": "24h",      },        "threshold": 2        "operator": ">=",        "metric": "grey_bodies_with_succession_crisis",      "condition": {      "severity": "critical",      "description": "Multiple governance bodies have insufficient succession",      "name": "Succession Crisis",      "id": "succession-crisis",    {    },      "notifications": ["council", "all-maintainers", "emergency"]      "for": "5m",      },        "threshold": 1.0        "operator": "<",        "metric": "grey_core_integrity",      "condition": {      "severity": "existential",      "description": "Immutable core principles may have been violated",      "name": "Core Integrity Breach",      "id": "core-integrity-breach",    {    },      "notifications": ["stewards", "council"]      "for": "1h",      },        "threshold": 0.7        "operator": "<",        "metric": "grey_permanence_score",      "condition": {      "severity": "critical",      "description": "Overall permanence score has dropped below threshold",      "name": "Permanence Score Low",      "id": "permanence-score-low",    {  "alerts": [  ],    }      ]        }          "limit": 5          "show_severity": true,          "metric": "grey_sustainability_risks",          "position": { "col": 3, "row": 1, "width": 1, "height": 1 },          "type": "list",          "title": "Sustainability Risks",          "id": "sustainability-risks",        {        },          "time_range": "10y"          ],            { "name": "grey_knowledge_sustainability_score", "label": "Knowledge" }            { "name": "grey_technical_sustainability_score", "label": "Technical" },            { "name": "grey_community_sustainability_score", "label": "Community" },            { "name": "grey_financial_sustainability_score", "label": "Financial" },          "metrics": [          "position": { "col": 0, "row": 1, "width": 3, "height": 1 },          "type": "timeseries",          "title": "Sustainability Trends",          "id": "sustainability-trends",        {        },          "max": 1          "min": 0,          "metric": "grey_knowledge_sustainability_score",          "position": { "col": 3, "row": 0, "width": 1, "height": 1 },          "type": "gauge",          "title": "Knowledge Sustainability",          "id": "knowledge-sustainability",        {        },          "max": 1          "min": 0,          "metric": "grey_technical_sustainability_score",          "position": { "col": 2, "row": 0, "width": 1, "height": 1 },          "type": "gauge",          "title": "Technical Sustainability",          "id": "technical-sustainability",        {        },          "max": 1          "min": 0,          "metric": "grey_community_sustainability_score",          "position": { "col": 1, "row": 0, "width": 1, "height": 1 },          "type": "gauge",          "title": "Community Sustainability",          "id": "community-sustainability",        {        },          "max": 1          "min": 0,          "metric": "grey_financial_sustainability_score",          "position": { "col": 0, "row": 0, "width": 1, "height": 1 },          "type": "gauge",          "title": "Financial Sustainability",          "id": "financial-sustainability",        {      "panels": [      "layout": { "columns": 4, "rows": 2 },      "description": "Metrics for multi-generational sustainability",      "title": "Long-Term Sustainability",      "id": "long-term-sustainability",    {    },      ]        }          "limit": 10          ],            { "field": "approval", "label": "Approval", "type": "percent" }            { "field": "subject", "label": "Subject" },            { "field": "body", "label": "Body" },            { "field": "date", "label": "Date" },          "columns": [          "metric": "grey_recent_governance_decisions",          "position": { "col": 2, "row": 1, "width": 2, "height": 1 },          "type": "table",          "title": "Recent Decisions",          "id": "recent-decisions",        {        },          ]            { "field": "status", "label": "Status", "type": "status" }            { "field": "ready_successors", "label": "Ready" },            { "field": "pipeline_depth", "label": "Pipeline" },            { "field": "has_plan", "label": "Has Plan", "type": "boolean" },            { "field": "body", "label": "Body" },          "columns": [          "metric": "grey_succession_health_by_body",          "position": { "col": 0, "row": 1, "width": 2, "height": 1 },          "type": "table",          "title": "Succession Health by Body",          "id": "succession-health",        {        },          "max": 1          "min": 0,          "metric": "grey_transparency_score",          "position": { "col": 3, "row": 0, "width": 1, "height": 1 },          "type": "gauge",          "title": "Transparency Score",          "id": "transparency-score",        {        },          ]            { "value": 0.6, "color": "red" }            { "value": 0.3, "color": "yellow" },            { "value": 0, "color": "green" },          "thresholds": [          "max": 1,          "min": 0,          "metric": "grey_power_concentration_risk",          "position": { "col": 2, "row": 0, "width": 1, "height": 1 },          "type": "gauge",          "title": "Power Concentration Risk",          "id": "concentration-risk",        {        },          "max": 1          "min": 0,          "format": "percent",          "metric": "grey_governance_participation_rate",          "position": { "col": 1, "row": 0, "width": 1, "height": 1 },          "type": "gauge",          "title": "Participation Rate",          "id": "participation-rate",        {        },          "max": 1          "min": 0,          "metric": "grey_governance_health_score",          "position": { "col": 0, "row": 0, "width": 1, "height": 1 },          "type": "gauge",          "title": "Governance Health",          "id": "governance-health",        {      "panels": [      "layout": { "columns": 4, "rows": 2 },      "description": "Health and activity of governance systems",      "title": "Self-Governance Status",      "id": "self-governance-status",    {    },      ]        }          "show_reversions": true          "annotations": true,          "metric": "grey_completed_evolutions",          "position": { "col": 2, "row": 1, "width": 2, "height": 1 },          "type": "timeline",          "title": "Evolution History",          "id": "evolution-history",        {        },          ]            { "name": "Complete", "color": "purple" }            { "name": "Approved", "color": "green" },            { "name": "Voting", "color": "yellow" },            { "name": "Comment", "color": "cyan" },            { "name": "Review", "color": "blue" },            { "name": "Draft", "color": "gray" },          "stages": [          "metric": "grey_proposals_by_status",          "position": { "col": 0, "row": 1, "width": 2, "height": 1 },          "type": "funnel",          "title": "Proposals by Status",          "id": "proposals-by-status",        {        },          }            "fields": ["draft", "review", "voting", "implementing"]            "metric": "grey_proposals_by_status",          "breakdown": {          "metric": "grey_active_evolution_proposals",          "position": { "col": 3, "row": 0, "width": 1, "height": 1 },          "type": "stat",          "title": "Active Proposals",          "id": "active-proposals",        {        },          "trend": "lower_is_better"          "format": "percent",          "metric": "grey_evolution_reversion_rate",          "position": { "col": 2, "row": 0, "width": 1, "height": 1 },          "type": "stat",          "title": "Reversion Rate",          "id": "reversion-rate",        {        },          ]            { "value": 1.0, "color": "green" }            { "value": 0.99, "color": "yellow" },            { "value": 0, "color": "red" },          "thresholds": [          "max": 1,          "min": 0,          "metric": "grey_core_integrity",          "position": { "col": 1, "row": 0, "width": 1, "height": 1 },          "type": "gauge",          "title": "Core Integrity",          "id": "core-integrity",        {        },          "sparkline": true          "format": "number",          "metric": "grey_evolutions_per_year",          "position": { "col": 0, "row": 0, "width": 1, "height": 1 },          "type": "stat",          "title": "Evolution Velocity",          "id": "evolution-velocity",        {      "panels": [      "layout": { "columns": 4, "rows": 2 },      "description": "State and progress of system evolution",      "title": "Self-Evolution Status",      "id": "self-evolution-status",    {    },      ]        }          ]            { "name": "grey_repairs_escalated", "label": "Escalated" }            { "name": "grey_repairs_completed", "label": "Repaired" },            { "name": "grey_issues_detected", "label": "Detected" },          "metrics": [          "position": { "col": 2, "row": 1, "width": 2, "height": 1 },          "type": "timeseries",          "title": "Repair Activity",          "id": "repair-activity",        {        },          }            "existential": "purple"            "critical": "red",            "major": "orange",            "moderate": "yellow",            "minor": "blue",            "cosmetic": "gray",          "colors": {          "groupBy": "severity",          "metric": "grey_issues_by_severity",          "position": { "col": 0, "row": 1, "width": 2, "height": 1 },          "type": "barchart",          "title": "Issues by Severity",          "id": "issues-by-severity",        {        },          "trend": "lower_is_better"          "format": "hours",          "metric": "grey_mttr_hours",          "position": { "col": 3, "row": 0, "width": 1, "height": 1 },          "type": "stat",          "title": "Mean Time to Repair",          "id": "mttr",        {        },          "max": 1          "min": 0,          "format": "percent",          "metric": "grey_repair_success_rate",          "position": { "col": 2, "row": 0, "width": 1, "height": 1 },          "type": "gauge",          "title": "Repair Success Rate",          "id": "repair-success-rate",        {        },          ]            { "value": 20, "color": "red" }            { "value": 5, "color": "yellow" },            { "value": 0, "color": "green" },          "thresholds": [          "sparkline": true,          "metric": "grey_active_issues_count",          "position": { "col": 1, "row": 0, "width": 1, "height": 1 },          "type": "stat",          "title": "Active Issues",          "id": "active-issues",        {        },          "max": 1          "min": 0,          "metric": "grey_self_repair_health_score",          "position": { "col": 0, "row": 0, "width": 1, "height": 1 },          "type": "gauge",          "title": "Self-Repair Health",          "id": "repair-health",        {      "panels": [      "layout": { "columns": 4, "rows": 2 },      "description": "Health and activity of self-repair systems",      "title": "Self-Repair Status",      "id": "self-repair-status",    {    },      ]        }          "annotations": true          ],            "grey_crisis_events"            "grey_governance_changes",            "grey_version_releases",            "grey_major_milestones",          "metrics": [          "position": { "col": 0, "row": 1, "width": 4, "height": 1 },          "type": "timeline",          "title": "Permanence Timeline",          "id": "permanence-timeline",        {        },          }            "mythic": { "color": "purple", "label": "Mythic" }            "permanent": { "color": "gold", "label": "Permanent" },            "established": { "color": "green", "label": "Established" },            "emerging": { "color": "blue", "label": "Emerging" },          "states": {          "metric": "grey_myth_tier_achieved",          "position": { "col": 3, "row": 0, "width": 1, "height": 1 },          "type": "status",          "title": "Myth-Tier Status",          "id": "myth-tier-status",        {        },          "subtitle": "At current sustainability rate"          "format": "years",          "metric": "grey_projected_lifespan_years",          "position": { "col": 2, "row": 0, "width": 1, "height": 1 },          "type": "stat",          "title": "Projected Lifespan",          "id": "projected-lifespan",        {        },          ]            { "value": 0.9, "color": "green" }            { "value": 0.7, "color": "yellow" },            { "value": 0, "color": "red" },          "thresholds": [          "max": 1,          "min": 0,          "metric": "grey_permanence_score",          "position": { "col": 1, "row": 0, "width": 1, "height": 1 },          "type": "gauge",          "title": "Permanence Score",          "id": "permanence-score",        {        },          ]            { "value": 1000, "color": "purple", "label": "Millennium" }            { "value": 100, "color": "gold", "label": "Century" },            { "value": 0, "color": "green" },          "thresholds": [          "format": "years",          "metric": "grey_system_age_years",          "position": { "col": 0, "row": 0, "width": 1, "height": 1 },          "type": "stat",          "title": "System Age",          "id": "system-age",        {      "panels": [      "layout": { "columns": 4, "rows": 2 },      "description": "High-level view of system permanence status",      "title": "Permanence Overview",      "id": "permanence-overview",    {  "sections": [  },    "options": ["7d", "30d", "1y", "10y", "100y", "all"]    "default": "30d",  "time_range": {  "refresh_interval": "5m",  "version": "1.0.0",  "description": "Monitoring the myth-tier permanence of Grey Distributed across centuries",  "title": "Grey Distributed — Permanence Dashboard",  "dashboard_id": "grey-permanence",  "dashboard": {
+    "title": "Grey Distributed — Permanence Dashboard",
+    "description": "Monitoring permanence health: self-repair, self-evolution, and self-governance across centuries",
+    "refresh_interval": "1h",
+    "time_range": {
+      "default": "30d",
+      "options": ["7d", "30d", "90d", "1y", "10y", "all"]
+    }
+  },
+  "sections": [
+    {
+      "name": "Permanence Overview",
+      "layout": "grid",
+      "panels": [
+        {
+          "type": "stat",
+          "title": "System Age",
+          "metric": "system_age_years",
+          "format": "{value} years",
+          "description": "Time since Grey Distributed genesis"
+        },
+        {
+          "type": "gauge",
+          "title": "Permanence Score",
+          "metric": "permanence_health_score",
+          "thresholds": {
+            "excellent": [0.9, 1.0],
+            "good": [0.7, 0.9],
+            "warning": [0.5, 0.7],
+            "critical": [0, 0.5]
+          },
+          "description": "Overall permanence health assessment"
+        },
+        {
+          "type": "stat",
+          "title": "Projected Lifespan",
+          "metric": "projected_lifespan_years",
+          "format": "{value}+ years",
+          "description": "Estimated remaining operational years at current trajectory"
+        },
+        {
+          "type": "gauge",
+          "title": "Core Integrity",
+          "metric": "core_integrity_score",
+          "thresholds": {
+            "excellent": [0.99, 1.0],
+            "warning": [0.95, 0.99],
+            "critical": [0, 0.95]
+          },
+          "description": "Immutable core principles integrity"
+        }
+      ]
+    },
+    {
+      "name": "Self-Repair Status",
+      "layout": "grid",
+      "panels": [
+        {
+          "type": "gauge",
+          "title": "Repair Health",
+          "metric": "self_repair_health_score",
+          "thresholds": {
+            "excellent": [0.9, 1.0],
+            "good": [0.7, 0.9],
+            "warning": [0.5, 0.7],
+            "critical": [0, 0.5]
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Active Issues",
+          "metric": "active_issues_count",
+          "sparkline": true,
+          "description": "Current unresolved issues"
+        },
+        {
+          "type": "barchart",
+          "title": "Issues by Severity",
+          "metric": "issues_by_severity",
+          "categories": ["Cosmetic", "Minor", "Moderate", "Major", "Critical", "Existential"],
+          "colors": {
+            "Cosmetic": "#a0a0a0",
+            "Minor": "#4caf50",
+            "Moderate": "#ffeb3b",
+            "Major": "#ff9800",
+            "Critical": "#f44336",
+            "Existential": "#9c27b0"
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Repair Success Rate",
+          "metrics": ["repair_success_rate", "auto_repair_rate"],
+          "time_range": "90d",
+          "description": "Success rate of repair attempts"
+        },
+        {
+          "type": "stat",
+          "title": "Mean Time to Repair",
+          "metric": "mean_time_to_repair_hours",
+          "format": "{value}h",
+          "trend": "decreasing_is_good"
+        },
+        {
+          "type": "stat",
+          "title": "Predictive Repairs",
+          "metric": "predictive_repairs_30d",
+          "description": "Issues fixed before becoming problems"
+        },
+        {
+          "type": "piechart",
+          "title": "Repair Methods",
+          "metric": "repair_method_distribution",
+          "categories": ["Automatic", "Assisted", "Manual", "Escalated"]
+        },
+        {
+          "type": "stat",
+          "title": "Autonomous Capability",
+          "metric": "autonomous_repair_days",
+          "format": "{value} days",
+          "description": "Can self-repair without human intervention"
+        }
+      ]
+    },
+    {
+      "name": "Self-Evolution Status",
+      "layout": "grid",
+      "panels": [
+        {
+          "type": "gauge",
+          "title": "Evolution Health",
+          "metric": "self_evolution_health_score",
+          "thresholds": {
+            "excellent": [0.9, 1.0],
+            "good": [0.7, 0.9],
+            "warning": [0.5, 0.7],
+            "critical": [0, 0.5]
+          }
+        },
+        {
+          "type": "sankey",
+          "title": "Proposal Pipeline",
+          "metric": "proposal_flow",
+          "nodes": ["Draft", "Review", "Comment", "Voting", "Approved", "Implementing", "Complete", "Rejected"]
+        },
+        {
+          "type": "stat",
+          "title": "Evolution Velocity",
+          "metric": "evolutions_per_year",
+          "format": "{value}/year",
+          "description": "Completed evolutions per year"
+        },
+        {
+          "type": "gauge",
+          "title": "Reversion Rate",
+          "metric": "evolution_reversion_rate",
+          "thresholds": {
+            "excellent": [0, 0.05],
+            "good": [0.05, 0.1],
+            "warning": [0.1, 0.2],
+            "critical": [0.2, 1.0]
+          },
+          "description": "Rate of evolutions that were reverted"
+        },
+        {
+          "type": "barchart",
+          "title": "Proposals by Status",
+          "metric": "proposals_by_status",
+          "stacked": true
+        },
+        {
+          "type": "timeseries",
+          "title": "Core Alignment Score",
+          "metrics": ["purpose_alignment", "ethics_alignment", "security_alignment"],
+          "time_range": "1y",
+          "description": "Evolution alignment with core principles"
+        },
+        {
+          "type": "table",
+          "title": "Active Evolutions",
+          "columns": ["Title", "Status", "Progress", "Timeline", "Risk"],
+          "data_source": "active_evolution_proposals",
+          "max_rows": 10
+        }
+      ]
+    },
+    {
+      "name": "Self-Governance Status",
+      "layout": "grid",
+      "panels": [
+        {
+          "type": "gauge",
+          "title": "Governance Health",
+          "metric": "self_governance_health_score",
+          "thresholds": {
+            "excellent": [0.9, 1.0],
+            "good": [0.7, 0.9],
+            "warning": [0.5, 0.7],
+            "critical": [0, 0.5]
+          }
+        },
+        {
+          "type": "gauge",
+          "title": "Participation Rate",
+          "metric": "governance_participation_rate",
+          "thresholds": {
+            "excellent": [0.8, 1.0],
+            "good": [0.6, 0.8],
+            "warning": [0.4, 0.6],
+            "critical": [0, 0.4]
+          }
+        },
+        {
+          "type": "gauge",
+          "title": "Concentration Risk",
+          "metric": "power_concentration_risk",
+          "thresholds": {
+            "excellent": [0, 0.1],
+            "good": [0.1, 0.2],
+            "warning": [0.2, 0.4],
+            "critical": [0.4, 1.0]
+          },
+          "description": "Risk of power concentration"
+        },
+        {
+          "type": "heatmap",
+          "title": "Succession Coverage",
+          "metric": "succession_coverage_by_body",
+          "x_axis": "governance_body",
+          "y_axis": "readiness_level",
+          "description": "Succession pipeline depth by body"
+        },
+        {
+          "type": "stat",
+          "title": "Bodies with Succession Concerns",
+          "metric": "succession_concern_count",
+          "thresholds": {
+            "excellent": 0,
+            "warning": 1,
+            "critical": 2
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Decision Activity",
+          "metrics": ["decisions_made", "decisions_appealed", "decisions_overturned"],
+          "time_range": "1y"
+        },
+        {
+          "type": "piechart",
+          "title": "Decision Types",
+          "metric": "decision_type_distribution",
+          "categories": ["Strategic", "Operational", "Technical", "Policy", "Emergency"]
+        },
+        {
+          "type": "gauge",
+          "title": "Transparency Score",
+          "metric": "transparency_score",
+          "thresholds": {
+            "excellent": [0.95, 1.0],
+            "good": [0.8, 0.95],
+            "warning": [0.6, 0.8],
+            "critical": [0, 0.6]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Long-term Trends",
+      "layout": "full-width",
+      "panels": [
+        {
+          "type": "timeseries",
+          "title": "Permanence Health Over Time",
+          "metrics": [
+            "permanence_health_score",
+            "self_repair_health_score",
+            "self_evolution_health_score",
+            "self_governance_health_score"
+          ],
+          "time_range": "all",
+          "description": "Historical permanence metrics"
+        },
+        {
+          "type": "timeseries",
+          "title": "System Sustainability Index",
+          "metrics": ["sustainability_financial", "sustainability_community", "sustainability_technical", "sustainability_governance"],
+          "time_range": "10y",
+          "description": "Multi-dimensional sustainability tracking"
+        },
+        {
+          "type": "histogram",
+          "title": "Issue Resolution Time Distribution",
+          "metric": "issue_resolution_time",
+          "buckets": ["<1h", "1-4h", "4-24h", "1-7d", "7-30d", ">30d"],
+          "time_range": "1y"
+        },
+        {
+          "type": "forecast",
+          "title": "Permanence Projection",
+          "metric": "permanence_health_score",
+          "forecast_horizon": "10y",
+          "confidence_intervals": [0.5, 0.75, 0.9],
+          "description": "Projected permanence health"
+        }
+      ]
+    },
+    {
+      "name": "Constitutional Compliance",
+      "layout": "grid",
+      "panels": [
+        {
+          "type": "gauge",
+          "title": "Compliance Rate",
+          "metric": "constitutional_compliance_rate",
+          "thresholds": {
+            "excellent": [0.99, 1.0],
+            "warning": [0.95, 0.99],
+            "critical": [0, 0.95]
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Violations (All Time)",
+          "metric": "constitutional_violations_total",
+          "thresholds": {
+            "excellent": 0,
+            "warning": 1,
+            "critical": 5
+          }
+        },
+        {
+          "type": "table",
+          "title": "Principle Health",
+          "columns": ["Principle", "Status", "Last Reviewed", "Next Review"],
+          "data_source": "constitutional_principles",
+          "max_rows": 10
+        },
+        {
+          "type": "timeseries",
+          "title": "Amendment Activity",
+          "metrics": ["amendments_proposed", "amendments_adopted", "amendments_rejected"],
+          "time_range": "10y"
+        }
+      ]
+    }
+  ],
+  "alerts": [
+    {
+      "name": "permanence_score_declining",
+      "condition": "permanence_health_score < 0.8 AND trend(permanence_health_score, 30d) < 0",
+      "severity": "warning",
+      "message": "Permanence health score declining",
+      "runbook": "docs/runbooks/permanence_health.md"
+    },
+    {
+      "name": "permanence_score_critical",
+      "condition": "permanence_health_score < 0.5",
+      "severity": "critical",
+      "message": "Permanence health critically low",
+      "runbook": "docs/runbooks/permanence_critical.md"
+    },
+    {
+      "name": "core_integrity_breach",
+      "condition": "core_integrity_score < 1.0",
+      "severity": "critical",
+      "message": "Core integrity compromised - immutable principles affected",
+      "runbook": "docs/runbooks/core_integrity.md"
+    },
+    {
+      "name": "repair_health_low",
+      "condition": "self_repair_health_score < 0.7",
+      "severity": "warning",
+      "message": "Self-repair capability degraded",
+      "runbook": "docs/runbooks/self_repair.md"
+    },
+    {
+      "name": "evolution_stuck",
+      "condition": "evolution_velocity < 0.5 AND age(last_completed_evolution) > 365d",
+      "severity": "warning",
+      "message": "Evolution velocity too low - system may be stagnating",
+      "runbook": "docs/runbooks/evolution_velocity.md"
+    },
+    {
+      "name": "reversion_rate_high",
+      "condition": "evolution_reversion_rate > 0.2",
+      "severity": "warning",
+      "message": "High evolution reversion rate indicates quality issues",
+      "runbook": "docs/runbooks/evolution_quality.md"
+    },
+    {
+      "name": "governance_participation_low",
+      "condition": "governance_participation_rate < 0.5",
+      "severity": "warning",
+      "message": "Governance participation declining",
+      "runbook": "docs/runbooks/governance_participation.md"
+    },
+    {
+      "name": "succession_crisis",
+      "condition": "succession_concern_count >= 2",
+      "severity": "critical",
+      "message": "Multiple governance bodies have succession gaps",
+      "runbook": "docs/runbooks/succession_crisis.md"
+    },
+    {
+      "name": "power_concentration",
+      "condition": "power_concentration_risk > 0.3",
+      "severity": "warning",
+      "message": "Power concentration risk elevated",
+      "runbook": "docs/runbooks/power_concentration.md"
+    },
+    {
+      "name": "constitutional_violation",
+      "condition": "constitutional_compliance_rate < 1.0",
+      "severity": "critical",
+      "message": "Constitutional violation detected",
+      "runbook": "docs/runbooks/constitutional_violation.md"
+    },
+    {
+      "name": "existential_issue",
+      "condition": "issues_by_severity['Existential'] > 0",
+      "severity": "critical",
+      "message": "Existential-level issue detected",
+      "runbook": "docs/runbooks/existential_response.md"
+    }
+  ],
+  "data_sources": {
+    "self_repair_engine": {
+      "type": "internal",
+      "module": "myth.permanence.self_repair",
+      "refresh": "1m"
+    },
+    "self_evolution_engine": {
+      "type": "internal",
+      "module": "myth.permanence.self_evolution",
+      "refresh": "5m"
+    },
+    "self_governance_engine": {
+      "type": "internal",
+      "module": "myth.permanence.self_governance",
+      "refresh": "5m"
+    },
+    "permanence_metrics": {
+      "type": "metrics",
+      "database": "grey_permanence",
+      "retention": "forever"
+    }
+  }
+}

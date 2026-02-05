@@ -1,0 +1,284 @@
+{{/*
+=============================================================================
+Grey Distributed — Coordinator StatefulSet
+=============================================================================
+
+Coordinators manage cluster consensus via Raft. StatefulSet ensures:
+- Stable network identities for leader election
+- Ordered, graceful deployment/scaling
+- Persistent storage for Raft log
+
+=============================================================================
+*/}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "grey.fullname" . }}-coordinator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grey.coordinator.labels" . | nindent 4 }}
+  annotations:
+    grey.io/component-version: {{ .Chart.AppVersion | quote }}
+spec:
+  serviceName: {{ include "grey.coordinator.headlessServiceName" . }}
+  replicas: {{ .Values.coordinator.replicas }}
+  podManagementPolicy: {{ .Values.coordinator.podManagementPolicy | default "Parallel" }}
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "grey.coordinator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "grey.coordinator.labels" . | nindent 8 }}
+        {{- with .Values.coordinator.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        grey.io/config-checksum: {{ include "grey.configChecksum" . }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.monitoring.prometheus.port | default "9090" | quote }}
+        prometheus.io/path: "/metrics"
+        {{- with .Values.coordinator.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "grey.coordinator.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.coordinator.terminationGracePeriodSeconds | default 60 }}
+      
+      {{- with .Values.global.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      
+      {{- if .Values.coordinator.priorityClassName }}
+      priorityClassName: {{ .Values.coordinator.priorityClassName }}
+      {{- end }}
+      
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      
+      # Anti-affinity: spread coordinators across nodes/zones
+      affinity:
+        {{- if .Values.coordinator.affinity }}
+        {{- toYaml .Values.coordinator.affinity | nindent 8 }}
+        {{- else }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  {{- include "grey.coordinator.selectorLabels" . | nindent 18 }}
+              topologyKey: kubernetes.io/hostname
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "grey.coordinator.selectorLabels" . | nindent 20 }}
+                topologyKey: topology.kubernetes.io/zone
+        {{- end }}
+      
+      {{- with .Values.coordinator.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      
+      {{- with .Values.coordinator.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      
+      {{- with .Values.coordinator.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      
+      initContainers:
+        - name: init-permissions
+          image: {{ include "grey.image" . }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # Ensure data directory has correct permissions
+              mkdir -p /data/raft /data/snapshots
+              chmod 750 /data/raft /data/snapshots
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      
+      containers:
+        - name: coordinator
+          image: {{ include "grey.image" . }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          
+          command:
+            - /usr/bin/grey-coordinator
+          args:
+            - --config=/etc/grey/config.yaml
+            - --node-id=$(POD_NAME)
+            - --data-dir=/data
+            - --raft-port={{ .Values.consensus.raftPort }}
+            - --grpc-port={{ .Values.coordinator.service.grpcPort }}
+            {{- if .Values.security.mtls.enabled }}
+            - --tls-cert=/etc/grey/certs/tls.crt
+            - --tls-key=/etc/grey/certs/tls.key
+            - --tls-ca=/etc/grey/certs/ca.crt
+            {{- end }}
+            {{- range .Values.coordinator.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          
+          env:
+            {{- include "grey.commonEnv" . | nindent 12 }}
+            - name: GREY_ROLE
+              value: "coordinator"
+            - name: GREY_CLUSTER_NAME
+              value: {{ .Values.global.clusterName | default "grey-cluster" | quote }}
+            - name: GREY_REPLICA_COUNT
+              value: {{ .Values.coordinator.replicas | quote }}
+            - name: GREY_HEADLESS_SERVICE
+              value: {{ include "grey.coordinator.headlessServiceName" . }}
+            # Peer discovery via headless service
+            - name: GREY_PEER_DISCOVERY_DNS
+              value: "{{ include "grey.coordinator.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.cluster.local"
+            {{- with .Values.coordinator.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          
+          ports:
+            - name: raft
+              containerPort: {{ .Values.consensus.raftPort }}
+              protocol: TCP
+            - name: grpc
+              containerPort: {{ .Values.coordinator.service.grpcPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.monitoring.prometheus.port | default 9090 }}
+              protocol: TCP
+          
+          resources:
+            {{- toYaml .Values.coordinator.resources | nindent 12 }}
+          
+          livenessProbe:
+            {{- if .Values.coordinator.livenessProbe }}
+            {{- toYaml .Values.coordinator.livenessProbe | nindent 12 }}
+            {{- else }}
+            grpc:
+              port: {{ .Values.coordinator.service.grpcPort }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+            {{- end }}
+          
+          readinessProbe:
+            {{- if .Values.coordinator.readinessProbe }}
+            {{- toYaml .Values.coordinator.readinessProbe | nindent 12 }}
+            {{- else }}
+            grpc:
+              port: {{ .Values.coordinator.service.grpcPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+            {{- end }}
+          
+          startupProbe:
+            grpc:
+              port: {{ .Values.coordinator.service.grpcPort }}
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
+
+          volumeMounts:
+            {{- include "grey.commonVolumeMounts" . | nindent 12 }}
+            - name: data
+              mountPath: /data
+            {{- with .Values.coordinator.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      
+      volumes:
+        {{- include "grey.commonVolumes" . | nindent 8 }}
+        {{- with .Values.coordinator.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+  
+  # Persistent storage for Raft log and snapshots
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "grey.coordinator.labels" . | nindent 10 }}
+      spec:
+        accessModes:
+          {{- toYaml .Values.coordinator.persistence.accessModes | nindent 10 }}
+        {{- if .Values.coordinator.persistence.storageClass }}
+        storageClassName: {{ .Values.coordinator.persistence.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.coordinator.persistence.size }}
+
+---
+# PodDisruptionBudget for coordinators — maintain quorum during voluntary disruptions
+{{- if .Values.coordinator.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "grey.fullname" . }}-coordinator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grey.coordinator.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ include "grey.coordinator.pdbMinAvailable" . }}
+  selector:
+    matchLabels:
+      {{- include "grey.coordinator.selectorLabels" . | nindent 6 }}
+{{- end }}
+
+---
+# ServiceAccount for coordinator pods
+{{- if .Values.coordinator.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "grey.coordinator.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grey.coordinator.labels" . | nindent 4 }}
+  {{- with .Values.coordinator.serviceAccount.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+automountServiceAccountToken: {{ .Values.coordinator.serviceAccount.automountServiceAccountToken | default true }}
+{{- end }}

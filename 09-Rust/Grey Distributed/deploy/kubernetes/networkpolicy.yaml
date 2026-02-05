@@ -1,0 +1,547 @@
+# =============================================================================
+# Grey Distributed — Network Policies
+# =============================================================================
+#
+# Network policies implement defense-in-depth for Grey Distributed.
+# They enforce:
+#   1. Micro-segmentation between components
+#   2. Tenant isolation for multi-tenant deployments
+#   3. Egress restrictions to prevent data exfiltration
+#
+# Policy strategy:
+#   - Default deny all traffic
+#   - Explicitly allow required communication paths
+#   - Separate policies per component for maintainability
+#
+# Requirements:
+#   - CNI plugin with NetworkPolicy support (Calico, Cilium, etc.)
+#   - NetworkPolicy API enabled in cluster
+#
+# Integration points:
+#   - Grey Multi-Tenant: Per-tenant namespace isolation
+#   - GreyAV: Traffic monitoring for anomaly detection
+#
+# =============================================================================
+---
+# =============================================================================
+# Default Deny All — Zero Trust baseline
+# =============================================================================
+#
+# This policy denies all ingress and egress traffic by default.
+# Subsequent policies explicitly allow required traffic flows.
+#
+# Why default deny?
+#   - Prevents lateral movement in case of compromise
+#   - Forces explicit documentation of all traffic flows
+#   - Meets compliance requirements (PCI-DSS, SOC2)
+#
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector: {}  # Applies to all pods in namespace
+  policyTypes:
+    - Ingress
+    - Egress
+
+---
+# =============================================================================
+# Allow DNS — Required for service discovery
+# =============================================================================
+#
+# All pods need DNS resolution for service discovery.
+# This allows egress to kube-dns in the kube-system namespace.
+#
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector: {}  # All pods
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# =============================================================================
+# Coordinator Network Policy
+# =============================================================================
+#
+# Coordinators need to:
+#   - Receive Raft replication from other coordinators
+#   - Accept API requests from gateways and workers
+#   - Send heartbeats to other coordinators
+#   - Connect to external services (metrics, tracing)
+#
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grey-coordinator-policy
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: coordinator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: coordinator
+  
+  policyTypes:
+    - Ingress
+    - Egress
+  
+  ingress:
+    # Raft replication from other coordinators
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: coordinator
+      ports:
+        - protocol: TCP
+          port: 7070  # Raft
+        - protocol: UDP
+          port: 7071  # Gossip
+    
+    # API requests from gateways
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: gateway
+      ports:
+        - protocol: TCP
+          port: 8080  # HTTP
+        - protocol: TCP
+          port: 9090  # gRPC
+    
+    # Registration and heartbeats from workers
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: worker
+      ports:
+        - protocol: TCP
+          port: 7070  # Raft (for log watching)
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 9090
+    
+    # Prometheus scraping
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9090  # Metrics on grpc port
+  
+  egress:
+    # Raft communication to other coordinators
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: coordinator
+      ports:
+        - protocol: TCP
+          port: 7070
+        - protocol: UDP
+          port: 7071
+    
+    # Task dispatch to workers
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: worker
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 9090
+    
+    # OTEL collector (tracing)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: otel-collector
+      ports:
+        - protocol: TCP
+          port: 4317  # OTLP gRPC
+
+---
+# =============================================================================
+# Worker Network Policy
+# =============================================================================
+#
+# Workers need to:
+#   - Register with coordinators
+#   - Receive tasks from coordinators
+#   - Replicate data to other workers
+#   - Report metrics
+#
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grey-worker-policy
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: worker
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: worker
+  
+  policyTypes:
+    - Ingress
+    - Egress
+  
+  ingress:
+    # Task dispatch from coordinators
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: coordinator
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 9090
+    
+    # Data replication from other workers
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: worker
+      ports:
+        - protocol: TCP
+          port: 9090  # gRPC for replication
+    
+    # Prometheus scraping
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9090
+  
+  egress:
+    # Registration and heartbeat to coordinators
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: coordinator
+      ports:
+        - protocol: TCP
+          port: 7070
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 9090
+    
+    # Data replication to other workers
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: worker
+      ports:
+        - protocol: TCP
+          port: 9090
+    
+    # OTEL collector
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: otel-collector
+      ports:
+        - protocol: TCP
+          port: 4317
+
+---
+# =============================================================================
+# Gateway Network Policy
+# =============================================================================
+#
+# Gateways are the entry point:
+#   - Accept traffic from external load balancers
+#   - Route requests to coordinators
+#   - Limited egress to reduce blast radius
+#
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grey-gateway-policy
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: gateway
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: gateway
+  
+  policyTypes:
+    - Ingress
+    - Egress
+  
+  ingress:
+    # External traffic via ingress controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 9090
+    
+    # Internal access from other namespaces
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              grey.io/access: "allowed"
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 9090
+    
+    # Prometheus scraping
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9090
+  
+  egress:
+    # Route to coordinators
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: coordinator
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 9090
+    
+    # OTEL collector
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: otel-collector
+      ports:
+        - protocol: TCP
+          port: 4317
+    
+    # OIDC provider for JWT validation
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+
+---
+# =============================================================================
+# Tenant Isolation — Per-Tenant Network Policies
+# =============================================================================
+#
+# These policies enforce network-level isolation between tenants.
+# Each tenant gets a dedicated namespace with strict policies.
+#
+# Integration with Grey Multi-Tenant:
+#   - Labels applied by tenant admission controller
+#   - Policies created by tenant provisioning workflow
+#
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tenant-isolation
+  namespace: grey-tenant-acme  # One per tenant namespace
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: tenant-isolation
+    grey.io/tenant: acme-corp
+spec:
+  podSelector: {}  # All pods in tenant namespace
+  
+  policyTypes:
+    - Ingress
+    - Egress
+  
+  ingress:
+    # Only allow traffic from same tenant
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              grey.io/tenant: acme-corp
+    
+    # Allow traffic from grey-system (gateways)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: grey-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: gateway
+  
+  egress:
+    # Only allow traffic to same tenant
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              grey.io/tenant: acme-corp
+    
+    # Allow traffic to grey-system
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: grey-system
+
+---
+# =============================================================================
+# Cilium Network Policy — Advanced Security (Optional)
+# =============================================================================
+#
+# Cilium provides additional capabilities:
+#   - L7 filtering (HTTP paths, gRPC methods)
+#   - DNS-based policies
+#   - Fine-grained identity-based policies
+#
+# Uncomment if using Cilium CNI.
+#
+# =============================================================================
+# apiVersion: cilium.io/v2
+# kind: CiliumNetworkPolicy
+# metadata:
+#   name: grey-coordinator-cilium
+#   namespace: grey-system
+# spec:
+#   endpointSelector:
+#     matchLabels:
+#       app.kubernetes.io/component: coordinator
+#   
+#   ingress:
+#     - fromEndpoints:
+#         - matchLabels:
+#             app.kubernetes.io/component: gateway
+#       toPorts:
+#         - ports:
+#             - port: "8080"
+#               protocol: TCP
+#           rules:
+#             http:
+#               # Only allow specific API paths
+#               - method: "POST"
+#                 path: "/v1/tasks"
+#               - method: "GET"
+#                 path: "/v1/status"
+#               - method: "GET"
+#                 path: "/health.*"
+#   
+#   egress:
+#     - toEndpoints:
+#         - matchLabels:
+#             app.kubernetes.io/component: coordinator
+#       toPorts:
+#         - ports:
+#             - port: "7070"
+#               protocol: TCP
+#     
+#     # DNS-based egress
+#     - toFQDNs:
+#         - matchName: "otel-collector.observability.svc.cluster.local"
+#       toPorts:
+#         - ports:
+#             - port: "4317"
+#               protocol: TCP
+
+---
+# =============================================================================
+# Global Network Policy — Cluster-wide Defaults
+# =============================================================================
+#
+# This GlobalNetworkPolicy (Calico) applies to all namespaces
+# that don't have explicit policies.
+#
+# =============================================================================
+# apiVersion: projectcalico.org/v3
+# kind: GlobalNetworkPolicy
+# metadata:
+#   name: grey-global-default
+# spec:
+#   selector: has(grey.io/managed)
+#   order: 1000  # Low priority, allows namespace-specific overrides
+#   
+#   types:
+#     - Ingress
+#     - Egress
+#   
+#   ingress:
+#     - action: Allow
+#       source:
+#         selector: has(grey.io/managed)
+#   
+#   egress:
+#     - action: Allow
+#       destination:
+#         selector: has(grey.io/managed)
+#     
+#     # Allow DNS
+#     - action: Allow
+#       protocol: UDP
+#       destination:
+#         ports:
+#           - 53

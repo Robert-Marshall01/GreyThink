@@ -1,0 +1,654 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "grey-adoption-enterprise",
+    "title": "Grey Distributed — Enterprise Adoption Dashboard",
+    "description": "Monitors enterprise deployment health, compliance status, integration performance, and business value metrics",
+    "tags": ["grey", "adoption", "enterprise", "compliance"],
+    "timezone": "browser",
+    "schemaVersion": 39,
+    "version": 1,
+    "refresh": "30s",
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "panels": [
+      {
+        "id": 1,
+        "type": "stat",
+        "title": "Deployment Status",
+        "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "textMode": "value_and_name",
+          "reduceOptions": {
+            "calcs": ["lastNotNull"],
+            "fields": "",
+            "values": false
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              { "type": "value", "options": { "1": { "text": "Healthy", "color": "green" } } },
+              { "type": "value", "options": { "0": { "text": "Degraded", "color": "red" } } }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "green", "value": 1 }
+              ]
+            }
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_cluster_health_status",
+            "legendFormat": "Cluster Health",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "type": "stat",
+        "title": "Active Tenants",
+        "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "blue", "value": null }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "targets": [
+          {
+            "expr": "count(grey_tenant_active == 1)",
+            "legendFormat": "Tenants",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "type": "stat",
+        "title": "Compliance Score",
+        "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 80 },
+                { "color": "green", "value": 95 }
+              ]
+            },
+            "unit": "percent",
+            "max": 100
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_compliance_score_percent",
+            "legendFormat": "Score",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "type": "stat",
+        "title": "Monthly Cost Savings",
+        "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "green", "value": 0 }
+              ]
+            },
+            "unit": "currencyUSD",
+            "decimals": 0
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_cost_savings_monthly_usd",
+            "legendFormat": "Savings",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "type": "stat",
+        "title": "SLA Compliance",
+        "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 99 },
+                { "color": "green", "value": 99.9 }
+              ]
+            },
+            "unit": "percent",
+            "decimals": 2
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_sla_compliance_percent",
+            "legendFormat": "SLA",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "type": "stat",
+        "title": "Security Incidents (30d)",
+        "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 1 },
+                { "color": "red", "value": 5 }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "targets": [
+          {
+            "expr": "increase(grey_security_incidents_total[30d])",
+            "legendFormat": "Incidents",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "type": "row",
+        "title": "Compliance & Security",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 4 },
+        "collapsed": false
+      },
+      {
+        "id": 8,
+        "type": "table",
+        "title": "Compliance Framework Status",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+        "options": {
+          "showHeader": true,
+          "footer": { "show": false }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "auto",
+              "displayMode": "auto"
+            }
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Status" },
+              "properties": [
+                {
+                  "id": "custom.displayMode",
+                  "value": "color-background"
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    { "type": "value", "options": { "Compliant": { "color": "green" } } },
+                    { "type": "value", "options": { "Partial": { "color": "yellow" } } },
+                    { "type": "value", "options": { "Non-Compliant": { "color": "red" } } }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "targets": [
+          {
+            "expr": "grey_compliance_framework_status",
+            "format": "table",
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "renameByName": {
+                "framework": "Framework",
+                "controls_total": "Total Controls",
+                "controls_passed": "Passed",
+                "controls_failed": "Failed",
+                "status": "Status",
+                "last_audit": "Last Audit"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "type": "piechart",
+        "title": "Control Implementation",
+        "gridPos": { "h": 8, "w": 6, "x": 12, "y": 5 },
+        "options": {
+          "legend": { "displayMode": "table", "placement": "right" },
+          "pieType": "pie",
+          "reduceOptions": { "calcs": ["lastNotNull"] }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" }
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_controls_by_status",
+            "legendFormat": "{{status}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "type": "timeseries",
+        "title": "Security Events",
+        "gridPos": { "h": 8, "w": 6, "x": 18, "y": 5 },
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "lineWidth": 1,
+              "fillOpacity": 10,
+              "spanNulls": false
+            }
+          }
+        },
+        "targets": [
+          {
+            "expr": "rate(grey_security_events_total[5m])",
+            "legendFormat": "{{event_type}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "type": "row",
+        "title": "Integration Performance",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 },
+        "collapsed": false
+      },
+      {
+        "id": 12,
+        "type": "timeseries",
+        "title": "Integration Response Time",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+        "options": {
+          "legend": { "displayMode": "table", "placement": "right" }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "lineWidth": 1,
+              "fillOpacity": 10
+            },
+            "unit": "ms"
+          }
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(grey_integration_request_duration_seconds_bucket[5m])) * 1000",
+            "legendFormat": "{{integration}} p95",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(grey_integration_request_duration_seconds_bucket[5m])) * 1000",
+            "legendFormat": "{{integration}} p50",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "id": 13,
+        "type": "bargauge",
+        "title": "Integration Availability",
+        "gridPos": { "h": 8, "w": 6, "x": 12, "y": 14 },
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient",
+          "reduceOptions": { "calcs": ["lastNotNull"] }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 99 },
+                { "color": "green", "value": 99.9 }
+              ]
+            },
+            "unit": "percent",
+            "max": 100
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_integration_availability_percent",
+            "legendFormat": "{{integration}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 14,
+        "type": "table",
+        "title": "Integration Status",
+        "gridPos": { "h": 8, "w": 6, "x": 18, "y": 14 },
+        "options": {
+          "showHeader": true
+        },
+        "targets": [
+          {
+            "expr": "grey_integration_status",
+            "format": "table",
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "renameByName": {
+                "integration": "Integration",
+                "status": "Status",
+                "last_sync": "Last Sync",
+                "error_count": "Errors (24h)"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 15,
+        "type": "row",
+        "title": "Business Value Metrics",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
+        "collapsed": false
+      },
+      {
+        "id": 16,
+        "type": "timeseries",
+        "title": "Cost Optimization Over Time",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "lineWidth": 2,
+              "fillOpacity": 20
+            },
+            "unit": "currencyUSD"
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_infrastructure_cost_monthly",
+            "legendFormat": "Grey Cost",
+            "refId": "A"
+          },
+          {
+            "expr": "grey_legacy_cost_baseline_monthly",
+            "legendFormat": "Legacy Baseline",
+            "refId": "B"
+          },
+          {
+            "expr": "grey_legacy_cost_baseline_monthly - grey_infrastructure_cost_monthly",
+            "legendFormat": "Savings",
+            "refId": "C"
+          }
+        ]
+      },
+      {
+        "id": 17,
+        "type": "gauge",
+        "title": "ROI Percentage",
+        "gridPos": { "h": 8, "w": 4, "x": 12, "y": 23 },
+        "options": {
+          "orientation": "auto",
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 100 },
+                { "color": "green", "value": 200 }
+              ]
+            },
+            "unit": "percent",
+            "max": 500
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_return_on_investment_percent",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 18,
+        "type": "stat",
+        "title": "Payback Period",
+        "gridPos": { "h": 4, "w": 4, "x": 16, "y": 23 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 12 },
+                { "color": "red", "value": 24 }
+              ]
+            },
+            "unit": "months"
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_payback_period_months",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 19,
+        "type": "stat",
+        "title": "Efficiency Gain",
+        "gridPos": { "h": 4, "w": 4, "x": 20, "y": 23 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "green", "value": 1 }
+              ]
+            },
+            "unit": "percentunit",
+            "decimals": 0
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_operational_efficiency_improvement",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 20,
+        "type": "table",
+        "title": "Tenant Cost Breakdown",
+        "gridPos": { "h": 4, "w": 8, "x": 16, "y": 27 },
+        "options": {
+          "showHeader": true
+        },
+        "targets": [
+          {
+            "expr": "grey_tenant_cost_monthly",
+            "format": "table",
+            "refId": "A"
+          }
+        ]
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "datasource",
+          "type": "datasource",
+          "query": "prometheus",
+          "current": { "selected": true, "text": "Prometheus", "value": "Prometheus" }
+        },
+        {
+          "name": "cluster",
+          "type": "query",
+          "query": "label_values(grey_cluster_info, cluster)",
+          "multi": false,
+          "includeAll": false,
+          "current": {}
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "name": "Deployments",
+          "enable": true,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "changes(grey_deployment_version[5m]) > 0",
+          "iconColor": "blue"
+        },
+        {
+          "name": "Security Events",
+          "enable": true,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "grey_security_incident_triggered == 1",
+          "iconColor": "red"
+        }
+      ]
+    }
+  },
+  "alerts": [
+    {
+      "name": "Compliance Score Below Threshold",
+      "condition": "grey_compliance_score_percent < 95",
+      "severity": "warning",
+      "message": "Compliance score has dropped below 95%. Current: {{ $value }}%",
+      "notifications": ["compliance-team", "security-team"]
+    },
+    {
+      "name": "Integration Failure",
+      "condition": "grey_integration_status{status=\"failed\"} == 1",
+      "severity": "critical",
+      "message": "Integration {{ $labels.integration }} has failed",
+      "notifications": ["ops-team", "integration-team"]
+    },
+    {
+      "name": "SLA Violation Risk",
+      "condition": "grey_sla_compliance_percent < 99.5",
+      "severity": "warning",
+      "message": "SLA compliance at risk: {{ $value }}%",
+      "notifications": ["ops-team", "management"]
+    },
+    {
+      "name": "Security Incident Detected",
+      "condition": "increase(grey_security_incidents_total[1h]) > 0",
+      "severity": "critical",
+      "message": "Security incident detected in the last hour",
+      "notifications": ["security-team", "incident-response"]
+    }
+  ]
+}

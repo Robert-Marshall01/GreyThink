@@ -1,0 +1,543 @@
+{
+  "__metadata": {
+    "title": "Grey Distributed — Tenant Fairness Dashboard",
+    "description": "Multi-tenant quota enforcement, isolation, and fairness metrics at scale",
+    "version": "1.0.0",
+    "refresh_interval": "15s"
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": "Prometheus",
+        "enable": true,
+        "expr": "grey_quota_violation_total > 0",
+        "iconColor": "#F2495C",
+        "name": "Quota Violations",
+        "titleFormat": "Quota Violation: {{ tenant }}"
+      }
+    ]
+  },
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "Quota Overview",
+      "type": "row"
+    },
+    {
+      "id": 1,
+      "title": "Active Tenants",
+      "description": "Tenants with running workloads",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "count(count by (tenant_id) (grey_tenant_tasks_running > 0))",
+          "legendFormat": "Active"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [{ "color": "blue", "value": null }]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Quota Violations (24h)",
+      "description": "Tenants exceeding quotas",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(increase(grey_quota_violation_total[24h]))",
+          "legendFormat": "Violations"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Throttled Tenants",
+      "description": "Currently rate-limited tenants",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "count(grey_tenant_throttled == 1)",
+          "legendFormat": "Throttled"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Fairness Index",
+      "description": "Jain's fairness index (1.0 = perfectly fair)",
+      "type": "gauge",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "grey_scheduler_fairness_index",
+          "legendFormat": "Fairness"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.7 },
+              { "color": "green", "value": 0.9 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Total CPU Allocated",
+      "description": "Cluster CPU allocation",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(grey_tenant_cpu_usage) / sum(grey_cluster_cpu_capacity) * 100",
+          "legendFormat": "CPU %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Total Memory Allocated",
+      "description": "Cluster memory allocation",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(grey_tenant_memory_usage) / sum(grey_cluster_memory_capacity) * 100",
+          "legendFormat": "Memory %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 101,
+      "title": "Per-Tenant Quota Usage",
+      "type": "row"
+    },
+    {
+      "id": 7,
+      "title": "CPU Quota Usage by Tenant",
+      "description": "Per-tenant CPU usage vs quota",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "grey_tenant_cpu_usage / grey_tenant_cpu_quota * 100",
+          "legendFormat": "{{ tenant_id }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "max": 120,
+          "custom": { "fillOpacity": 10 },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 80 },
+              { "color": "red", "value": 100 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right" }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Memory Quota Usage by Tenant",
+      "description": "Per-tenant memory usage vs quota",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "grey_tenant_memory_usage / grey_tenant_memory_quota * 100",
+          "legendFormat": "{{ tenant_id }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "max": 120
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Tenant Resource Allocation",
+      "description": "Stacked view of resource distribution",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 14 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "grey_tenant_cpu_usage",
+          "legendFormat": "{{ tenant_id }} CPU"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "stacking": { "mode": "percent" }, "fillOpacity": 80 }
+        }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
+      "id": 102,
+      "title": "Fairness Metrics",
+      "type": "row"
+    },
+    {
+      "id": 10,
+      "title": "Task Completion Share",
+      "description": "Percentage of completed tasks per tenant",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 23 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum by (tenant_id) (increase(grey_tenant_tasks_completed_total[1h]))",
+          "legendFormat": "{{ tenant_id }}"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right" },
+        "pieType": "pie"
+      }
+    },
+    {
+      "id": 11,
+      "title": "Wait Time by Tenant",
+      "description": "Average task wait time per tenant",
+      "type": "bargauge",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 23 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "avg by (tenant_id) (grey_task_wait_time_seconds)",
+          "legendFormat": "{{ tenant_id }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 30 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient"
+      }
+    },
+    {
+      "id": 12,
+      "title": "Throughput Ratio",
+      "description": "Actual vs expected throughput per tenant",
+      "type": "bargauge",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 23 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "(rate(grey_tenant_tasks_completed_total[5m]) / grey_tenant_expected_throughput) * 100",
+          "legendFormat": "{{ tenant_id }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 80 },
+              { "color": "green", "value": 95 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 13,
+      "title": "Fairness Index Over Time",
+      "description": "Jain's fairness index tracking",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 31 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "grey_scheduler_fairness_index",
+          "legendFormat": "Fairness Index"
+        },
+        {
+          "expr": "0.9",
+          "legendFormat": "Target (0.9)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": { "fillOpacity": 30 }
+        }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 39 },
+      "id": 103,
+      "title": "Isolation & Priority",
+      "type": "row"
+    },
+    {
+      "id": 14,
+      "title": "Priority Class Distribution",
+      "description": "Tasks by priority class",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 40 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum by (priority) (grey_scheduler_queue_depth)",
+          "legendFormat": "Priority {{ priority }}"
+        }
+      ],
+      "fieldConfig": {
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Priority 1" }, "properties": [{ "id": "color", "value": "#F2495C" }] },
+          { "matcher": { "id": "byName", "options": "Priority 2" }, "properties": [{ "id": "color", "value": "#FF9830" }] },
+          { "matcher": { "id": "byName", "options": "Priority 3" }, "properties": [{ "id": "color", "value": "#73BF69" }] }
+        ]
+      }
+    },
+    {
+      "id": 15,
+      "title": "Tenant Isolation Violations",
+      "description": "Cross-tenant access attempts",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 40 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(grey_isolation_violation_total[5m])",
+          "legendFormat": "{{ tenant_id }} → {{ target_tenant }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      }
+    },
+    {
+      "id": 16,
+      "title": "Resource Contention",
+      "description": "Tenant pairs competing for same resources",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 40 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum by (tenant_id) (grey_resource_contention_score)",
+          "legendFormat": "{{ tenant_id }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 48 },
+      "id": 104,
+      "title": "Throttling & Limits",
+      "type": "row"
+    },
+    {
+      "id": 17,
+      "title": "Throttle Events by Tenant",
+      "description": "Rate limiting triggers",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 49 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(grey_tenant_throttle_total[5m])",
+          "legendFormat": "{{ tenant_id }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      }
+    },
+    {
+      "id": 18,
+      "title": "Burst Allowance Remaining",
+      "description": "Available burst capacity per tenant",
+      "type": "bargauge",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 49 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "grey_tenant_burst_remaining / grey_tenant_burst_limit * 100",
+          "legendFormat": "{{ tenant_id }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 20 },
+              { "color": "green", "value": 50 }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["grey", "fairness", "multi-tenant", "quotas", "production"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "grey-production", "value": "grey-production" },
+        "datasource": "Prometheus",
+        "definition": "label_values(grey_tenant_info, namespace)",
+        "hide": 0,
+        "label": "Namespace",
+        "name": "namespace",
+        "query": "label_values(grey_tenant_info, namespace)",
+        "refresh": 1,
+        "type": "query"
+      },
+      {
+        "current": { "selected": false, "text": "All", "value": "$__all" },
+        "datasource": "Prometheus",
+        "definition": "label_values(grey_tenant_info, tenant_id)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Tenant",
+        "multi": true,
+        "name": "tenant",
+        "query": "label_values(grey_tenant_info, tenant_id)",
+        "refresh": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "timezone": "browser",
+  "title": "Grey — Tenant Fairness",
+  "uid": "grey-tenant-fairness",
+  "version": 1
+}

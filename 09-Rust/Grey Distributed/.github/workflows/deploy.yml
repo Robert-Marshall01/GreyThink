@@ -1,0 +1,640 @@
+# Grey Distributed - Deployment Pipeline
+# =============================================================================
+#
+# Purpose:
+#   Build container images and deploy Grey Distributed to various environments:
+#   - Dev: Local cluster for development
+#   - Staging: Cloud cluster for pre-production testing
+#   - Production: Hybrid edge + cloud deployment
+#
+# Why this matters:
+#   - Automated deployments reduce human error
+#   - Consistent environments across dev/staging/prod
+#   - Rollback capability for quick recovery
+#   - Canary deployments minimize blast radius
+#
+# Deployment Strategy:
+#   - Dev: Direct deployment, immediate
+#   - Staging: Blue-green with smoke tests
+#   - Production: Canary with gradual rollout (10% → 50% → 100%)
+#
+# Tradeoffs:
+#   - Multi-stage deployments are slower but safer
+#   - Canary requires traffic splitting (adds complexity)
+#   - Edge deployments have higher latency tolerance
+#   - Rollback automation requires state management
+#
+# =============================================================================
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+      version:
+        description: 'Version to deploy (leave empty for latest)'
+        required: false
+        default: ''
+      rollback:
+        description: 'Rollback to previous version'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  GO_VERSION: '1.22'
+  RUST_VERSION: '1.75.0'
+
+# Prevent concurrent deployments to same environment
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+jobs:
+  # ============================================================
+  # Stage 1: Build Container Images
+  # ============================================================
+  build-images:
+    name: Build Container Images
+    runs-on: ubuntu-latest
+    if: github.event.inputs.rollback != 'true'
+    
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      image_tag: ${{ steps.meta.outputs.tags }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      # Determine version
+      - name: Determine Version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="$(git describe --tags --always --dirty)-$(date +%Y%m%d%H%M%S)"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+      
+      # Setup build environment
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      # Generate image metadata
+      - name: Extract Metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,prefix=sha-
+      
+      # Build and push multi-platform image
+      - name: Build and Push Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            COMMIT=${{ github.sha }}
+      
+      # Scan built image for vulnerabilities
+      - name: Scan Image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+        continue-on-error: true
+      
+      - name: Upload Scan Results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+        continue-on-error: true
+
+  # ============================================================
+  # Stage 2: Deploy to Dev (Local Cluster)
+  # ============================================================
+  deploy-dev:
+    name: Deploy to Dev
+    runs-on: ubuntu-latest
+    needs: build-images
+    if: |
+      (github.event.inputs.environment == 'dev' || 
+       (github.event_name == 'push' && github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')))
+    environment:
+      name: development
+      url: http://localhost:8080
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      
+      # Deploy using dev script
+      - name: Deploy Local Cluster
+        run: |
+          chmod +x ./deploy/dev.sh
+          
+          # Set image version
+          export GREY_VERSION="${{ needs.build-images.outputs.version }}"
+          
+          # Start dev cluster
+          ./deploy/dev.sh start
+          
+          # Wait for cluster ready
+          for i in {1..30}; do
+            if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
+              echo "Cluster is ready"
+              break
+            fi
+            echo "Waiting for cluster... ($i/30)"
+            sleep 2
+          done
+      
+      # Run smoke tests
+      - name: Smoke Tests
+        run: |
+          # Health check
+          curl -sf http://localhost:8080/health
+          
+          # Version check
+          VERSION=$(curl -sf http://localhost:8080/version | jq -r '.version' || echo "unknown")
+          echo "Deployed version: $VERSION"
+          
+          # Basic functionality test
+          curl -sf -X POST http://localhost:8080/v1/tasks \
+            -H "Content-Type: application/json" \
+            -d '{"name": "smoke-test", "priority": 1}'
+      
+      - name: Cleanup
+        if: always()
+        run: ./deploy/dev.sh stop
+
+  # ============================================================
+  # Stage 3: Deploy to Staging (Cloud Cluster)
+  # ============================================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build-images
+    if: |
+      github.event.inputs.environment == 'staging' || 
+      startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: staging
+      url: https://staging.grey.example.com
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      # Setup Kubernetes access
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+      
+      - name: Configure Kubernetes
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.STAGING_KUBECONFIG }}" | base64 -d > ~/.kube/config
+          kubectl config set-context --current --namespace=grey-staging
+      
+      # Blue-Green Deployment
+      - name: Blue-Green Deployment
+        run: |
+          VERSION="${{ needs.build-images.outputs.version }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$VERSION"
+          
+          # Determine current color
+          CURRENT=$(kubectl get service grey-active -o jsonpath='{.spec.selector.color}' 2>/dev/null || echo "blue")
+          if [ "$CURRENT" = "blue" ]; then
+            NEW="green"
+          else
+            NEW="blue"
+          fi
+          
+          echo "Current: $CURRENT, Deploying to: $NEW"
+          
+          # Update the inactive deployment
+          kubectl set image deployment/grey-$NEW grey=$IMAGE
+          
+          # Wait for rollout
+          kubectl rollout status deployment/grey-$NEW --timeout=300s
+          
+          # Store new color for tests
+          echo "NEW_COLOR=$NEW" >> $GITHUB_ENV
+          echo "OLD_COLOR=$CURRENT" >> $GITHUB_ENV
+      
+      # Run pre-switch tests against new deployment
+      - name: Pre-Switch Tests
+        run: |
+          # Get new deployment endpoint
+          NEW_POD=$(kubectl get pods -l app=grey,color=$NEW_COLOR -o jsonpath='{.items[0].metadata.name}')
+          
+          # Port-forward for testing
+          kubectl port-forward pod/$NEW_POD 8081:8080 &
+          PF_PID=$!
+          sleep 5
+          
+          # Run tests against new version
+          curl -sf http://localhost:8081/health
+          curl -sf http://localhost:8081/ready
+          
+          # Basic integration test
+          RESPONSE=$(curl -sf -X POST http://localhost:8081/v1/tasks \
+            -H "Content-Type: application/json" \
+            -d '{"name": "staging-test", "priority": 1}')
+          
+          if [ -z "$RESPONSE" ]; then
+            echo "::error::Pre-switch test failed"
+            kill $PF_PID || true
+            exit 1
+          fi
+          
+          kill $PF_PID || true
+          echo "Pre-switch tests passed"
+      
+      # Switch traffic to new deployment
+      - name: Switch Traffic
+        run: |
+          # Update service selector to point to new color
+          kubectl patch service grey-active -p "{\"spec\":{\"selector\":{\"color\":\"$NEW_COLOR\"}}}"
+          
+          echo "Traffic switched to $NEW_COLOR deployment"
+      
+      # Post-switch validation
+      - name: Post-Switch Validation
+        run: |
+          # Verify through load balancer
+          sleep 10
+          
+          ENDPOINT="https://staging.grey.example.com"
+          
+          for i in {1..5}; do
+            if curl -sf "$ENDPOINT/health" > /dev/null 2>&1; then
+              echo "Staging deployment healthy"
+              break
+            fi
+            echo "Waiting for LB propagation... ($i/5)"
+            sleep 5
+          done
+          
+          # Verify version
+          VERSION=$(curl -sf "$ENDPOINT/version" | jq -r '.version' || echo "unknown")
+          echo "Live version: $VERSION"
+          
+          if [ "$VERSION" != "${{ needs.build-images.outputs.version }}" ]; then
+            echo "::warning::Version mismatch - expected ${{ needs.build-images.outputs.version }}, got $VERSION"
+          fi
+      
+      # Keep old deployment for quick rollback
+      - name: Tag Previous Version
+        run: |
+          kubectl annotate deployment grey-$OLD_COLOR grey.io/previous-version="true" --overwrite
+
+  # ============================================================
+  # Stage 4: Deploy to Production (Canary + Hybrid)
+  # ============================================================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-images, deploy-staging]
+    if: github.event.inputs.environment == 'production'
+    environment:
+      name: production
+      url: https://grey.example.com
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+      
+      - name: Configure Kubernetes
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > ~/.kube/config
+          kubectl config set-context --current --namespace=grey-production
+      
+      # Phase 1: Canary deployment (10%)
+      - name: Canary Deployment (10%)
+        id: canary
+        run: |
+          VERSION="${{ needs.build-images.outputs.version }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$VERSION"
+          
+          # Deploy canary
+          kubectl set image deployment/grey-canary grey=$IMAGE
+          kubectl scale deployment/grey-canary --replicas=1
+          kubectl rollout status deployment/grey-canary --timeout=300s
+          
+          # Configure traffic split (10% to canary)
+          # Using Istio/Linkerd/Nginx for traffic splitting
+          cat <<EOF | kubectl apply -f -
+          apiVersion: networking.istio.io/v1beta1
+          kind: VirtualService
+          metadata:
+            name: grey-split
+          spec:
+            hosts:
+              - grey
+            http:
+              - route:
+                - destination:
+                    host: grey-stable
+                  weight: 90
+                - destination:
+                    host: grey-canary
+                  weight: 10
+          EOF
+          
+          echo "Canary deployed at 10%"
+      
+      # Monitor canary health
+      - name: Monitor Canary (10min)
+        run: |
+          echo "Monitoring canary for 10 minutes..."
+          
+          for i in {1..20}; do
+            # Check error rate
+            ERROR_RATE=$(kubectl exec -it deploy/prometheus -- \
+              curl -sf 'http://localhost:9090/api/v1/query?query=sum(rate(grey_request_errors_total{deployment="canary"}[1m]))/sum(rate(grey_request_total{deployment="canary"}[1m]))*100' \
+              | jq -r '.data.result[0].value[1]' 2>/dev/null || echo "0")
+            
+            if (( $(echo "$ERROR_RATE > 5" | bc -l) )); then
+              echo "::error::Canary error rate $ERROR_RATE% exceeds 5%"
+              # Rollback canary
+              kubectl scale deployment/grey-canary --replicas=0
+              exit 1
+            fi
+            
+            echo "Canary health check $i/20: error rate ${ERROR_RATE}%"
+            sleep 30
+          done
+          
+          echo "Canary healthy at 10%"
+      
+      # Phase 2: Increase to 50%
+      - name: Scale Canary to 50%
+        run: |
+          kubectl scale deployment/grey-canary --replicas=3
+          
+          cat <<EOF | kubectl apply -f -
+          apiVersion: networking.istio.io/v1beta1
+          kind: VirtualService
+          metadata:
+            name: grey-split
+          spec:
+            hosts:
+              - grey
+            http:
+              - route:
+                - destination:
+                    host: grey-stable
+                  weight: 50
+                - destination:
+                    host: grey-canary
+                  weight: 50
+          EOF
+          
+          echo "Canary scaled to 50%"
+      
+      - name: Monitor Canary (5min at 50%)
+        run: |
+          echo "Monitoring at 50% for 5 minutes..."
+          sleep 300
+          
+          # Final health check
+          CANARY_HEALTHY=$(curl -sf http://grey-canary.grey-production.svc/health 2>/dev/null && echo "true" || echo "false")
+          
+          if [ "$CANARY_HEALTHY" != "true" ]; then
+            echo "::error::Canary unhealthy at 50%"
+            exit 1
+          fi
+      
+      # Phase 3: Full rollout
+      - name: Full Production Rollout
+        run: |
+          VERSION="${{ needs.build-images.outputs.version }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$VERSION"
+          
+          # Update stable deployment
+          kubectl set image deployment/grey-stable grey=$IMAGE
+          kubectl rollout status deployment/grey-stable --timeout=600s
+          
+          # Remove traffic split
+          cat <<EOF | kubectl apply -f -
+          apiVersion: networking.istio.io/v1beta1
+          kind: VirtualService
+          metadata:
+            name: grey-split
+          spec:
+            hosts:
+              - grey
+            http:
+              - route:
+                - destination:
+                    host: grey-stable
+                  weight: 100
+          EOF
+          
+          # Scale down canary
+          kubectl scale deployment/grey-canary --replicas=0
+          
+          echo "Full production rollout complete"
+      
+      # Deploy to edge nodes (hybrid)
+      - name: Deploy to Edge Nodes
+        run: |
+          VERSION="${{ needs.build-images.outputs.version }}"
+          
+          # Apply edge deployment config
+          kubectl apply -f deploy/federation.yaml
+          
+          # Update edge daemon set
+          kubectl -n grey-edge set image daemonset/grey-edge grey=$IMAGE
+          kubectl -n grey-edge rollout status daemonset/grey-edge --timeout=600s
+          
+          echo "Edge deployment complete"
+      
+      # Final validation
+      - name: Production Validation
+        run: |
+          # Validate all regions
+          ENDPOINTS=(
+            "https://grey.example.com"
+            "https://grey-eu.example.com"
+            "https://grey-ap.example.com"
+          )
+          
+          for endpoint in "${ENDPOINTS[@]}"; do
+            VERSION=$(curl -sf "$endpoint/version" | jq -r '.version' 2>/dev/null || echo "unreachable")
+            echo "$endpoint: $VERSION"
+          done
+          
+          echo "Production deployment validated"
+
+  # ============================================================
+  # Rollback (Manual Trigger)
+  # ============================================================
+  rollback:
+    name: Rollback
+    runs-on: ubuntu-latest
+    if: github.event.inputs.rollback == 'true'
+    environment:
+      name: ${{ github.event.inputs.environment }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+      
+      - name: Configure Kubernetes
+        run: |
+          ENV="${{ github.event.inputs.environment }}"
+          if [ "$ENV" = "staging" ]; then
+            echo "${{ secrets.STAGING_KUBECONFIG }}" | base64 -d > ~/.kube/config
+            kubectl config set-context --current --namespace=grey-staging
+          else
+            echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > ~/.kube/config
+            kubectl config set-context --current --namespace=grey-production
+          fi
+      
+      - name: Execute Rollback
+        run: |
+          ENV="${{ github.event.inputs.environment }}"
+          
+          if [ "$ENV" = "staging" ]; then
+            # Blue-green rollback: switch to old color
+            CURRENT=$(kubectl get service grey-active -o jsonpath='{.spec.selector.color}')
+            if [ "$CURRENT" = "blue" ]; then
+              OLD="green"
+            else
+              OLD="blue"
+            fi
+            
+            kubectl patch service grey-active -p "{\"spec\":{\"selector\":{\"color\":\"$OLD\"}}}"
+            echo "Rolled back to $OLD deployment"
+          else
+            # Production: use kubectl rollout undo
+            kubectl rollout undo deployment/grey-stable
+            kubectl rollout status deployment/grey-stable --timeout=300s
+            echo "Production rollback complete"
+          fi
+      
+      - name: Validate Rollback
+        run: |
+          sleep 10
+          
+          if ! curl -sf http://localhost:8080/health > /dev/null 2>&1; then
+            curl -sf "https://${{ github.event.inputs.environment }}.grey.example.com/health"
+          fi
+          
+          echo "Rollback validated"
+      
+      - name: Notify Team
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          channel-id: '#grey-deploys'
+          slack-message: |
+            :rewind: Rollback Executed
+            
+            Environment: ${{ github.event.inputs.environment }}
+            Triggered by: ${{ github.actor }}
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        continue-on-error: true
+
+  # ============================================================
+  # Summary
+  # ============================================================
+  deploy-summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [build-images, deploy-dev, deploy-staging, deploy-production]
+    if: always()
+    
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: ${{ needs.build-images.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Deployment Status" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Images | ${{ needs.build-images.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dev | ${{ needs.deploy-dev.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Staging | ${{ needs.deploy-staging.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Production | ${{ needs.deploy-production.result }} |" >> $GITHUB_STEP_SUMMARY
+      
+      # Notify on completion
+      - name: Notify Deployment Complete
+        if: success()
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          channel-id: '#grey-deploys'
+          slack-message: |
+            :rocket: Deployment Complete
+            
+            Version: ${{ needs.build-images.outputs.version }}
+            Environment: ${{ github.event.inputs.environment || 'dev' }}
+            Commit: ${{ github.sha }}
+            
+            View: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        continue-on-error: true

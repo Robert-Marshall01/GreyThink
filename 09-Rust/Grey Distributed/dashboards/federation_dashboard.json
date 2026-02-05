@@ -1,0 +1,859 @@
+{
+  "__metadata": {
+    "name": "Grey Federation Dashboard",
+    "version": "1.0.0",
+    "description": "Monitors cross-cluster federation, attestation, and connectivity health",
+    "author": "Grey Distributed Team"
+  },
+  "dashboard": {
+    "id": null,
+    "uid": "grey-federation",
+    "title": "Grey Federation Dashboard",
+    "description": "Real-time visibility into multi-cloud and on-premises federation",
+    "tags": ["grey", "federation", "multi-cloud", "attestation"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "30s",
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "annotations": {
+      "list": [
+        {
+          "name": "Federation Events",
+          "datasource": "-- Grafana --",
+          "enable": true,
+          "hide": false,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "type": "dashboard",
+          "tags": ["federation", "events"]
+        },
+        {
+          "name": "Attestation Failures",
+          "datasource": "Prometheus",
+          "enable": true,
+          "expr": "changes(grey_attestation_failures_total[1m]) > 0",
+          "iconColor": "rgba(255, 96, 96, 1)",
+          "titleFormat": "Attestation Failure",
+          "textFormat": "Cluster: {{cluster_id}}"
+        }
+      ]
+    },
+    "templating": {
+      "list": [
+        {
+          "name": "cluster",
+          "label": "Cluster",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(grey_federation_cluster_info, cluster_id)",
+          "current": { "text": "All", "value": "$__all" },
+          "multi": true,
+          "includeAll": true,
+          "allValue": ".*"
+        },
+        {
+          "name": "cloud_provider",
+          "label": "Cloud Provider",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(grey_federation_cluster_info, cloud_provider)",
+          "current": { "text": "All", "value": "$__all" },
+          "multi": true,
+          "includeAll": true
+        },
+        {
+          "name": "region",
+          "label": "Region",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(grey_federation_cluster_info{cloud_provider=~\"$cloud_provider\"}, region)",
+          "current": { "text": "All", "value": "$__all" },
+          "multi": true,
+          "includeAll": true
+        }
+      ]
+    },
+    "rows": [
+      {
+        "title": "Federation Overview",
+        "collapse": false,
+        "height": "120px",
+        "panels": [
+          {
+            "id": 1,
+            "type": "stat",
+            "title": "Total Federated Clusters",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+            "targets": [
+              {
+                "expr": "count(grey_federation_cluster_info{cluster_id=~\"$cluster\"})",
+                "legendFormat": ""
+              }
+            ],
+            "options": {
+              "colorMode": "value",
+              "graphMode": "none",
+              "justifyMode": "center",
+              "reduceOptions": { "calcs": ["lastNotNull"] }
+            },
+            "fieldConfig": {
+              "defaults": {
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "blue", "value": null }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 2,
+            "type": "stat",
+            "title": "Healthy Connections",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+            "targets": [
+              {
+                "expr": "sum(grey_federation_connection_healthy{cluster_id=~\"$cluster\"} == 1)",
+                "legendFormat": ""
+              }
+            ],
+            "options": {
+              "colorMode": "value",
+              "graphMode": "none",
+              "justifyMode": "center"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 3,
+            "type": "stat",
+            "title": "Unhealthy Connections",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+            "targets": [
+              {
+                "expr": "sum(grey_federation_connection_healthy{cluster_id=~\"$cluster\"} == 0)",
+                "legendFormat": ""
+              }
+            ],
+            "options": {
+              "colorMode": "value",
+              "graphMode": "none",
+              "justifyMode": "center"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": 0 },
+                    { "color": "yellow", "value": 1 },
+                    { "color": "red", "value": 3 }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 4,
+            "type": "stat",
+            "title": "Attestation Success Rate",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+            "targets": [
+              {
+                "expr": "sum(rate(grey_attestation_success_total{cluster_id=~\"$cluster\"}[5m])) / (sum(rate(grey_attestation_success_total{cluster_id=~\"$cluster\"}[5m])) + sum(rate(grey_attestation_failures_total{cluster_id=~\"$cluster\"}[5m]))) * 100",
+                "legendFormat": ""
+              }
+            ],
+            "options": {
+              "colorMode": "value",
+              "graphMode": "area"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "red", "value": null },
+                    { "color": "yellow", "value": 95 },
+                    { "color": "green", "value": 99 }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 5,
+            "type": "stat",
+            "title": "Cross-Cluster Latency P95",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, sum(rate(grey_federation_latency_bucket{cluster_id=~\"$cluster\"}[5m])) by (le))",
+                "legendFormat": ""
+              }
+            ],
+            "options": {
+              "colorMode": "value",
+              "graphMode": "area"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "unit": "ms",
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 100 },
+                    { "color": "red", "value": 500 }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 6,
+            "type": "stat",
+            "title": "Active VPC Peerings",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+            "targets": [
+              {
+                "expr": "sum(grey_federation_vpc_peering_active{cluster_id=~\"$cluster\"})",
+                "legendFormat": ""
+              }
+            ],
+            "options": {
+              "colorMode": "value",
+              "graphMode": "none"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "blue", "value": null }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "Cluster Topology",
+        "collapse": false,
+        "height": "400px",
+        "panels": [
+          {
+            "id": 10,
+            "type": "nodeGraph",
+            "title": "Federation Topology",
+            "description": "Visual representation of cluster connections",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 0, "y": 4, "w": 12, "h": 10 },
+            "targets": [
+              {
+                "expr": "grey_federation_cluster_info{cluster_id=~\"$cluster\"}",
+                "format": "table",
+                "instant": true
+              },
+              {
+                "expr": "grey_federation_connection_info{cluster_id=~\"$cluster\"}",
+                "format": "table",
+                "instant": true
+              }
+            ],
+            "options": {
+              "nodes": {
+                "mainStatUnit": "none",
+                "arcs": [
+                  { "field": "attestation_status", "color": { "mode": "fixed", "fixedColor": "green" } }
+                ]
+              },
+              "edges": {
+                "mainStatUnit": "ms"
+              }
+            }
+          },
+          {
+            "id": 11,
+            "type": "table",
+            "title": "Cluster Status",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 12, "y": 4, "w": 12, "h": 10 },
+            "targets": [
+              {
+                "expr": "grey_federation_cluster_info{cluster_id=~\"$cluster\"}",
+                "format": "table",
+                "instant": true
+              }
+            ],
+            "transformations": [
+              {
+                "id": "organize",
+                "options": {
+                  "renameByName": {
+                    "cluster_id": "Cluster ID",
+                    "cloud_provider": "Cloud",
+                    "region": "Region",
+                    "attestation_status": "Attestation",
+                    "connection_status": "Connection"
+                  }
+                }
+              }
+            ],
+            "fieldConfig": {
+              "overrides": [
+                {
+                  "matcher": { "id": "byName", "options": "Attestation" },
+                  "properties": [
+                    {
+                      "id": "mappings",
+                      "value": [
+                        { "type": "value", "options": { "1": { "text": "Valid", "color": "green" } } },
+                        { "type": "value", "options": { "0": { "text": "Invalid", "color": "red" } } }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "matcher": { "id": "byName", "options": "Connection" },
+                  "properties": [
+                    {
+                      "id": "mappings",
+                      "value": [
+                        { "type": "value", "options": { "1": { "text": "Connected", "color": "green" } } },
+                        { "type": "value", "options": { "0": { "text": "Disconnected", "color": "red" } } }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Connection Metrics",
+        "collapse": false,
+        "height": "300px",
+        "panels": [
+          {
+            "id": 20,
+            "type": "timeseries",
+            "title": "Cross-Cluster Latency",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 0, "y": 14, "w": 8, "h": 8 },
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.50, sum(rate(grey_federation_latency_bucket{cluster_id=~\"$cluster\"}[1m])) by (le, source_cluster, dest_cluster))",
+                "legendFormat": "p50 {{source_cluster}} → {{dest_cluster}}"
+              },
+              {
+                "expr": "histogram_quantile(0.99, sum(rate(grey_federation_latency_bucket{cluster_id=~\"$cluster\"}[1m])) by (le, source_cluster, dest_cluster))",
+                "legendFormat": "p99 {{source_cluster}} → {{dest_cluster}}"
+              }
+            ],
+            "options": {
+              "legend": { "displayMode": "table", "placement": "right" },
+              "tooltip": { "mode": "multi" }
+            },
+            "fieldConfig": {
+              "defaults": {
+                "unit": "ms",
+                "custom": {
+                  "lineWidth": 1,
+                  "fillOpacity": 10,
+                  "gradientMode": "opacity"
+                }
+              }
+            }
+          },
+          {
+            "id": 21,
+            "type": "timeseries",
+            "title": "Federation Throughput",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 8, "y": 14, "w": 8, "h": 8 },
+            "targets": [
+              {
+                "expr": "sum(rate(grey_federation_bytes_sent_total{cluster_id=~\"$cluster\"}[1m])) by (source_cluster, dest_cluster)",
+                "legendFormat": "{{source_cluster}} → {{dest_cluster}}"
+              }
+            ],
+            "options": {
+              "legend": { "displayMode": "table", "placement": "right" }
+            },
+            "fieldConfig": {
+              "defaults": {
+                "unit": "Bps",
+                "custom": {
+                  "lineWidth": 1,
+                  "fillOpacity": 20,
+                  "stacking": { "mode": "normal" }
+                }
+              }
+            }
+          },
+          {
+            "id": 22,
+            "type": "timeseries",
+            "title": "Connection State Changes",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 16, "y": 14, "w": 8, "h": 8 },
+            "targets": [
+              {
+                "expr": "sum(increase(grey_federation_connection_established_total{cluster_id=~\"$cluster\"}[1m])) by (cluster_id)",
+                "legendFormat": "Established: {{cluster_id}}"
+              },
+              {
+                "expr": "sum(increase(grey_federation_connection_failed_total{cluster_id=~\"$cluster\"}[1m])) by (cluster_id)",
+                "legendFormat": "Failed: {{cluster_id}}"
+              }
+            ],
+            "options": {
+              "legend": { "displayMode": "table", "placement": "bottom" }
+            },
+            "fieldConfig": {
+              "defaults": {
+                "custom": {
+                  "drawStyle": "bars",
+                  "barAlignment": 0,
+                  "fillOpacity": 50
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "Attestation & Security",
+        "collapse": false,
+        "height": "300px",
+        "panels": [
+          {
+            "id": 30,
+            "type": "timeseries",
+            "title": "Attestation Operations",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 0, "y": 22, "w": 8, "h": 8 },
+            "targets": [
+              {
+                "expr": "sum(rate(grey_attestation_success_total{cluster_id=~\"$cluster\"}[1m])) by (cluster_id, attestation_type)",
+                "legendFormat": "Success: {{cluster_id}} ({{attestation_type}})"
+              },
+              {
+                "expr": "sum(rate(grey_attestation_failures_total{cluster_id=~\"$cluster\"}[1m])) by (cluster_id, failure_reason)",
+                "legendFormat": "Failed: {{cluster_id}} ({{failure_reason}})"
+              }
+            ],
+            "options": {
+              "legend": { "displayMode": "table", "placement": "right" }
+            },
+            "fieldConfig": {
+              "defaults": {
+                "unit": "ops",
+                "custom": {
+                  "lineWidth": 1,
+                  "fillOpacity": 20
+                }
+              },
+              "overrides": [
+                {
+                  "matcher": { "id": "byRegexp", "options": "/Failed.*/" },
+                  "properties": [
+                    { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": 31,
+            "type": "gauge",
+            "title": "Certificate Expiry",
+            "description": "Days until certificate expiration",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 8, "y": 22, "w": 8, "h": 8 },
+            "targets": [
+              {
+                "expr": "(grey_federation_certificate_expiry_timestamp{cluster_id=~\"$cluster\"} - time()) / 86400",
+                "legendFormat": "{{cluster_id}}"
+              }
+            ],
+            "options": {
+              "orientation": "horizontal",
+              "showThresholdLabels": false,
+              "showThresholdMarkers": true
+            },
+            "fieldConfig": {
+              "defaults": {
+                "unit": "d",
+                "min": 0,
+                "max": 365,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "red", "value": null },
+                    { "color": "orange", "value": 30 },
+                    { "color": "yellow", "value": 60 },
+                    { "color": "green", "value": 90 }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 32,
+            "type": "heatmap",
+            "title": "Attestation Duration Heatmap",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 16, "y": 22, "w": 8, "h": 8 },
+            "targets": [
+              {
+                "expr": "sum(increase(grey_attestation_duration_bucket{cluster_id=~\"$cluster\"}[1m])) by (le)",
+                "legendFormat": "{{le}}",
+                "format": "heatmap"
+              }
+            ],
+            "options": {
+              "calculate": false,
+              "cellGap": 1,
+              "color": {
+                "mode": "scheme",
+                "scheme": "Spectral",
+                "steps": 64
+              },
+              "yAxis": {
+                "unit": "ms"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "Cloud Provider Breakdown",
+        "collapse": false,
+        "height": "300px",
+        "panels": [
+          {
+            "id": 40,
+            "type": "piechart",
+            "title": "Clusters by Cloud Provider",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 0, "y": 30, "w": 6, "h": 8 },
+            "targets": [
+              {
+                "expr": "count(grey_federation_cluster_info{cluster_id=~\"$cluster\"}) by (cloud_provider)",
+                "legendFormat": "{{cloud_provider}}"
+              }
+            ],
+            "options": {
+              "legend": {
+                "displayMode": "table",
+                "placement": "right",
+                "values": ["value", "percent"]
+              },
+              "pieType": "donut",
+              "reduceOptions": { "calcs": ["lastNotNull"] }
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": { "mode": "palette-classic" }
+              }
+            }
+          },
+          {
+            "id": 41,
+            "type": "piechart",
+            "title": "Clusters by Region",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 6, "y": 30, "w": 6, "h": 8 },
+            "targets": [
+              {
+                "expr": "count(grey_federation_cluster_info{cluster_id=~\"$cluster\", cloud_provider=~\"$cloud_provider\"}) by (region)",
+                "legendFormat": "{{region}}"
+              }
+            ],
+            "options": {
+              "legend": {
+                "displayMode": "table",
+                "placement": "right",
+                "values": ["value"]
+              },
+              "pieType": "donut"
+            }
+          },
+          {
+            "id": 42,
+            "type": "bargauge",
+            "title": "Resources per Cloud",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 12, "y": 30, "w": 6, "h": 8 },
+            "targets": [
+              {
+                "expr": "sum(grey_federation_allocated_cpu_cores{cluster_id=~\"$cluster\"}) by (cloud_provider)",
+                "legendFormat": "{{cloud_provider}} CPU"
+              }
+            ],
+            "options": {
+              "orientation": "horizontal",
+              "displayMode": "gradient",
+              "showUnfilled": true
+            },
+            "fieldConfig": {
+              "defaults": {
+                "unit": "cores",
+                "thresholds": {
+                  "mode": "percentage",
+                  "steps": [
+                    { "color": "blue", "value": null }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 43,
+            "type": "timeseries",
+            "title": "Cross-Cloud Data Transfer",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 18, "y": 30, "w": 6, "h": 8 },
+            "targets": [
+              {
+                "expr": "sum(rate(grey_federation_cross_cloud_bytes_total{cluster_id=~\"$cluster\"}[5m])) by (source_cloud, dest_cloud)",
+                "legendFormat": "{{source_cloud}} → {{dest_cloud}}"
+              }
+            ],
+            "options": {
+              "legend": { "displayMode": "table", "placement": "bottom" }
+            },
+            "fieldConfig": {
+              "defaults": {
+                "unit": "Bps",
+                "custom": {
+                  "fillOpacity": 30,
+                  "stacking": { "mode": "normal" }
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "Consensus & Coordination",
+        "collapse": false,
+        "height": "300px",
+        "panels": [
+          {
+            "id": 50,
+            "type": "timeseries",
+            "title": "Inter-Cluster Consensus Operations",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 0, "y": 38, "w": 12, "h": 8 },
+            "targets": [
+              {
+                "expr": "sum(rate(grey_federation_consensus_proposals_total{cluster_id=~\"$cluster\"}[1m]))",
+                "legendFormat": "Proposals"
+              },
+              {
+                "expr": "sum(rate(grey_federation_consensus_commits_total{cluster_id=~\"$cluster\"}[1m]))",
+                "legendFormat": "Commits"
+              },
+              {
+                "expr": "sum(rate(grey_federation_consensus_aborts_total{cluster_id=~\"$cluster\"}[1m]))",
+                "legendFormat": "Aborts"
+              }
+            ],
+            "options": {
+              "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] }
+            },
+            "fieldConfig": {
+              "defaults": {
+                "unit": "ops",
+                "custom": {
+                  "lineWidth": 2,
+                  "fillOpacity": 10
+                }
+              }
+            }
+          },
+          {
+            "id": 51,
+            "type": "timeseries",
+            "title": "Resource Sharing Operations",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 12, "y": 38, "w": 12, "h": 8 },
+            "targets": [
+              {
+                "expr": "sum(rate(grey_federation_resource_requests_total{cluster_id=~\"$cluster\"}[1m])) by (resource_type)",
+                "legendFormat": "Requests: {{resource_type}}"
+              },
+              {
+                "expr": "sum(rate(grey_federation_resource_grants_total{cluster_id=~\"$cluster\"}[1m])) by (resource_type)",
+                "legendFormat": "Grants: {{resource_type}}"
+              }
+            ],
+            "options": {
+              "legend": { "displayMode": "table", "placement": "right" }
+            },
+            "fieldConfig": {
+              "defaults": {
+                "unit": "ops"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "alerts": [
+    {
+      "name": "FederationConnectionLost",
+      "condition": "B",
+      "data": [
+        {
+          "refId": "A",
+          "queryType": "",
+          "model": {
+            "expr": "grey_federation_connection_healthy{cluster_id=~\"$cluster\"}"
+          }
+        },
+        {
+          "refId": "B",
+          "queryType": "",
+          "model": {
+            "type": "reduce",
+            "expression": "A",
+            "reducer": "last",
+            "conditions": [
+              { "evaluator": { "params": [0], "type": "lt" }, "type": "query" }
+            ]
+          }
+        }
+      ],
+      "execErrState": "Alerting",
+      "for": "2m",
+      "labels": {
+        "severity": "critical",
+        "team": "platform"
+      },
+      "annotations": {
+        "summary": "Federation connection lost to cluster {{ $labels.cluster_id }}",
+        "description": "The federation connection to {{ $labels.cluster_id }} has been down for more than 2 minutes."
+      }
+    },
+    {
+      "name": "AttestationFailureRate",
+      "condition": "B",
+      "data": [
+        {
+          "refId": "A",
+          "model": {
+            "expr": "sum(rate(grey_attestation_failures_total[5m])) / (sum(rate(grey_attestation_success_total[5m])) + sum(rate(grey_attestation_failures_total[5m]))) * 100"
+          }
+        },
+        {
+          "refId": "B",
+          "model": {
+            "type": "threshold",
+            "expression": "A",
+            "conditions": [
+              { "evaluator": { "params": [5], "type": "gt" }, "type": "query" }
+            ]
+          }
+        }
+      ],
+      "for": "5m",
+      "labels": {
+        "severity": "warning",
+        "team": "security"
+      },
+      "annotations": {
+        "summary": "High attestation failure rate",
+        "description": "Attestation failure rate is {{ $value }}%, which exceeds the 5% threshold."
+      }
+    },
+    {
+      "name": "CertificateExpiryWarning",
+      "condition": "B",
+      "data": [
+        {
+          "refId": "A",
+          "model": {
+            "expr": "(grey_federation_certificate_expiry_timestamp - time()) / 86400"
+          }
+        },
+        {
+          "refId": "B",
+          "model": {
+            "type": "threshold",
+            "expression": "A",
+            "conditions": [
+              { "evaluator": { "params": [30], "type": "lt" }, "type": "query" }
+            ]
+          }
+        }
+      ],
+      "for": "1h",
+      "labels": {
+        "severity": "warning",
+        "team": "security"
+      },
+      "annotations": {
+        "summary": "Federation certificate expiring soon",
+        "description": "Certificate for {{ $labels.cluster_id }} expires in {{ $value }} days."
+      }
+    },
+    {
+      "name": "CrossClusterLatencyHigh",
+      "condition": "B",
+      "data": [
+        {
+          "refId": "A",
+          "model": {
+            "expr": "histogram_quantile(0.95, sum(rate(grey_federation_latency_bucket[5m])) by (le, source_cluster, dest_cluster))"
+          }
+        },
+        {
+          "refId": "B",
+          "model": {
+            "type": "threshold",
+            "expression": "A",
+            "conditions": [
+              { "evaluator": { "params": [500], "type": "gt" }, "type": "query" }
+            ]
+          }
+        }
+      ],
+      "for": "10m",
+      "labels": {
+        "severity": "warning",
+        "team": "platform"
+      },
+      "annotations": {
+        "summary": "High cross-cluster latency detected",
+        "description": "P95 latency between {{ $labels.source_cluster }} and {{ $labels.dest_cluster }} is {{ $value }}ms."
+      }
+    }
+  ]
+}

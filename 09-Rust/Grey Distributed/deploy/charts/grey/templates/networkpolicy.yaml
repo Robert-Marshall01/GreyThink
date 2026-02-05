@@ -1,0 +1,286 @@
+{{/*
+=============================================================================
+Grey Distributed — Network Policies
+=============================================================================
+
+Zero-trust network security:
+- Default deny all ingress/egress
+- Explicit allow policies per component
+- Tenant isolation for multi-tenancy
+
+=============================================================================
+*/}}
+
+{{- if .Values.networkPolicy.enabled }}
+# Default deny all ingress and egress
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "grey.fullname" . }}-default-deny
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grey.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "grey.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+
+---
+# Allow DNS egress for all pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "grey.fullname" . }}-allow-dns
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grey.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "grey.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# Coordinator NetworkPolicy — accepts from coordinators, workers, and gateways
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "grey.fullname" . }}-coordinator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grey.coordinator.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "grey.coordinator.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Raft consensus traffic from other coordinators
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "grey.coordinator.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.consensus.raftPort }}
+    # gRPC from workers
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "grey.worker.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.coordinator.service.grpcPort }}
+    # gRPC from gateways
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "grey.gateway.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.coordinator.service.grpcPort }}
+    # Metrics scraping from Prometheus
+    {{- if .Values.monitoring.prometheus.enabled }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- .Values.networkPolicy.prometheus.namespaceSelector | toYaml | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- .Values.networkPolicy.prometheus.podSelector | toYaml | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.monitoring.prometheus.port | default 9090 }}
+    {{- end }}
+  egress:
+    # Raft to other coordinators
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "grey.coordinator.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.consensus.raftPort }}
+    # gRPC to workers
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "grey.worker.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.worker.service.grpcPort }}
+
+---
+# Worker NetworkPolicy — accepts from coordinators, communicates with storage
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "grey.fullname" . }}-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grey.worker.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "grey.worker.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Task assignments from coordinators
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "grey.coordinator.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.worker.service.grpcPort }}
+    # Metrics scraping
+    {{- if .Values.monitoring.prometheus.enabled }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- .Values.networkPolicy.prometheus.namespaceSelector | toYaml | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- .Values.networkPolicy.prometheus.podSelector | toYaml | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.monitoring.prometheus.port | default 9090 }}
+    {{- end }}
+  egress:
+    # Report results to coordinators
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "grey.coordinator.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.coordinator.service.grpcPort }}
+    # Worker-to-worker communication (if enabled)
+    {{- if .Values.networkPolicy.workerToWorker }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "grey.worker.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.worker.service.grpcPort }}
+    {{- end }}
+    # Tracing collector
+    {{- if .Values.monitoring.tracing.enabled }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- .Values.networkPolicy.tracing.namespaceSelector | toYaml | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 4317  # OTLP gRPC
+        - protocol: TCP
+          port: 4318  # OTLP HTTP
+    {{- end }}
+
+---
+# Gateway NetworkPolicy — accepts external traffic, routes to coordinators
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "grey.fullname" . }}-gateway
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grey.gateway.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "grey.gateway.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # External HTTP/gRPC traffic (from ingress controller or LB)
+    - from: []  # Allow from anywhere (LoadBalancer)
+      ports:
+        - protocol: TCP
+          port: {{ .Values.gateway.service.httpPort }}
+        - protocol: TCP
+          port: {{ .Values.gateway.service.grpcPort }}
+    # Metrics scraping
+    {{- if .Values.monitoring.prometheus.enabled }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- .Values.networkPolicy.prometheus.namespaceSelector | toYaml | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- .Values.networkPolicy.prometheus.podSelector | toYaml | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.monitoring.prometheus.port | default 9090 }}
+    {{- end }}
+  egress:
+    # Route requests to coordinators
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "grey.coordinator.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.coordinator.service.grpcPort }}
+    # Direct task dispatch to workers (if enabled)
+    {{- if .Values.networkPolicy.gatewayToWorker }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "grey.worker.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.worker.service.grpcPort }}
+    {{- end }}
+
+{{- if .Values.networkPolicy.tenantIsolation.enabled }}
+---
+# Tenant Isolation — restrict cross-tenant communication
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "grey.fullname" . }}-tenant-isolation
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grey.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "grey.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    # Only allow traffic from same tenant
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: grey.io/tenant
+                operator: In
+                values:
+                  - "$(grey.io/tenant)"  # Same tenant
+{{- end }}
+
+{{- end }}

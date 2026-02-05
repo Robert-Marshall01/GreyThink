@@ -1,0 +1,491 @@
+# =============================================================================
+# Grey Distributed — Resource Allocation Policy
+# =============================================================================
+#
+# This policy defines how resources are allocated across federated clusters,
+# organizations, and tenants.
+#
+# Allocation follows a hierarchical model:
+# 1. Federation-level pools
+# 2. Organization allocations
+# 3. Tenant quotas
+# 4. Workload assignments
+
+apiVersion: grey.io/v1
+kind: ResourceAllocationPolicy
+metadata:
+  name: default-resource-allocation
+  namespace: grey-governance
+  labels:
+    grey.io/policy-type: allocation
+    grey.io/version: "1.0.0"
+
+spec:
+  # ===========================================================================
+  # Global Resource Pools
+  # ===========================================================================
+  globalPools:
+    # Production pool - highest priority, guaranteed resources
+    - name: production
+      description: Production workloads with SLA guarantees
+      priority: 1
+      allocation:
+        compute:
+          minCores: 10000
+          maxCores: 50000
+          burstable: true
+        memory:
+          minGB: 40000
+          maxGB: 200000
+        storage:
+          minTB: 100
+          maxTB: 1000
+        gpu:
+          minUnits: 100
+          maxUnits: 500
+      preemptible: false
+      
+    # Development pool - flexible, can be preempted
+    - name: development
+      description: Development and testing workloads
+      priority: 3
+      allocation:
+        compute:
+          minCores: 1000
+          maxCores: 10000
+          burstable: true
+        memory:
+          minGB: 4000
+          maxGB: 40000
+        storage:
+          minTB: 10
+          maxTB: 100
+        gpu:
+          minUnits: 10
+          maxUnits: 50
+      preemptible: true
+      preemptionGracePeriod: 5m
+      
+    # Burst pool - shared overflow capacity
+    - name: burst
+      description: Overflow capacity for temporary spikes
+      priority: 5
+      allocation:
+        compute:
+          minCores: 0
+          maxCores: 20000
+          burstable: true
+        memory:
+          minGB: 0
+          maxGB: 80000
+        storage:
+          minTB: 0
+          maxTB: 200
+        gpu:
+          minUnits: 0
+          maxUnits: 100
+      preemptible: true
+      preemptionGracePeriod: 30s
+      costMultiplier: 1.5
+
+  # ===========================================================================
+  # Organization Allocation Rules
+  # ===========================================================================
+  organizationAllocation:
+    # Base allocation method
+    method: weighted-fair-share
+    
+    # Weights determine relative share
+    weights:
+      calculation: based-on-contract
+      minimumWeight: 1
+      maximumWeight: 100
+      
+    # Organization tiers with different guarantees
+    tiers:
+      - name: enterprise
+        description: Large enterprise customers
+        guarantees:
+          minCoresPercent: 10%     # Minimum 10% of pool
+          maxCoresPercent: 40%     # Maximum 40% of pool
+          burstAllowed: true
+          dedicatedCapacity: optional
+          priorityAccess: true
+        sla:
+          availability: 99.99%
+          supportLevel: premium
+          
+      - name: business
+        description: Business tier customers
+        guarantees:
+          minCoresPercent: 2%
+          maxCoresPercent: 20%
+          burstAllowed: true
+          dedicatedCapacity: false
+          priorityAccess: false
+        sla:
+          availability: 99.9%
+          supportLevel: standard
+          
+      - name: startup
+        description: Startup and small business tier
+        guarantees:
+          minCoresPercent: 0.5%
+          maxCoresPercent: 5%
+          burstAllowed: limited   # Only 125% of quota
+          dedicatedCapacity: false
+          priorityAccess: false
+        sla:
+          availability: 99.5%
+          supportLevel: basic
+
+  # ===========================================================================
+  # Tenant Quota Rules
+  # ===========================================================================
+  tenantQuotas:
+    # Quota inheritance from organization
+    inheritance:
+      enabled: true
+      method: proportional  # Based on tenant weight within org
+      
+    # Quota types
+    types:
+      - name: guaranteed
+        description: Always available, cannot be preempted
+        percentage: 50%       # 50% of allocation is guaranteed
+        
+      - name: burstable
+        description: Available when capacity exists
+        percentage: 100%      # Up to 100% is burstable
+        
+      - name: max-burst
+        description: Absolute maximum including burst
+        percentage: 150%      # Can burst to 150% if available
+        
+    # Default quotas for new tenants
+    defaults:
+      compute:
+        cores: 100
+        maxCores: 500
+      memory:
+        gb: 400
+        maxGB: 2000
+      storage:
+        gb: 1000
+        maxGB: 10000
+      gpu:
+        units: 0
+        maxUnits: 10
+      tasks:
+        concurrent: 1000
+        maxConcurrent: 10000
+        dailyLimit: 100000
+      network:
+        egressGbPerDay: 100
+        ingressGbPerDay: unlimited
+        
+    # Resource limits by workload type
+    workloadLimits:
+      batch:
+        maxTaskDuration: 24h
+        maxMemoryPerTask: 256GB
+        maxCoresPerTask: 64
+      interactive:
+        maxTaskDuration: 1h
+        maxMemoryPerTask: 64GB
+        maxCoresPerTask: 16
+      streaming:
+        maxMemoryPerTask: 32GB
+        maxCoresPerTask: 8
+        maxConnections: 10000
+
+  # ===========================================================================
+  # Cross-Cluster Allocation
+  # ===========================================================================
+  crossClusterAllocation:
+    # How resources are distributed across clusters
+    strategy: locality-aware
+    
+    # Affinity rules
+    affinity:
+      # Prefer keeping workloads close to data
+      dataLocality:
+        weight: 100
+        preference: same-cluster
+        fallback: same-region
+        
+      # Prefer clusters with available capacity
+      capacityAware:
+        weight: 50
+        threshold: 20%  # Prefer clusters with >20% free capacity
+        
+      # Cost optimization
+      costAware:
+        weight: 30
+        preferCheaperClusters: true
+        spotInstancesAllowed: true
+        
+    # Anti-affinity for resilience
+    antiAffinity:
+      # Spread replicas across failure domains
+      spreadAcrossZones:
+        enabled: true
+        minZones: 2
+        
+      # Don't concentrate on single cluster
+      maxPerCluster:
+        percent: 50%
+        
+    # Rebalancing
+    rebalancing:
+      enabled: true
+      frequency: 1h
+      threshold: 20%  # Rebalance if imbalance > 20%
+      maxMigrationPercent: 10%  # Max 10% of workloads per rebalance
+
+  # ===========================================================================
+  # Burst and Borrowing Rules
+  # ===========================================================================
+  burstRules:
+    # When burst is allowed
+    conditions:
+      - quotaUtilization: ">90%"
+        guaranteedUtilization: ">80%"
+        
+    # Burst limits
+    limits:
+      maxBurstPercent: 50%      # Max 50% above quota
+      maxBurstDuration: 1h      # Max burst duration
+      cooldownPeriod: 15m       # Time between bursts
+      
+    # Borrowing between tenants
+    borrowing:
+      enabled: true
+      
+      # Lender requirements
+      lenderRequirements:
+        minFreeCapacity: 30%    # Must have 30% free to lend
+        optIn: required         # Tenants must opt-in to lend
+        
+      # Borrower requirements
+      borrowerRequirements:
+        maxBorrowPercent: 25%   # Can borrow up to 25% of quota
+        repaymentPriority: 1    # Borrowed resources returned first
+        
+      # Cost
+      borrowingCost:
+        multiplier: 1.25        # 25% premium for borrowed resources
+        billing: real-time
+
+  # ===========================================================================
+  # Priority and Preemption
+  # ===========================================================================
+  priorityRules:
+    # Priority classes
+    classes:
+      - name: critical
+        priority: 1000
+        description: Critical production workloads
+        preemptLowerPriority: true
+        canBePreempted: false
+        maxPercentOfQuota: 10%
+        
+      - name: high
+        priority: 500
+        description: High-priority production
+        preemptLowerPriority: true
+        canBePreempted: false
+        maxPercentOfQuota: 30%
+        
+      - name: normal
+        priority: 100
+        description: Standard workloads
+        preemptLowerPriority: false
+        canBePreempted: true
+        maxPercentOfQuota: 100%
+        
+      - name: low
+        priority: 10
+        description: Low-priority batch jobs
+        preemptLowerPriority: false
+        canBePreempted: true
+        maxPercentOfQuota: 100%
+        
+      - name: preemptible
+        priority: 1
+        description: Use spare capacity only
+        preemptLowerPriority: false
+        canBePreempted: true
+        costDiscount: 70%
+        maxPercentOfQuota: 200%
+        
+    # Preemption rules
+    preemption:
+      enabled: true
+      gracePeriod: 30s
+      checkpointFirst: true     # Try to checkpoint before preemption
+      notifyTenant: true
+      compensateForPreemption: true  # Credit for preempted work
+
+  # ===========================================================================
+  # Scheduling Policies
+  # ===========================================================================
+  schedulingPolicies:
+    # Default scheduler
+    default:
+      algorithm: weighted-fair-scheduling
+      
+    # Batch scheduling
+    batch:
+      binPacking: true          # Pack tasks efficiently
+      allowFragmentation: false
+      preferLargeMachines: true
+      
+    # Interactive scheduling
+    interactive:
+      prioritizeLatency: true
+      maxQueueTime: 10s
+      spreadAcrossNodes: true
+      
+    # Gang scheduling for distributed workloads
+    gang:
+      enabled: true
+      allOrNothing: true
+      timeout: 5m
+      
+    # Fair scheduling parameters
+    fairness:
+      algorithm: dominant-resource-fairness
+      weights:
+        compute: 1.0
+        memory: 1.0
+        storage: 0.5
+        gpu: 2.0
+
+  # ===========================================================================
+  # Capacity Reservation
+  # ===========================================================================
+  capacityReservation:
+    # Allow tenants to reserve capacity
+    enabled: true
+    
+    # Reservation types
+    types:
+      - name: on-demand
+        description: Immediate capacity guarantee
+        commitment: none
+        costMultiplier: 1.0
+        
+      - name: reserved-1yr
+        description: 1-year capacity commitment
+        commitment: 1y
+        costMultiplier: 0.7
+        penalty: 50%  # Penalty for early termination
+        
+      - name: reserved-3yr
+        description: 3-year capacity commitment
+        commitment: 3y
+        costMultiplier: 0.5
+        penalty: 30%
+        
+    # Reservation limits
+    limits:
+      maxReservedPercent: 80%   # Max 80% of quota can be reserved
+      minReservationSize: 10    # Minimum cores to reserve
+      maxReservationDuration: 3y
+
+  # ===========================================================================
+  # Autoscaling Integration
+  # ===========================================================================
+  autoscaling:
+    # Quota autoscaling
+    quotaAutoscaling:
+      enabled: true
+      
+      scaleUp:
+        trigger: utilization > 80% for 10m
+        increment: 25%
+        maxScale: 200%
+        cooldown: 30m
+        
+      scaleDown:
+        trigger: utilization < 30% for 1h
+        decrement: 10%
+        minScale: 50%
+        cooldown: 2h
+        
+    # Cluster autoscaling hints
+    clusterHints:
+      enabled: true
+      scaleUpThreshold: 70%     # Scale cluster when 70% utilized
+      scaleDownThreshold: 30%   # Scale down when 30% utilized
+
+  # ===========================================================================
+  # Monitoring and Alerts
+  # ===========================================================================
+  monitoring:
+    metrics:
+      - name: quota_utilization
+        description: Current quota usage percentage
+        alertThreshold: 90%
+        
+      - name: burst_usage
+        description: Current burst usage
+        alertThreshold: 80%
+        
+      - name: preemption_rate
+        description: Rate of preemptions
+        alertThreshold: 10%     # Alert if >10% preempted
+        
+      - name: fairness_index
+        description: Jain's fairness index
+        alertThreshold: 0.8     # Alert if fairness drops below 0.8
+        
+    alerts:
+      - name: quota-exhausted
+        condition: quota_utilization >= 100%
+        severity: warning
+        channels:
+          - slack
+          - email
+          
+      - name: burst-limit-reached
+        condition: burst_usage >= 100%
+        severity: critical
+        channels:
+          - pager
+          - slack
+          
+      - name: unfair-allocation
+        condition: fairness_index < 0.7
+        severity: warning
+        channels:
+          - slack
+
+  # ===========================================================================
+  # Policy Enforcement
+  # ===========================================================================
+  enforcement:
+    mode: active
+    
+    # Hard limits cannot be exceeded
+    hardLimits:
+      - maxCores
+      - maxMemory
+      - maxBurst
+      
+    # Soft limits trigger alerts but allow temporary exceedance
+    softLimits:
+      - dailyTaskLimit
+      - egressLimit
+      
+    # Grace period for over-quota situations
+    gracePeriod:
+      duration: 5m
+      action: warn
+      
+    # After grace period
+    overQuotaAction:
+      queue: true           # Queue new requests
+      preemptBurst: true    # Preempt burst workloads
+      notifyTenant: true

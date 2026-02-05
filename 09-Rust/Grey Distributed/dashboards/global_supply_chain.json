@@ -1,0 +1,551 @@
+{
+  "title": "Grey Distributed — Global Supply Chain Dashboard",
+  "description": "Real-time visualization of worldwide logistics orchestration and supply chain coordination",
+  "version": "1.0.0",
+  "refreshInterval": "30s",
+  "timeRange": {
+    "default": "24h",
+    "options": ["1h", "6h", "24h", "7d", "30d"]
+  },
+  "variables": [
+    {
+      "name": "region",
+      "label": "Region",
+      "type": "multiselect",
+      "options": ["north_america", "europe", "asia_pacific", "middle_east", "africa", "south_america"],
+      "default": "all"
+    },
+    {
+      "name": "mode",
+      "label": "Transport Mode",
+      "type": "multiselect",
+      "options": ["ocean", "air", "rail", "road", "intermodal"],
+      "default": "all"
+    }
+  ],
+  "sections": [
+    {
+      "title": "Global Overview",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Active Shipments",
+              "type": "stat",
+              "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+              "query": "sum(grey_logistics_active_shipments)",
+              "format": "short",
+              "sparkline": true,
+              "color": "#3b82f6"
+            },
+            {
+              "title": "Daily Volume",
+              "type": "stat",
+              "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+              "query": "sum(increase(grey_logistics_shipments_completed[24h]))",
+              "format": "short",
+              "sparkline": true
+            },
+            {
+              "title": "On-Time Delivery",
+              "type": "gauge",
+              "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+              "query": "grey_logistics_on_time_rate * 100",
+              "unit": "%",
+              "thresholds": {
+                "critical": [0, 85],
+                "warning": [85, 95],
+                "ok": [95, 100]
+              }
+            },
+            {
+              "title": "Avg Transit Time",
+              "type": "stat",
+              "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+              "query": "avg(grey_logistics_transit_time_hours)",
+              "unit": "hours",
+              "subtitle": "Door-to-door"
+            },
+            {
+              "title": "Disruption Index",
+              "type": "gauge",
+              "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+              "query": "grey_logistics_disruption_index",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "ok": [0, 20],
+                "warning": [20, 50],
+                "critical": [50, 100]
+              }
+            },
+            {
+              "title": "Carbon Intensity",
+              "type": "stat",
+              "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+              "query": "grey_logistics_carbon_kg_per_teu",
+              "unit": "kg CO2/TEU",
+              "sparkline": true
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Global Freight Flows",
+              "type": "worldmap",
+              "gridPos": { "x": 0, "y": 4, "w": 16, "h": 12 },
+              "query": "grey_logistics_freight_flow",
+              "routes": {
+                "query": "grey_logistics_trade_lanes",
+                "width": "volume_teu",
+                "color": "mode"
+              },
+              "ports": {
+                "query": "grey_logistics_ports",
+                "size": "throughput",
+                "color": "congestion"
+              },
+              "colors": {
+                "ocean": "#3b82f6",
+                "air": "#22c55e",
+                "rail": "#f59e0b",
+                "road": "#a855f7"
+              }
+            },
+            {
+              "title": "Volume by Mode",
+              "type": "piechart",
+              "gridPos": { "x": 16, "y": 4, "w": 8, "h": 6 },
+              "query": "sum by (mode) (grey_logistics_volume_teu)",
+              "colors": {
+                "ocean": "#3b82f6",
+                "air": "#22c55e",
+                "rail": "#f59e0b",
+                "road": "#a855f7",
+                "intermodal": "#06b6d4"
+              }
+            },
+            {
+              "title": "Trade Balance",
+              "type": "barchart",
+              "gridPos": { "x": 16, "y": 10, "w": 8, "h": 6 },
+              "query": "grey_logistics_trade_balance_teu",
+              "xAxis": { "label": "Region" },
+              "yAxis": { "label": "TEU (import - export)" },
+              "orientation": "horizontal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Port & Terminal Operations",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Major Port Status",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 0, "w": 14, "h": 10 },
+              "query": "grey_logistics_port_status",
+              "columns": [
+                { "field": "port_name", "label": "Port", "width": "18%" },
+                { "field": "region", "label": "Region", "width": "12%" },
+                { "field": "vessels_waiting", "label": "Queue", "width": "10%" },
+                { "field": "avg_wait_hours", "label": "Wait Time", "width": "12%" },
+                { "field": "berth_utilization", "label": "Berth Util", "width": "12%", "format": "percent" },
+                { "field": "crane_moves_hr", "label": "Moves/hr", "width": "12%" },
+                { "field": "congestion", "label": "Congestion", "width": "12%", "format": "progressbar" },
+                { "field": "status", "label": "Status", "width": "12%" }
+              ],
+              "rowStyles": {
+                "congestion": {
+                  ">0.8": "bg-red-100",
+                  ">0.5": "bg-yellow-100",
+                  "<=0.5": "bg-green-100"
+                }
+              }
+            },
+            {
+              "title": "Port Congestion Heatmap",
+              "type": "heatmap",
+              "gridPos": { "x": 14, "y": 0, "w": 10, "h": 10 },
+              "query": "grey_logistics_port_congestion",
+              "xAxis": "time",
+              "yAxis": "port",
+              "colorScale": {
+                "colors": ["#22c55e", "#fbbf24", "#ef4444"],
+                "min": 0,
+                "max": 1
+              }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Vessel Positions",
+              "type": "worldmap",
+              "gridPos": { "x": 0, "y": 10, "w": 24, "h": 10 },
+              "query": "grey_logistics_vessel_positions",
+              "markers": {
+                "lat": "latitude",
+                "lon": "longitude",
+                "size": "capacity_teu",
+                "color": "status"
+              },
+              "colors": {
+                "sailing": "#3b82f6",
+                "anchored": "#f59e0b",
+                "berthed": "#22c55e",
+                "delayed": "#ef4444"
+              },
+              "clustering": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Air Freight & Express",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Air Cargo Hubs",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 10 },
+              "query": "grey_logistics_air_hub_status",
+              "columns": [
+                { "field": "airport", "label": "Airport", "width": "20%" },
+                { "field": "daily_tonnage", "label": "Tonnage/day", "width": "15%" },
+                { "field": "flights_24h", "label": "Flights", "width": "12%" },
+                { "field": "capacity_util", "label": "Capacity", "width": "13%", "format": "percent" },
+                { "field": "avg_dwell_hours", "label": "Dwell Time", "width": "13%" },
+                { "field": "customs_clearance_hours", "label": "Customs", "width": "13%" },
+                { "field": "status", "label": "Status", "width": "14%" }
+              ]
+            },
+            {
+              "title": "Express Delivery Performance",
+              "type": "timeseries",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 10 },
+              "queries": [
+                {
+                  "expr": "grey_logistics_express_delivery_rate{sla='same_day'}",
+                  "legendFormat": "Same Day"
+                },
+                {
+                  "expr": "grey_logistics_express_delivery_rate{sla='next_day'}",
+                  "legendFormat": "Next Day"
+                },
+                {
+                  "expr": "grey_logistics_express_delivery_rate{sla='two_day'}",
+                  "legendFormat": "2-Day"
+                }
+              ],
+              "yAxis": { "label": "On-Time Rate %", "max": 100 }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Inventory & Warehousing",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Global Inventory Levels",
+              "type": "timeseries",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "sum(grey_logistics_inventory_units) by (category)",
+                  "legendFormat": "{{category}}"
+                }
+              ],
+              "yAxis": { "label": "Units" }
+            },
+            {
+              "title": "Warehouse Utilization",
+              "type": "barchart",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+              "query": "grey_logistics_warehouse_utilization",
+              "xAxis": { "label": "Region" },
+              "yAxis": { "label": "Utilization %", "max": 100 },
+              "thresholds": [
+                { "value": 90, "color": "#ef4444", "label": "Critical" },
+                { "value": 75, "color": "#f59e0b", "label": "High" }
+              ]
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Stock-Out Risk",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+              "query": "grey_logistics_stockout_risk",
+              "columns": [
+                { "field": "sku", "label": "SKU", "width": "20%" },
+                { "field": "product", "label": "Product", "width": "25%" },
+                { "field": "current_stock", "label": "Stock", "width": "12%" },
+                { "field": "daily_demand", "label": "Demand", "width": "12%" },
+                { "field": "days_of_supply", "label": "Days Supply", "width": "13%" },
+                { "field": "risk_level", "label": "Risk", "width": "18%" }
+              ],
+              "rowStyles": {
+                "days_of_supply": {
+                  "<7": "bg-red-100",
+                  "<14": "bg-yellow-100",
+                  ">=14": "bg-green-100"
+                }
+              }
+            },
+            {
+              "title": "Replenishment Orders",
+              "type": "timeline",
+              "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+              "query": "grey_logistics_replenishment_orders",
+              "fields": {
+                "time": "expected_arrival",
+                "title": "description",
+                "type": "urgency"
+              },
+              "colors": {
+                "critical": "#ef4444",
+                "urgent": "#f59e0b",
+                "normal": "#3b82f6"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Customs & Compliance",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Customs Clearance Time",
+              "type": "barchart",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+              "query": "grey_logistics_customs_clearance_hours",
+              "xAxis": { "label": "Country" },
+              "yAxis": { "label": "Hours" },
+              "orientation": "horizontal",
+              "sortBy": "value"
+            },
+            {
+              "title": "Trade Compliance Status",
+              "type": "piechart",
+              "gridPos": { "x": 12, "y": 0, "w": 6, "h": 8 },
+              "query": "sum by (status) (grey_logistics_compliance_checks)",
+              "colors": {
+                "passed": "#22c55e",
+                "pending_review": "#f59e0b",
+                "failed": "#ef4444",
+                "exempted": "#6b7280"
+              }
+            },
+            {
+              "title": "Held Shipments",
+              "type": "stat",
+              "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+              "query": "sum(grey_logistics_shipments_held)",
+              "color": "#ef4444",
+              "subtitle": "Customs/regulatory hold"
+            },
+            {
+              "title": "Avg Hold Duration",
+              "type": "stat",
+              "gridPos": { "x": 18, "y": 4, "w": 6, "h": 4 },
+              "query": "avg(grey_logistics_hold_duration_hours)",
+              "unit": "hours"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Disruption & Risk",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Active Disruptions",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 0, "w": 14, "h": 10 },
+              "query": "grey_logistics_active_disruptions",
+              "columns": [
+                { "field": "type", "label": "Type", "width": "15%" },
+                { "field": "location", "label": "Location", "width": "20%" },
+                { "field": "severity", "label": "Severity", "width": "12%" },
+                { "field": "affected_shipments", "label": "Affected", "width": "12%" },
+                { "field": "estimated_delay_hours", "label": "Delay", "width": "12%" },
+                { "field": "started", "label": "Started", "width": "14%", "format": "relative" },
+                { "field": "status", "label": "Status", "width": "15%" }
+              ],
+              "rowStyles": {
+                "severity": {
+                  "critical": "bg-red-100",
+                  "high": "bg-orange-100",
+                  "medium": "bg-yellow-100",
+                  "low": "bg-green-100"
+                }
+              }
+            },
+            {
+              "title": "Disruption Types",
+              "type": "piechart",
+              "gridPos": { "x": 14, "y": 0, "w": 5, "h": 5 },
+              "query": "sum by (type) (grey_logistics_disruption_impact)",
+              "colors": {
+                "weather": "#3b82f6",
+                "congestion": "#f59e0b",
+                "labor": "#ef4444",
+                "geopolitical": "#a855f7",
+                "infrastructure": "#6b7280"
+              }
+            },
+            {
+              "title": "Risk Score by Lane",
+              "type": "heatmap",
+              "gridPos": { "x": 14, "y": 5, "w": 10, "h": 5 },
+              "query": "grey_logistics_lane_risk_score",
+              "xAxis": "origin",
+              "yAxis": "destination",
+              "colorScale": {
+                "colors": ["#22c55e", "#fbbf24", "#ef4444"],
+                "min": 0,
+                "max": 100
+              }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Weather Impact Forecast",
+              "type": "worldmap",
+              "gridPos": { "x": 0, "y": 10, "w": 24, "h": 10 },
+              "query": "grey_logistics_weather_impact",
+              "overlays": {
+                "storms": {
+                  "query": "grey_logistics_storm_tracks",
+                  "color": "#ef4444"
+                },
+                "affected_routes": {
+                  "query": "grey_logistics_routes_at_risk",
+                  "color": "#f59e0b"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Consensus & Coordination",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Supply Chain Consensus Status",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+              "query": "grey_consensus_logistics_status",
+              "columns": [
+                { "field": "region", "label": "Region", "width": "20%" },
+                { "field": "participants", "label": "Participants", "width": "15%" },
+                { "field": "pending_confirmations", "label": "Pending", "width": "15%" },
+                { "field": "avg_confirmation_ms", "label": "Confirm Time", "width": "15%" },
+                { "field": "last_sync", "label": "Last Sync", "width": "20%", "format": "relative" },
+                { "field": "status", "label": "Status", "width": "15%" }
+              ]
+            },
+            {
+              "title": "Document Exchange Latency",
+              "type": "timeseries",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "histogram_quantile(0.50, grey_logistics_doc_exchange_latency_ms)",
+                  "legendFormat": "p50"
+                },
+                {
+                  "expr": "histogram_quantile(0.95, grey_logistics_doc_exchange_latency_ms)",
+                  "legendFormat": "p95"
+                }
+              ],
+              "yAxis": { "label": "Latency (ms)" },
+              "thresholdLines": [
+                { "value": 500, "color": "#22c55e", "label": "Target" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "alerts": [
+    {
+      "name": "port_congestion_critical",
+      "description": "Port congestion reaching critical levels",
+      "query": "grey_logistics_port_congestion > 0.9",
+      "severity": "critical",
+      "annotations": {
+        "summary": "{{$labels.port}} congestion at {{$value | percent}}"
+      }
+    },
+    {
+      "name": "vessel_delay_significant",
+      "description": "Significant vessel delays detected",
+      "query": "grey_logistics_vessel_delay_hours > 48",
+      "severity": "warning",
+      "annotations": {
+        "summary": "{{$labels.vessel}} delayed {{$value}} hours"
+      }
+    },
+    {
+      "name": "stockout_imminent",
+      "description": "Stock-out imminent for critical items",
+      "query": "grey_logistics_days_of_supply < 7 and grey_logistics_item_criticality == 'high'",
+      "severity": "critical",
+      "annotations": {
+        "summary": "{{$labels.sku}} has only {{$value}} days of supply"
+      }
+    },
+    {
+      "name": "customs_hold_extended",
+      "description": "Shipment held at customs too long",
+      "query": "grey_logistics_hold_duration_hours > 72",
+      "severity": "warning",
+      "annotations": {
+        "summary": "{{$labels.shipment_id}} held for {{$value}} hours"
+      }
+    },
+    {
+      "name": "disruption_major",
+      "description": "Major supply chain disruption detected",
+      "query": "grey_logistics_disruption_severity == 'critical'",
+      "severity": "critical",
+      "annotations": {
+        "summary": "{{$labels.type}} disruption at {{$labels.location}}"
+      }
+    },
+    {
+      "name": "on_time_rate_low",
+      "description": "On-time delivery rate below threshold",
+      "query": "grey_logistics_on_time_rate < 0.90",
+      "severity": "warning",
+      "annotations": {
+        "summary": "On-time delivery rate at {{$value | percent}}"
+      }
+    }
+  ]
+}

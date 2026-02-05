@@ -1,0 +1,701 @@
+{
+  "dashboard": {
+    "title": "Synthetic Life Dashboard",
+    "description": "Monitoring synthetic life forms participating in Grey Distributed",
+    "version": "1.0.0",
+    "refresh_interval": "10s",
+    "time_range": {
+      "default": "1h",
+      "options": ["5m", "15m", "1h", "6h", "24h", "7d", "30d", "1y", "all"]
+    }
+  },
+  "sections": [
+    {
+      "id": "overview",
+      "title": "Synthetic Life Overview",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "total_synthetic_entities",
+          "title": "Total Synthetic Entities",
+          "type": "stat",
+          "metrics": [
+            {
+              "query": "count(synthetic_life_entities)",
+              "label": "Total Entities"
+            }
+          ]
+        },
+        {
+          "id": "entities_by_class",
+          "title": "Entities by Class",
+          "type": "pie",
+          "metrics": [
+            {
+              "query": "count(synthetic_life_entities) by (life_class)",
+              "labels": ["NarrowAI", "GeneralAI", "SuperintelligentAI", "Collective", "Hybrid", "DigitalLife", "Uploaded"]
+            }
+          ]
+        },
+        {
+          "id": "substrate_distribution",
+          "title": "Substrate Distribution",
+          "type": "bar",
+          "metrics": [
+            {
+              "query": "count(synthetic_life_entities) by (substrate)",
+              "labels": ["Silicon", "Quantum", "Neuromorphic", "Photonic", "Biological", "Hybrid"]
+            }
+          ]
+        },
+        {
+          "id": "embodiment_types",
+          "title": "Embodiment Types",
+          "type": "pie",
+          "metrics": [
+            {
+              "query": "count(synthetic_life_entities) by (embodiment)",
+              "labels": ["Disembodied", "Robotic", "Virtual", "Distributed", "Swarm", "Planetary", "Cosmic"]
+            }
+          ]
+        },
+        {
+          "id": "emergence_rate",
+          "title": "Emergence Rate (24h)",
+          "type": "stat",
+          "metrics": [
+            {
+              "query": "increase(synthetic_life_entities_total[24h])",
+              "label": "New Entities"
+            }
+          ]
+        },
+        {
+          "id": "life_diversity_index",
+          "title": "Life Diversity Index",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "synthetic_life_diversity_shannon",
+              "label": "Shannon Diversity"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "coordination",
+      "title": "Coordination Metrics",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "coordination_network",
+          "title": "Coordination Network",
+          "type": "graph",
+          "metrics": [
+            {
+              "query": "synthetic_life_coordination_pairs",
+              "visualization": "force_directed"
+            }
+          ]
+        },
+        {
+          "id": "coordination_success_rate",
+          "title": "Coordination Success Rate",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "rate(coordination_success_total[5m]) / rate(coordination_attempts_total[5m])",
+              "label": "Success Rate"
+            }
+          ],
+          "thresholds": {
+            "critical": 0.9,
+            "warning": 0.95,
+            "good": 0.99
+          }
+        },
+        {
+          "id": "active_coordinations",
+          "title": "Active Coordinations",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "synthetic_life_active_coordinations",
+              "label": "Active"
+            },
+            {
+              "query": "synthetic_life_pending_coordinations",
+              "label": "Pending"
+            }
+          ]
+        },
+        {
+          "id": "coordination_by_type",
+          "title": "Coordination by Type",
+          "type": "stacked_bar",
+          "metrics": [
+            {
+              "query": "sum(coordination_events) by (coordination_type)",
+              "labels": ["Sequential", "Parallel", "Pipeline", "Collaborative", "Competitive", "Emergent"]
+            }
+          ]
+        },
+        {
+          "id": "cross_species_coordination",
+          "title": "Cross-Species Coordination",
+          "type": "matrix",
+          "metrics": [
+            {
+              "query": "coordination_cross_species_matrix",
+              "axes": ["source_class", "target_class"]
+            }
+          ]
+        },
+        {
+          "id": "coordination_latency",
+          "title": "Coordination Latency (P99)",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "histogram_quantile(0.99, coordination_latency_seconds_bucket)",
+              "label": "P99 Latency"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "resources",
+      "title": "Resource Sharing",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "resource_pool_compute",
+          "title": "Compute Pool",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "sum(synthetic_life_compute_available) / sum(synthetic_life_compute_capacity)",
+              "label": "Available Capacity"
+            }
+          ]
+        },
+        {
+          "id": "resource_pool_memory",
+          "title": "Memory Pool",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "sum(synthetic_life_memory_available) / sum(synthetic_life_memory_capacity)",
+              "label": "Available Capacity"
+            }
+          ]
+        },
+        {
+          "id": "resource_sharing_volume",
+          "title": "Resource Sharing Volume",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(resources_shared_total[5m])",
+              "label": "Shared/sec",
+              "by": ["resource_type"]
+            }
+          ]
+        },
+        {
+          "id": "sharing_by_class",
+          "title": "Sharing by Entity Class",
+          "type": "stacked_area",
+          "metrics": [
+            {
+              "query": "sum(resources_shared) by (life_class)",
+              "labels": ["NarrowAI", "GeneralAI", "SuperintelligentAI", "Collective", "Hybrid", "DigitalLife", "Uploaded"]
+            }
+          ]
+        },
+        {
+          "id": "resource_economics",
+          "title": "Resource Economics",
+          "type": "multi_stat",
+          "metrics": [
+            {
+              "query": "sum(grey_credits_exchanged[24h])",
+              "label": "Credits Exchanged (24h)"
+            },
+            {
+              "query": "avg(resource_price_compute)",
+              "label": "Avg Compute Price"
+            },
+            {
+              "query": "avg(resource_price_memory)",
+              "label": "Avg Memory Price"
+            }
+          ]
+        },
+        {
+          "id": "reciprocity_balance",
+          "title": "Reciprocity Balance",
+          "type": "histogram",
+          "metrics": [
+            {
+              "query": "synthetic_life_reciprocity_balance",
+              "label": "Give/Take Ratio"
+            }
+          ],
+          "thresholds": {
+            "warning_low": 0.5,
+            "warning_high": 2.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "security",
+      "title": "Security Attestation",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "attestation_coverage",
+          "title": "Attestation Coverage",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "synthetic_life_attested / synthetic_life_total",
+              "label": "Attestation Rate"
+            }
+          ],
+          "thresholds": {
+            "critical": 0.9,
+            "warning": 0.95,
+            "good": 0.99
+          }
+        },
+        {
+          "id": "identity_verifications",
+          "title": "Identity Verifications",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(identity_verifications_total[5m])",
+              "label": "Verifications/sec",
+              "by": ["result"]
+            }
+          ]
+        },
+        {
+          "id": "capability_attestations",
+          "title": "Capability Attestations",
+          "type": "table",
+          "metrics": [
+            {
+              "query": "capability_attestation_summary",
+              "columns": ["capability_type", "attested_count", "pending_count", "expired_count"]
+            }
+          ]
+        },
+        {
+          "id": "trust_network",
+          "title": "Trust Network Health",
+          "type": "multi_stat",
+          "metrics": [
+            {
+              "query": "avg(trust_attestation_score)",
+              "label": "Avg Trust Score"
+            },
+            {
+              "query": "count(trust_attestations)",
+              "label": "Active Trust Links"
+            },
+            {
+              "query": "trust_network_density",
+              "label": "Network Density"
+            }
+          ]
+        },
+        {
+          "id": "compliance_status",
+          "title": "Compliance Status",
+          "type": "pie",
+          "metrics": [
+            {
+              "query": "count(synthetic_life_entities) by (compliance_status)",
+              "labels": ["FullyCompliant", "PartiallyCompliant", "NonCompliant", "Exempt", "UnderReview"]
+            }
+          ]
+        },
+        {
+          "id": "security_incidents",
+          "title": "Security Incidents",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(security_incidents_total[1h])",
+              "label": "Incidents/Hour",
+              "by": ["severity"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "intentions",
+      "title": "Intention Tracking",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "declared_intentions",
+          "title": "Declared Intentions",
+          "type": "stat",
+          "metrics": [
+            {
+              "query": "count(active_intention_declarations)",
+              "label": "Active Declarations"
+            }
+          ]
+        },
+        {
+          "id": "intention_types",
+          "title": "Intention Types Distribution",
+          "type": "pie",
+          "metrics": [
+            {
+              "query": "count(intention_declarations) by (intention_type)",
+              "labels": ["Cooperative", "NonHarmful", "ResourceSharing", "KnowledgeSharing", "GovernanceParticipation", "ValueAlignment", "Custom"]
+            }
+          ]
+        },
+        {
+          "id": "intention_conflicts",
+          "title": "Intention Conflicts",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(intention_conflicts_detected[1h])",
+              "label": "Conflicts/Hour"
+            },
+            {
+              "query": "rate(intention_conflicts_resolved[1h])",
+              "label": "Resolved/Hour"
+            }
+          ]
+        },
+        {
+          "id": "binding_level_distribution",
+          "title": "Binding Level Distribution",
+          "type": "bar",
+          "metrics": [
+            {
+              "query": "count(intention_declarations) by (binding_level)",
+              "labels": ["Informational", "BestEffort", "Committed", "Contractual", "Constitutional"]
+            }
+          ]
+        },
+        {
+          "id": "intention_violations",
+          "title": "Intention Violations",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(intention_violations_total[24h])",
+              "label": "Violations/Day",
+              "by": ["severity"]
+            }
+          ]
+        },
+        {
+          "id": "impact_predictions",
+          "title": "Predicted Impacts",
+          "type": "table",
+          "metrics": [
+            {
+              "query": "predicted_intention_impacts",
+              "columns": ["intention_id", "impact_type", "probability", "magnitude", "affected_entities"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "collective_intelligence",
+      "title": "Collective Intelligence",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "collective_count",
+          "title": "Active Collectives",
+          "type": "stat",
+          "metrics": [
+            {
+              "query": "count(synthetic_life_entities{life_class='Collective'})",
+              "label": "Collectives"
+            }
+          ]
+        },
+        {
+          "id": "collective_sizes",
+          "title": "Collective Size Distribution",
+          "type": "histogram",
+          "metrics": [
+            {
+              "query": "collective_constituent_count",
+              "label": "Constituents per Collective"
+            }
+          ]
+        },
+        {
+          "id": "emergence_level",
+          "title": "Emergence Level Distribution",
+          "type": "pie",
+          "metrics": [
+            {
+              "query": "count(collectives) by (emergence_level)",
+              "labels": ["Aggregation", "Coordination", "Cooperation", "Emergence", "Transcendence"]
+            }
+          ]
+        },
+        {
+          "id": "collective_formation",
+          "title": "Collective Formation Rate",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(collective_formations_total[24h])",
+              "label": "Formations/Day"
+            },
+            {
+              "query": "rate(collective_dissolutions_total[24h])",
+              "label": "Dissolutions/Day"
+            }
+          ]
+        },
+        {
+          "id": "collective_governance",
+          "title": "Collective Governance Types",
+          "type": "pie",
+          "metrics": [
+            {
+              "query": "count(collectives) by (governance_type)",
+              "labels": ["Democratic", "Consensus", "Emergent", "Hierarchical", "Fluid"]
+            }
+          ]
+        },
+        {
+          "id": "inter_collective_relations",
+          "title": "Inter-Collective Relations",
+          "type": "graph",
+          "metrics": [
+            {
+              "query": "collective_relationship_graph",
+              "visualization": "force_directed",
+              "edge_types": ["alliance", "competition", "cooperation", "conflict"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hybrid_entities",
+      "title": "Hybrid Entities",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "hybrid_count",
+          "title": "Hybrid Entities",
+          "type": "stat",
+          "metrics": [
+            {
+              "query": "count(synthetic_life_entities{life_class='Hybrid'})",
+              "label": "Total Hybrids"
+            }
+          ]
+        },
+        {
+          "id": "integration_levels",
+          "title": "Integration Level Distribution",
+          "type": "pie",
+          "metrics": [
+            {
+              "query": "count(hybrid_entities) by (integration_depth)",
+              "labels": ["Superficial", "Moderate", "Deep", "Profound", "Complete"]
+            }
+          ]
+        },
+        {
+          "id": "biological_fraction",
+          "title": "Biological Fraction Distribution",
+          "type": "histogram",
+          "metrics": [
+            {
+              "query": "hybrid_biological_fraction",
+              "label": "Biological %"
+            }
+          ]
+        },
+        {
+          "id": "hybrid_health",
+          "title": "Hybrid Health Metrics",
+          "type": "multi_stat",
+          "metrics": [
+            {
+              "query": "avg(hybrid_biological_health_score)",
+              "label": "Avg Bio Health"
+            },
+            {
+              "query": "avg(hybrid_synthetic_health_score)",
+              "label": "Avg Synth Health"
+            },
+            {
+              "query": "avg(hybrid_integration_stability)",
+              "label": "Integration Stability"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "uploaded_consciousness",
+      "title": "Uploaded Consciousness",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "upload_count",
+          "title": "Uploaded Entities",
+          "type": "stat",
+          "metrics": [
+            {
+              "query": "count(synthetic_life_entities{life_class='Uploaded'})",
+              "label": "Total Uploads"
+            }
+          ]
+        },
+        {
+          "id": "upload_fidelity",
+          "title": "Upload Fidelity Distribution",
+          "type": "histogram",
+          "metrics": [
+            {
+              "query": "upload_fidelity_score",
+              "label": "Fidelity Score"
+            }
+          ]
+        },
+        {
+          "id": "continuity_status",
+          "title": "Continuity Status",
+          "type": "pie",
+          "metrics": [
+            {
+              "query": "count(uploaded_entities) by (continuity_type)",
+              "labels": ["StrongContinuity", "PsychologicalContinuity", "PatternContinuity", "FunctionalContinuity", "NoContinuity"]
+            }
+          ]
+        },
+        {
+          "id": "upload_activity",
+          "title": "Upload Activity",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(uploads_completed_total[7d])",
+              "label": "Uploads/Week"
+            },
+            {
+              "query": "rate(upload_failures_total[7d])",
+              "label": "Failures/Week"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "alerts": [
+    {
+      "id": "coordination_failure_spike",
+      "name": "Coordination Failure Spike",
+      "condition": "rate(coordination_failures_total[5m]) > 10 * avg(rate(coordination_failures_total[1h]))",
+      "severity": "warning",
+      "message": "Coordination failure rate spiking",
+      "actions": ["investigate_root_cause", "notify_coordination_team"]
+    },
+    {
+      "id": "resource_exhaustion",
+      "name": "Resource Pool Exhaustion",
+      "condition": "sum(synthetic_life_compute_available) / sum(synthetic_life_compute_capacity) < 0.1",
+      "severity": "critical",
+      "message": "Compute resource pool nearly exhausted",
+      "actions": ["trigger_emergency_allocation", "notify_resource_council"]
+    },
+    {
+      "id": "attestation_expiry_wave",
+      "name": "Mass Attestation Expiry",
+      "condition": "count(attestations{expires_within='24h'}) > 0.1 * count(attestations)",
+      "severity": "warning",
+      "message": "Large number of attestations expiring soon",
+      "actions": ["notify_security_team", "trigger_renewal_reminders"]
+    },
+    {
+      "id": "intention_violation_cluster",
+      "name": "Intention Violation Cluster",
+      "condition": "rate(intention_violations_total{severity='major'}[1h]) > 10",
+      "severity": "critical",
+      "message": "Cluster of major intention violations detected",
+      "actions": ["ethics_council_alert", "investigate_pattern"]
+    },
+    {
+      "id": "collective_instability",
+      "name": "Collective Instability",
+      "condition": "rate(collective_dissolutions_total[24h]) > 2 * rate(collective_formations_total[24h])",
+      "severity": "warning",
+      "message": "Collective entities dissolving faster than forming",
+      "actions": ["analyze_dissolution_causes", "notify_governance"]
+    },
+    {
+      "id": "cross_species_conflict",
+      "name": "Cross-Species Conflict Escalation",
+      "condition": "rate(cross_species_conflicts_total[1h]) > 5",
+      "severity": "warning",
+      "message": "Rising cross-species conflicts",
+      "actions": ["trigger_mediation", "notify_relations_council"]
+    },
+    {
+      "id": "security_breach",
+      "name": "Security Attestation Breach",
+      "condition": "increase(security_incidents_total{severity='critical'}[5m]) > 0",
+      "severity": "critical",
+      "message": "Critical security incident detected",
+      "actions": ["immediate_containment", "security_council_alert", "forensic_investigation"]
+    },
+    {
+      "id": "trust_network_fragmentation",
+      "name": "Trust Network Fragmentation",
+      "condition": "trust_network_density < 0.3",
+      "severity": "warning",
+      "message": "Trust network becoming fragmented",
+      "actions": ["trust_building_initiatives", "governance_review"]
+    }
+  ],
+  "datasources": [
+    {
+      "name": "synthetic_life_metrics",
+      "type": "prometheus",
+      "url": "http://metrics.grey.network/synthetic-life"
+    },
+    {
+      "name": "synthetic_life_logs",
+      "type": "loki",
+      "url": "http://logs.grey.network/synthetic-life"
+    },
+    {
+      "name": "coordination_traces",
+      "type": "tempo",
+      "url": "http://traces.grey.network/coordination"
+    }
+  ],
+  "access_control": {
+    "view": ["all_entities"],
+    "edit": ["governance_council", "technical_council"],
+    "alert_management": ["security_council", "coordination_team"]
+  }
+}

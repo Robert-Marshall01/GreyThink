@@ -1,0 +1,540 @@
+{
+  "title": "Grey Distributed — Global Internet Backbone Dashboard",
+  "description": "Real-time visualization of worldwide internet backbone routing and resilience",
+  "version": "1.0.0",
+  "refreshInterval": "5s",
+  "timeRange": {
+    "default": "1h",
+    "options": ["5m", "15m", "1h", "6h", "24h", "7d"]
+  },
+  "variables": [
+    {
+      "name": "region",
+      "label": "Region",
+      "type": "multiselect",
+      "options": ["americas", "europe", "asia_pacific", "middle_east_africa"],
+      "default": "all"
+    },
+    {
+      "name": "tier",
+      "label": "Network Tier",
+      "type": "select",
+      "options": ["all", "tier1", "tier2", "tier3", "ixp"],
+      "default": "all"
+    }
+  ],
+  "sections": [
+    {
+      "title": "Global Overview",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Global Traffic",
+              "type": "stat",
+              "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+              "query": "sum(grey_internet_traffic_tbps)",
+              "unit": "Tbps",
+              "sparkline": true,
+              "color": "#3b82f6"
+            },
+            {
+              "title": "Active Routes",
+              "type": "stat",
+              "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+              "query": "sum(grey_internet_bgp_routes_total)",
+              "format": "short",
+              "sparkline": true
+            },
+            {
+              "title": "Global Latency (avg)",
+              "type": "stat",
+              "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+              "query": "avg(grey_internet_latency_ms)",
+              "unit": "ms",
+              "thresholds": {
+                "ok": [0, 50],
+                "warning": [50, 100],
+                "critical": [100, null]
+              }
+            },
+            {
+              "title": "Packet Loss",
+              "type": "stat",
+              "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+              "query": "avg(grey_internet_packet_loss_percent)",
+              "unit": "%",
+              "thresholds": {
+                "ok": [0, 0.1],
+                "warning": [0.1, 1],
+                "critical": [1, null]
+              }
+            },
+            {
+              "title": "BGP Events (1h)",
+              "type": "stat",
+              "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+              "query": "sum(increase(grey_internet_bgp_events_total[1h]))",
+              "sparkline": true
+            },
+            {
+              "title": "Network Health",
+              "type": "gauge",
+              "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+              "query": "grey_internet_health_score",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "critical": [0, 50],
+                "warning": [50, 80],
+                "ok": [80, 100]
+              }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Global Traffic Map",
+              "type": "worldmap",
+              "gridPos": { "x": 0, "y": 4, "w": 16, "h": 12 },
+              "query": "grey_internet_traffic_by_region_tbps",
+              "colorField": "traffic_tbps",
+              "colorScale": {
+                "min": 0,
+                "max": 100,
+                "colors": ["#dbeafe", "#3b82f6", "#1e3a8a"]
+              },
+              "overlays": {
+                "cables": {
+                  "query": "grey_internet_submarine_cables",
+                  "color": "#22c55e"
+                },
+                "ixps": {
+                  "query": "grey_internet_ixp_locations",
+                  "icon": "exchange"
+                }
+              }
+            },
+            {
+              "title": "Traffic by Type",
+              "type": "piechart",
+              "gridPos": { "x": 16, "y": 4, "w": 8, "h": 6 },
+              "query": "sum by (traffic_type) (grey_internet_traffic_tbps)",
+              "colors": {
+                "video": "#ef4444",
+                "web": "#3b82f6",
+                "gaming": "#22c55e",
+                "voip": "#f59e0b",
+                "vpn": "#a855f7",
+                "other": "#6b7280"
+              }
+            },
+            {
+              "title": "Top ASes by Traffic",
+              "type": "barchart",
+              "gridPos": { "x": 16, "y": 10, "w": 8, "h": 6 },
+              "query": "topk(10, grey_internet_as_traffic_tbps)",
+              "orientation": "horizontal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "BGP Routing",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "BGP Route Table Size",
+              "type": "timeseries",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "sum(grey_internet_bgp_routes_ipv4)",
+                  "legendFormat": "IPv4 Routes"
+                },
+                {
+                  "expr": "sum(grey_internet_bgp_routes_ipv6)",
+                  "legendFormat": "IPv6 Routes"
+                }
+              ],
+              "yAxis": { "label": "Routes" }
+            },
+            {
+              "title": "Route Flaps",
+              "type": "timeseries",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "rate(grey_internet_bgp_flaps_total[5m]) * 60",
+                  "legendFormat": "{{region}}"
+                }
+              ],
+              "yAxis": { "label": "Flaps/min" },
+              "thresholdLines": [
+                { "value": 100, "color": "#f59e0b", "label": "Warning" }
+              ]
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "BGP Convergence Time",
+              "type": "histogram",
+              "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+              "query": "grey_internet_bgp_convergence_seconds",
+              "buckets": [1, 5, 10, 30, 60, 120, 300],
+              "xAxis": { "label": "Convergence Time (s)" }
+            },
+            {
+              "title": "Route Hijack Detections",
+              "type": "timeline",
+              "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+              "query": "grey_internet_bgp_hijack_detected",
+              "fields": {
+                "time": "detected_at",
+                "title": "description",
+                "type": "severity"
+              },
+              "colors": {
+                "suspected": "#f59e0b",
+                "confirmed": "#ef4444",
+                "mitigated": "#22c55e"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Submarine Cables & IXPs",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Submarine Cable Status",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 0, "w": 14, "h": 10 },
+              "query": "grey_internet_submarine_cable_status",
+              "columns": [
+                { "field": "name", "label": "Cable", "width": "25%" },
+                { "field": "landing_a", "label": "Landing A", "width": "15%" },
+                { "field": "landing_b", "label": "Landing B", "width": "15%" },
+                { "field": "capacity_tbps", "label": "Capacity", "width": "12%" },
+                { "field": "utilization", "label": "Util %", "width": "10%", "format": "percent" },
+                { "field": "latency_ms", "label": "Latency", "width": "10%" },
+                { "field": "status", "label": "Status", "width": "13%" }
+              ],
+              "rowStyles": {
+                "status": {
+                  "operational": "bg-green-100",
+                  "degraded": "bg-yellow-100",
+                  "fault": "bg-red-100"
+                }
+              }
+            },
+            {
+              "title": "Cable Utilization",
+              "type": "timeseries",
+              "gridPos": { "x": 14, "y": 0, "w": 10, "h": 10 },
+              "queries": [
+                {
+                  "expr": "grey_internet_cable_utilization_percent",
+                  "legendFormat": "{{cable_name}}"
+                }
+              ],
+              "yAxis": { "label": "Utilization %", "max": 100 }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "IXP Traffic",
+              "type": "barchart",
+              "gridPos": { "x": 0, "y": 10, "w": 12, "h": 8 },
+              "query": "topk(15, grey_internet_ixp_traffic_tbps)",
+              "xAxis": { "label": "IXP" },
+              "yAxis": { "label": "Traffic (Tbps)" },
+              "orientation": "horizontal"
+            },
+            {
+              "title": "IXP Peering Density",
+              "type": "scatter",
+              "gridPos": { "x": 12, "y": 10, "w": 12, "h": 8 },
+              "query": "grey_internet_ixp_metrics",
+              "xAxis": { "field": "member_count", "label": "Members" },
+              "yAxis": { "field": "traffic_tbps", "label": "Traffic (Tbps)" },
+              "sizeField": "routes_exchanged"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Latency & Performance",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Inter-Region Latency Matrix",
+              "type": "heatmap",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 10 },
+              "query": "grey_internet_inter_region_latency_ms",
+              "xAxis": "source_region",
+              "yAxis": "dest_region",
+              "colorScale": {
+                "colors": ["#22c55e", "#fbbf24", "#ef4444"],
+                "min": 0,
+                "max": 300
+              }
+            },
+            {
+              "title": "CDN Performance",
+              "type": "table",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 10 },
+              "query": "grey_internet_cdn_performance",
+              "columns": [
+                { "field": "provider", "label": "CDN", "width": "20%" },
+                { "field": "edge_pops", "label": "Edge PoPs", "width": "15%" },
+                { "field": "cache_hit_rate", "label": "Cache Hit", "width": "15%", "format": "percent" },
+                { "field": "avg_latency_ms", "label": "Latency", "width": "15%" },
+                { "field": "throughput_tbps", "label": "Throughput", "width": "15%" },
+                { "field": "status", "label": "Status", "width": "20%" }
+              ]
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Jitter Distribution",
+              "type": "timeseries",
+              "gridPos": { "x": 0, "y": 10, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "histogram_quantile(0.50, grey_internet_jitter_ms)",
+                  "legendFormat": "p50"
+                },
+                {
+                  "expr": "histogram_quantile(0.95, grey_internet_jitter_ms)",
+                  "legendFormat": "p95"
+                },
+                {
+                  "expr": "histogram_quantile(0.99, grey_internet_jitter_ms)",
+                  "legendFormat": "p99"
+                }
+              ],
+              "yAxis": { "label": "Jitter (ms)" }
+            },
+            {
+              "title": "DNS Resolution Time",
+              "type": "timeseries",
+              "gridPos": { "x": 12, "y": 10, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "grey_internet_dns_resolution_ms{type='recursive'}",
+                  "legendFormat": "Recursive"
+                },
+                {
+                  "expr": "grey_internet_dns_resolution_ms{type='authoritative'}",
+                  "legendFormat": "Authoritative"
+                }
+              ],
+              "yAxis": { "label": "Resolution Time (ms)" }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Security & DDoS",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "DDoS Attack Volume",
+              "type": "timeseries",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "sum(grey_internet_ddos_volume_gbps)",
+                  "legendFormat": "Total Attack Volume"
+                },
+                {
+                  "expr": "sum(grey_internet_ddos_mitigated_gbps)",
+                  "legendFormat": "Mitigated"
+                }
+              ],
+              "yAxis": { "label": "Volume (Gbps)" }
+            },
+            {
+              "title": "Attack Types",
+              "type": "piechart",
+              "gridPos": { "x": 12, "y": 0, "w": 6, "h": 8 },
+              "query": "sum by (attack_type) (grey_internet_ddos_attacks_active)",
+              "colors": {
+                "volumetric": "#ef4444",
+                "protocol": "#f59e0b",
+                "application": "#a855f7",
+                "amplification": "#3b82f6"
+              }
+            },
+            {
+              "title": "Active Mitigations",
+              "type": "stat",
+              "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+              "query": "sum(grey_internet_ddos_mitigations_active)",
+              "color": "#22c55e"
+            },
+            {
+              "title": "Scrubbing Capacity",
+              "type": "gauge",
+              "gridPos": { "x": 18, "y": 4, "w": 6, "h": 4 },
+              "query": "sum(grey_internet_ddos_volume_gbps) / sum(grey_internet_scrubbing_capacity_gbps) * 100",
+              "unit": "%",
+              "thresholds": {
+                "ok": [0, 50],
+                "warning": [50, 80],
+                "critical": [80, 100]
+              }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "RPKI Validation Status",
+              "type": "piechart",
+              "gridPos": { "x": 0, "y": 8, "w": 8, "h": 8 },
+              "query": "sum by (status) (grey_internet_rpki_routes)",
+              "colors": {
+                "valid": "#22c55e",
+                "invalid": "#ef4444",
+                "unknown": "#6b7280"
+              }
+            },
+            {
+              "title": "Security Events",
+              "type": "timeline",
+              "gridPos": { "x": 8, "y": 8, "w": 16, "h": 8 },
+              "query": "grey_internet_security_events",
+              "fields": {
+                "time": "timestamp",
+                "title": "description",
+                "type": "event_type"
+              },
+              "colors": {
+                "bgp_hijack": "#ef4444",
+                "ddos_attack": "#f59e0b",
+                "route_leak": "#a855f7",
+                "cable_cut": "#3b82f6"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Consensus & Coordination",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Routing Consensus Status",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+              "query": "grey_consensus_internet_status",
+              "columns": [
+                { "field": "region", "label": "Region", "width": "20%" },
+                { "field": "nodes", "label": "Nodes", "width": "12%" },
+                { "field": "routes_agreed", "label": "Routes Agreed", "width": "18%" },
+                { "field": "convergence_ms", "label": "Convergence", "width": "15%" },
+                { "field": "last_update", "label": "Last Update", "width": "20%", "format": "relative" },
+                { "field": "status", "label": "Status", "width": "15%" }
+              ]
+            },
+            {
+              "title": "Route Propagation Delay",
+              "type": "timeseries",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "histogram_quantile(0.50, grey_internet_route_propagation_ms)",
+                  "legendFormat": "p50"
+                },
+                {
+                  "expr": "histogram_quantile(0.99, grey_internet_route_propagation_ms)",
+                  "legendFormat": "p99"
+                }
+              ],
+              "yAxis": { "label": "Propagation Delay (ms)" },
+              "thresholdLines": [
+                { "value": 20, "color": "#22c55e", "label": "Target" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "alerts": [
+    {
+      "name": "cable_fault",
+      "description": "Submarine cable fault detected",
+      "query": "grey_internet_cable_status != 1",
+      "severity": "critical",
+      "annotations": {
+        "summary": "{{$labels.cable_name}} has fault condition"
+      }
+    },
+    {
+      "name": "bgp_hijack",
+      "description": "BGP route hijack detected",
+      "query": "grey_internet_bgp_hijack_detected == 1",
+      "severity": "critical",
+      "annotations": {
+        "summary": "Route hijack: {{$labels.prefix}} by AS{{$labels.hijacking_as}}"
+      }
+    },
+    {
+      "name": "ddos_attack_large",
+      "description": "Large DDoS attack in progress",
+      "query": "sum(grey_internet_ddos_volume_gbps) > 1000",
+      "severity": "critical",
+      "annotations": {
+        "summary": "DDoS attack volume: {{$value}}Gbps"
+      }
+    },
+    {
+      "name": "latency_degradation",
+      "description": "Inter-region latency degraded",
+      "query": "grey_internet_inter_region_latency_ms > grey_internet_baseline_latency_ms * 2",
+      "severity": "warning",
+      "annotations": {
+        "summary": "{{$labels.source}}-{{$labels.dest}} latency {{$value}}ms"
+      }
+    },
+    {
+      "name": "packet_loss_high",
+      "description": "High packet loss detected",
+      "query": "grey_internet_packet_loss_percent > 1",
+      "severity": "critical",
+      "annotations": {
+        "summary": "Packet loss {{$value}}% on {{$labels.path}}"
+      }
+    },
+    {
+      "name": "route_flap_storm",
+      "description": "BGP route flap storm detected",
+      "query": "rate(grey_internet_bgp_flaps_total[5m]) > 500",
+      "severity": "critical",
+      "annotations": {
+        "summary": "Route flap rate: {{$value}}/min in {{$labels.region}}"
+      }
+    }
+  ]
+}

@@ -1,0 +1,487 @@
+# =============================================================================
+# Grey Distributed — Edge Node Kubernetes Manifests
+# =============================================================================
+#
+# Edge deployment for Grey Distributed. Edge nodes run at network edge locations
+# with limited resources, providing low-latency access and offline capability.
+#
+# Deployment Architecture:
+#   ┌─────────────────────────────────────────────────────────────────────────┐
+#   │                          Edge Site (K3s/K8s)                            │
+#   ├─────────────────────────────────────────────────────────────────────────┤
+#   │                                                                          │
+#   │  ┌─────────────────────────────────────────────────────────────────┐    │
+#   │  │ DaemonSet: grey-edge                                            │    │
+#   │  │ • Runs on every edge node                                       │    │
+#   │  │ • Local data processing                                         │    │
+#   │  │ • Federation sync to cloud                                      │    │
+#   │  └─────────────────────────────────────────────────────────────────┘    │
+#   │                                                                          │
+#   │  ┌─────────────────────────────────────────────────────────────────┐    │
+#   │  │ GatewayDaemonSet: grey-edge-gateway                             │    │
+#   │  │ • Load balancing for local clients                              │    │
+#   │  │ • Request routing                                               │    │
+#   │  └─────────────────────────────────────────────────────────────────┘    │
+#   │                                                                          │
+#   └─────────────────────────────────────────────────────────────────────────┘
+#
+# Why DaemonSet instead of Deployment:
+#   - Every node should run Grey edge agent
+#   - Guarantees local pod for node-local traffic
+#   - Simplifies node affinity configuration
+#
+# =============================================================================
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: grey-edge
+  labels:
+    app.kubernetes.io/name: grey-edge
+    app.kubernetes.io/component: edge
+---
+# =============================================================================
+# ConfigMap: Edge-specific configuration
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grey-edge-config
+  namespace: grey-edge
+  labels:
+    app.kubernetes.io/name: grey-edge
+data:
+  # Site configuration (override from environment)
+  site.yaml: |
+    site:
+      id: "${EDGE_SITE_ID}"
+      type: "edge"
+      region: "${EDGE_REGION}"
+      
+    # Edge-optimized settings
+    consensus:
+      # Faster timeouts for local network
+      electionTimeout: 200ms
+      heartbeatInterval: 20ms
+      
+    storage:
+      # Smaller data tier on edge
+      maxLocalSize: 50Gi
+      archiveThreshold: 80%
+      
+    sync:
+      # Aggressive sync to cloud
+      interval: 5s
+      batchSize: 1000
+      
+    offline:
+      enabled: true
+      maxDuration: 24h
+      queueSize: 100000
+      
+  # Cloud endpoints for federation
+  cloud-endpoints.yaml: |
+    cloud:
+      endpoints:
+        - host: "grey-primary.example.com"
+          port: 9191
+        - host: "grey-secondary.example.com"
+          port: 9191
+          
+  # Resource limits for edge (constrained environment)
+  resources.yaml: |
+    resources:
+      # Per-node limits
+      perNode:
+        maxMemory: 1Gi
+        maxCPU: 500m
+        maxDiskIO: 100MBps
+        
+      # Per-tenant limits (multiplied by node count)
+      perTenant:
+        maxMemory: 256Mi
+        maxCPU: 100m
+---
+# =============================================================================
+# Secret: Edge certificates and keys
+# =============================================================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grey-edge-certs
+  namespace: grey-edge
+  labels:
+    app.kubernetes.io/name: grey-edge
+type: kubernetes.io/tls
+data:
+  # Federation TLS certificate (base64 encoded)
+  # Generate: kubectl create secret tls grey-edge-certs --cert=edge.crt --key=edge.key
+  tls.crt: ""  # Placeholder - inject via CI/CD or cert-manager
+  tls.key: ""
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grey-edge-ca
+  namespace: grey-edge
+  labels:
+    app.kubernetes.io/name: grey-edge
+data:
+  # Federation CA certificate for verifying cloud nodes
+  ca.crt: ""  # Placeholder
+---
+# =============================================================================
+# DaemonSet: Grey Edge Agent
+# =============================================================================
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: grey-edge
+  namespace: grey-edge
+  labels:
+    app.kubernetes.io/name: grey-edge
+    app.kubernetes.io/component: edge-agent
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grey-edge
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Update one node at a time for edge stability
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grey-edge
+        app.kubernetes.io/component: edge-agent
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      # High priority for edge workload
+      priorityClassName: system-node-critical
+      
+      serviceAccountName: grey-edge
+      
+      # Tolerate edge-specific taints
+      tolerations:
+        - key: "node.kubernetes.io/edge"
+          operator: "Exists"
+          effect: "NoSchedule"
+        - key: "grey.io/edge"
+          operator: "Exists"
+          effect: "NoSchedule"
+      
+      # Host network for low latency
+      hostNetwork: false
+      
+      # Init container: Wait for cloud connectivity (optional)
+      initContainers:
+        - name: wait-for-cloud
+          image: busybox:1.36
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Checking cloud connectivity..."
+              # Don't fail if cloud unreachable - edge can run offline
+              for i in 1 2 3; do
+                if nc -z grey-primary.example.com 9191 2>/dev/null; then
+                  echo "Cloud reachable"
+                  exit 0
+                fi
+                echo "Waiting for cloud... ($i/3)"
+                sleep 5
+              done
+              echo "Cloud not reachable, starting in offline mode"
+              exit 0
+      
+      containers:
+        - name: grey-edge
+          image: ghcr.io/grey-systems/grey-distributed:latest
+          imagePullPolicy: IfNotPresent
+          
+          args:
+            - "--mode=edge"
+            - "--config=/etc/grey/site.yaml"
+            - "--cloud-config=/etc/grey/cloud-endpoints.yaml"
+          
+          env:
+            - name: EDGE_SITE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: EDGE_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: grey-edge-env
+                  key: region
+                  optional: true
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: grpc
+              containerPort: 9090
+              protocol: TCP
+            - name: raft
+              containerPort: 7070
+              protocol: TCP
+            - name: federation
+              containerPort: 9191
+              protocol: TCP
+          
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          
+          volumeMounts:
+            - name: config
+              mountPath: /etc/grey
+              readOnly: true
+            - name: certs
+              mountPath: /etc/grey/certs
+              readOnly: true
+            - name: ca
+              mountPath: /etc/grey/ca
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/grey
+            - name: offline-queue
+              mountPath: /var/lib/grey/queue
+          
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+      
+      volumes:
+        - name: config
+          configMap:
+            name: grey-edge-config
+        - name: certs
+          secret:
+            secretName: grey-edge-certs
+        - name: ca
+          secret:
+            secretName: grey-edge-ca
+        - name: data
+          hostPath:
+            path: /var/lib/grey
+            type: DirectoryOrCreate
+        - name: offline-queue
+          emptyDir:
+            sizeLimit: 10Gi
+---
+# =============================================================================
+# Service: Edge internal service
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: grey-edge
+  namespace: grey-edge
+  labels:
+    app.kubernetes.io/name: grey-edge
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: grey-edge
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+    - name: grpc
+      port: 9090
+      targetPort: grpc
+    - name: federation
+      port: 9191
+      targetPort: federation
+---
+# =============================================================================
+# Service: Edge NodePort for local client access
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: grey-edge-local
+  namespace: grey-edge
+  labels:
+    app.kubernetes.io/name: grey-edge
+  annotations:
+    service.kubernetes.io/topology-mode: "Auto"
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: grey-edge
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      nodePort: 30080
+    - name: grpc
+      port: 9090
+      targetPort: grpc
+      nodePort: 30090
+---
+# =============================================================================
+# ServiceAccount
+# =============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grey-edge
+  namespace: grey-edge
+  labels:
+    app.kubernetes.io/name: grey-edge
+---
+# =============================================================================
+# RBAC: Role for edge agent
+# =============================================================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: grey-edge
+  namespace: grey-edge
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+    resourceNames: ["grey-edge-certs", "grey-edge-ca"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: grey-edge
+  namespace: grey-edge
+subjects:
+  - kind: ServiceAccount
+    name: grey-edge
+    namespace: grey-edge
+roleRef:
+  kind: Role
+  name: grey-edge
+  apiGroup: rbac.authorization.k8s.io
+---
+# =============================================================================
+# NetworkPolicy: Edge isolation
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grey-edge-policy
+  namespace: grey-edge
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: grey-edge
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from local pods
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: grey-edge
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 9090
+    # Allow from any source on NodePort
+    - ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 9090
+    # Allow internal Raft
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: grey-edge
+      ports:
+        - protocol: TCP
+          port: 7070
+  egress:
+    # Allow to cloud federation endpoints
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 9191
+    # Allow internal cluster DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow internal communication
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: grey-edge
+---
+# =============================================================================
+# PodDisruptionBudget
+# =============================================================================
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: grey-edge
+  namespace: grey-edge
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grey-edge

@@ -1,0 +1,771 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "grey-adoption-opensource",
+    "title": "Grey Distributed — Open Source Adoption Dashboard",
+    "description": "Monitors community cluster health, federation network, contribution metrics, and ecosystem growth",
+    "tags": ["grey", "adoption", "open-source", "community", "federation"],
+    "timezone": "browser",
+    "schemaVersion": 39,
+    "version": 1,
+    "refresh": "1m",
+    "time": {
+      "from": "now-7d",
+      "to": "now"
+    },
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "panels": [
+      {
+        "id": 1,
+        "type": "stat",
+        "title": "Federated Clusters",
+        "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "blue", "value": null }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "targets": [
+          {
+            "expr": "count(grey_community_cluster_active == 1)",
+            "legendFormat": "Clusters",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "type": "stat",
+        "title": "Total Nodes",
+        "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "targets": [
+          {
+            "expr": "sum(grey_community_node_count)",
+            "legendFormat": "Nodes",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "type": "stat",
+        "title": "Available Compute",
+        "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "purple", "value": null }
+              ]
+            },
+            "unit": "short",
+            "displayName": "vCPUs"
+          }
+        },
+        "targets": [
+          {
+            "expr": "sum(grey_community_available_vcpu)",
+            "legendFormat": "vCPUs",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "type": "stat",
+        "title": "Available Memory",
+        "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "orange", "value": null }
+              ]
+            },
+            "unit": "bytes"
+          }
+        },
+        "targets": [
+          {
+            "expr": "sum(grey_community_available_memory_bytes)",
+            "legendFormat": "Memory",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "type": "stat",
+        "title": "Weekly Active Users",
+        "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "blue", "value": null }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_community_weekly_active_users",
+            "legendFormat": "Users",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "type": "stat",
+        "title": "Tasks Processed (24h)",
+        "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "targets": [
+          {
+            "expr": "increase(grey_community_tasks_completed_total[24h])",
+            "legendFormat": "Tasks",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "type": "row",
+        "title": "Federation Network",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 4 },
+        "collapsed": false
+      },
+      {
+        "id": 8,
+        "type": "geomap",
+        "title": "Global Cluster Distribution",
+        "gridPos": { "h": 12, "w": 12, "x": 0, "y": 5 },
+        "options": {
+          "view": {
+            "id": "zero",
+            "lat": 0,
+            "lon": 0,
+            "zoom": 1
+          },
+          "basemap": {
+            "type": "default",
+            "name": "Layer 0"
+          },
+          "layers": [
+            {
+              "type": "markers",
+              "config": {
+                "style": {
+                  "size": {
+                    "field": "node_count",
+                    "min": 5,
+                    "max": 30
+                  },
+                  "color": {
+                    "field": "health_score",
+                    "min": 0,
+                    "max": 100
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "targets": [
+          {
+            "expr": "grey_community_cluster_location",
+            "format": "table",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "type": "table",
+        "title": "Cluster Directory",
+        "gridPos": { "h": 12, "w": 12, "x": 12, "y": 5 },
+        "options": {
+          "showHeader": true,
+          "footer": { "show": true, "reducer": ["count"] }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": { "align": "auto" }
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Status" },
+              "properties": [
+                {
+                  "id": "custom.displayMode",
+                  "value": "color-background"
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    { "type": "value", "options": { "Healthy": { "color": "green" } } },
+                    { "type": "value", "options": { "Degraded": { "color": "yellow" } } },
+                    { "type": "value", "options": { "Offline": { "color": "red" } } }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "Capacity" },
+              "properties": [
+                {
+                  "id": "custom.displayMode",
+                  "value": "gradient-gauge"
+                },
+                {
+                  "id": "max",
+                  "value": 100
+                }
+              ]
+            }
+          ]
+        },
+        "targets": [
+          {
+            "expr": "grey_community_cluster_info",
+            "format": "table",
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "renameByName": {
+                "cluster_id": "Cluster ID",
+                "operator": "Operator",
+                "region": "Region",
+                "node_count": "Nodes",
+                "vcpu_total": "vCPUs",
+                "health_status": "Status",
+                "capacity_used_percent": "Capacity",
+                "uptime_days": "Uptime"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "type": "row",
+        "title": "Resource Sharing",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+        "collapsed": false
+      },
+      {
+        "id": 11,
+        "type": "timeseries",
+        "title": "Federation Resource Flow",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 18 },
+        "options": {
+          "legend": { "displayMode": "table", "placement": "right" }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "lineWidth": 2,
+              "fillOpacity": 20
+            },
+            "unit": "short"
+          }
+        },
+        "targets": [
+          {
+            "expr": "rate(grey_community_federation_tokens_transferred[5m]) * 60",
+            "legendFormat": "{{direction}} - {{cluster}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "type": "bargauge",
+        "title": "Top Resource Providers",
+        "gridPos": { "h": 8, "w": 6, "x": 12, "y": 18 },
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient",
+          "reduceOptions": { "calcs": ["lastNotNull"] }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "unit": "short"
+          }
+        },
+        "targets": [
+          {
+            "expr": "topk(10, grey_community_resources_provided_tokens)",
+            "legendFormat": "{{cluster_id}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 13,
+        "type": "bargauge",
+        "title": "Top Resource Consumers",
+        "gridPos": { "h": 8, "w": 6, "x": 18, "y": 18 },
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient",
+          "reduceOptions": { "calcs": ["lastNotNull"] }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "unit": "short"
+          }
+        },
+        "targets": [
+          {
+            "expr": "topk(10, grey_community_resources_consumed_tokens)",
+            "legendFormat": "{{cluster_id}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 14,
+        "type": "row",
+        "title": "Community Contributions",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 26 },
+        "collapsed": false
+      },
+      {
+        "id": 15,
+        "type": "timeseries",
+        "title": "GitHub Activity",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 27 },
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "lineWidth": 2,
+              "fillOpacity": 10
+            },
+            "unit": "short"
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_community_github_commits_daily",
+            "legendFormat": "Commits",
+            "refId": "A"
+          },
+          {
+            "expr": "grey_community_github_prs_open",
+            "legendFormat": "Open PRs",
+            "refId": "B"
+          },
+          {
+            "expr": "grey_community_github_issues_open",
+            "legendFormat": "Open Issues",
+            "refId": "C"
+          }
+        ]
+      },
+      {
+        "id": 16,
+        "type": "stat",
+        "title": "Contributors (30d)",
+        "gridPos": { "h": 4, "w": 3, "x": 12, "y": 27 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "blue", "value": null }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_community_contributors_30d",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 17,
+        "type": "stat",
+        "title": "PRs Merged (30d)",
+        "gridPos": { "h": 4, "w": 3, "x": 15, "y": 27 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_community_prs_merged_30d",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 18,
+        "type": "stat",
+        "title": "GitHub Stars",
+        "gridPos": { "h": 4, "w": 3, "x": 18, "y": 27 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "yellow", "value": null }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_community_github_stars",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 19,
+        "type": "stat",
+        "title": "Discord Members",
+        "gridPos": { "h": 4, "w": 3, "x": 21, "y": 27 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "purple", "value": null }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_community_discord_members",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 20,
+        "type": "table",
+        "title": "Top Contributors",
+        "gridPos": { "h": 4, "w": 12, "x": 12, "y": 31 },
+        "options": {
+          "showHeader": true
+        },
+        "targets": [
+          {
+            "expr": "topk(10, grey_community_contributor_commits_30d)",
+            "format": "table",
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "renameByName": {
+                "contributor": "Contributor",
+                "commits": "Commits",
+                "additions": "Additions",
+                "deletions": "Deletions"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 21,
+        "type": "row",
+        "title": "Ecosystem Health",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 35 },
+        "collapsed": false
+      },
+      {
+        "id": 22,
+        "type": "timeseries",
+        "title": "Network Health Score",
+        "gridPos": { "h": 8, "w": 8, "x": 0, "y": 36 },
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 70 },
+                { "color": "green", "value": 90 }
+              ]
+            },
+            "custom": {
+              "lineWidth": 2,
+              "fillOpacity": 20
+            },
+            "unit": "percent",
+            "max": 100
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_community_network_health_score",
+            "legendFormat": "Health Score",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 23,
+        "type": "timeseries",
+        "title": "Cluster Churn",
+        "gridPos": { "h": 8, "w": 8, "x": 8, "y": 36 },
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "lineWidth": 2,
+              "fillOpacity": 10
+            },
+            "unit": "short"
+          }
+        },
+        "targets": [
+          {
+            "expr": "increase(grey_community_clusters_joined[1d])",
+            "legendFormat": "Joined",
+            "refId": "A"
+          },
+          {
+            "expr": "increase(grey_community_clusters_left[1d])",
+            "legendFormat": "Left",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "id": 24,
+        "type": "piechart",
+        "title": "Clusters by Region",
+        "gridPos": { "h": 8, "w": 8, "x": 16, "y": 36 },
+        "options": {
+          "legend": { "displayMode": "table", "placement": "right" },
+          "pieType": "donut",
+          "reduceOptions": { "calcs": ["lastNotNull"] }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "unit": "short"
+          }
+        },
+        "targets": [
+          {
+            "expr": "count by (region) (grey_community_cluster_info)",
+            "legendFormat": "{{region}}",
+            "refId": "A"
+          }
+        ]
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "datasource",
+          "type": "datasource",
+          "query": "prometheus",
+          "current": { "selected": true, "text": "Prometheus", "value": "Prometheus" }
+        },
+        {
+          "name": "cluster",
+          "type": "query",
+          "query": "label_values(grey_community_cluster_info, cluster_id)",
+          "multi": true,
+          "includeAll": true,
+          "current": { "text": "All", "value": "$__all" }
+        },
+        {
+          "name": "region",
+          "type": "query",
+          "query": "label_values(grey_community_cluster_info, region)",
+          "multi": true,
+          "includeAll": true,
+          "current": { "text": "All", "value": "$__all" }
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "name": "New Cluster Joined",
+          "enable": true,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "increase(grey_community_clusters_joined[5m]) > 0",
+          "iconColor": "green"
+        },
+        {
+          "name": "Cluster Left",
+          "enable": true,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "increase(grey_community_clusters_left[5m]) > 0",
+          "iconColor": "red"
+        },
+        {
+          "name": "Release Published",
+          "enable": true,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "grey_community_release_published == 1",
+          "iconColor": "blue"
+        }
+      ]
+    }
+  },
+  "alerts": [
+    {
+      "name": "Network Health Degraded",
+      "condition": "grey_community_network_health_score < 70",
+      "severity": "warning",
+      "message": "Community network health has dropped to {{ $value }}%",
+      "notifications": ["community-ops", "core-team"]
+    },
+    {
+      "name": "Large Cluster Offline",
+      "condition": "grey_community_cluster_status{node_count > 10} == 0",
+      "severity": "warning",
+      "message": "Large cluster {{ $labels.cluster_id }} has gone offline",
+      "notifications": ["community-ops"]
+    },
+    {
+      "name": "Federation Token Imbalance",
+      "condition": "abs(sum(grey_community_resources_provided_tokens) - sum(grey_community_resources_consumed_tokens)) / sum(grey_community_resources_provided_tokens) > 0.3",
+      "severity": "warning",
+      "message": "Federation network has significant resource imbalance",
+      "notifications": ["economics-team", "community-ops"]
+    },
+    {
+      "name": "High Cluster Churn",
+      "condition": "increase(grey_community_clusters_left[1d]) > 5",
+      "severity": "warning",
+      "message": "{{ $value }} clusters have left the network in the last 24h",
+      "notifications": ["community-ops", "core-team"]
+    }
+  ]
+}

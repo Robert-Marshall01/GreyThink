@@ -1,0 +1,457 @@
+# Grey Distributed — Artifact Archive Manifest
+# Defines the archival structure for all project artifacts
+
+apiVersion: grey.distributed/v1
+kind: ArchiveManifest
+metadata:
+  name: grey-distributed-archive
+  version: "2.0.0"
+  created: "2024-01-15T00:00:00Z"
+  updated: "2026-02-04T00:00:00Z"
+  maintainer: archive-team@grey-distributed.org
+
+spec:
+  # Archive retention policies
+  retention:
+    # Default retention for all artifacts
+    default:
+      duration: "10 years"
+      storage_class: standard
+      encryption: aes-256-gcm
+      replication: 3
+    
+    # Category-specific retention
+    categories:
+      code:
+        duration: "perpetual"
+        storage_class: cold
+        snapshots:
+          - trigger: release
+          - trigger: quarterly
+        verification: sha256
+      
+      documentation:
+        duration: "perpetual"
+        storage_class: cold
+        formats:
+          - markdown
+          - pdf
+          - html
+        localization: preserve_all
+      
+      benchmarks:
+        duration: "20 years"
+        storage_class: standard
+        verification: sha256
+        metadata:
+          - hardware_specs
+          - software_versions
+          - methodology
+      
+      proofs:
+        duration: "perpetual"
+        storage_class: cold
+        verification:
+          - sha256
+          - witness_signatures
+        legal_hold: true
+      
+      telemetry:
+        duration: "5 years"
+        storage_class: cold
+        anonymization: required
+        aggregation: daily
+      
+      governance:
+        duration: "perpetual"
+        storage_class: standard
+        immutability: true
+        audit_trail: true
+
+  # Artifact definitions
+  artifacts:
+    # Source code artifacts
+    source_code:
+      description: "All source code including history"
+      locations:
+        primary: github.com/grey-distributed/grey
+        mirrors:
+          - gitlab.com/grey-distributed/grey
+          - codeberg.org/grey-distributed/grey
+          - software-heritage.org  # Long-term archive
+      
+      snapshots:
+        - type: release
+          trigger: "on:tag:v*"
+          format: tar.gz
+          includes:
+            - source/**
+            - docs/**
+            - tests/**
+            - Cargo.toml
+            - go.mod
+            - Makefile
+        
+        - type: periodic
+          trigger: "schedule:quarterly"
+          format: git-bundle
+          includes: "*"
+      
+      verification:
+        checksums: sha256
+        signatures: maintainer-gpg-keys
+        provenance: sigstore
+
+    # Binary releases
+    releases:
+      description: "Compiled binaries and packages"
+      locations:
+        primary: releases.grey-distributed.org
+        mirrors:
+          - github.com/grey-distributed/grey/releases
+          - registry.npmjs.org/@grey-distributed
+          - pypi.org/project/grey-distributed
+      
+      artifacts:
+        - pattern: "greyd-*-{os}-{arch}"
+          platforms:
+            - linux-amd64
+            - linux-arm64
+            - darwin-amd64
+            - darwin-arm64
+            - windows-amd64
+        
+        - pattern: "greyctl-*-{os}-{arch}"
+          platforms: same_as_greyd
+        
+        - pattern: "grey-sdk-python-*.whl"
+          verification: twine
+        
+        - pattern: "grey-sdk-js-*.tgz"
+          verification: npm-signature
+      
+      retention:
+        lts_releases: "10 years"
+        standard_releases: "5 years"
+        pre_releases: "1 year"
+
+    # Documentation
+    documentation:
+      description: "All project documentation"
+      locations:
+        primary: docs.grey-distributed.org
+        archive: archive.grey-distributed.org/docs
+        source: github.com/grey-distributed/grey/docs
+      
+      types:
+        - name: api_reference
+          format: [openapi, protobuf, markdown]
+          versioned: true
+        
+        - name: user_guides
+          format: [markdown, pdf]
+          versioned: true
+        
+        - name: architecture
+          format: [markdown, diagrams]
+          versioned: true
+        
+        - name: rfcs
+          format: [markdown]
+          immutable: true  # RFCs never modified after acceptance
+        
+        - name: adrs
+          format: [markdown]
+          immutable: true  # ADRs are append-only
+      
+      snapshots:
+        trigger: "on:release"
+        format: pdf-bundle
+        metadata:
+          - version
+          - date
+          - contributors
+
+    # Benchmarks and performance data
+    benchmarks:
+      description: "Performance benchmarks with full reproducibility data"
+      locations:
+        primary: benchmarks.grey-distributed.org
+        raw_data: archive.grey-distributed.org/benchmarks
+      
+      artifacts:
+        - name: consensus_benchmarks
+          source: benchmarks/consensus_bench.rs
+          results: benchmarks/results/consensus/
+          metadata:
+            - hardware_profile
+            - network_config
+            - dataset_description
+            - methodology
+        
+        - name: network_benchmarks
+          source: benchmarks/network_bench.rs
+          results: benchmarks/results/network/
+        
+        - name: storage_benchmarks
+          source: benchmarks/storage_bench.rs
+          results: benchmarks/results/storage/
+        
+        - name: scalability_benchmarks
+          source: stress/
+          results: docs/scaling_results.md
+      
+      reproducibility:
+        environment:
+          containerized: true
+          image: grey-distributed/benchmark-runner
+          deterministic: best-effort
+        
+        data:
+          datasets: archive.grey-distributed.org/datasets
+          synthetic_generators: included
+          real_world_traces: anonymized
+
+    # Formal verification proofs
+    proofs:
+      description: "Formal verification proofs and specifications"
+      locations:
+        primary: github.com/grey-distributed/grey/specs
+        archive: archive.grey-distributed.org/proofs
+      
+      artifacts:
+        - name: tla_specifications
+          path: specs/tla/
+          format: tla+
+          verifier: tla-toolbox
+          verification_logs: preserved
+        
+        - name: consensus_proofs
+          path: specs/tla/consensus/
+          properties:
+            - safety
+            - liveness
+            - byzantine_fault_tolerance
+        
+        - name: state_machine_proofs
+          path: specs/tla/state/
+          properties:
+            - linearizability
+            - serializability
+      
+      verification:
+        model_checker_version: preserved
+        counter_examples: none_found
+        witness_signatures:
+          - primary_author
+          - independent_reviewer
+
+    # Governance records
+    governance:
+      description: "All governance decisions and records"
+      locations:
+        primary: github.com/grey-distributed/governance
+        archive: archive.grey-distributed.org/governance
+      
+      records:
+        - type: rfcs
+          path: rfcs/
+          immutable: true
+          numbering: sequential
+        
+        - type: adrs
+          path: decisions/
+          immutable: true
+          numbering: sequential
+        
+        - type: votes
+          path: votes/
+          format: yaml
+          verification: gpg-signed
+        
+        - type: meeting_notes
+          path: meetings/
+          format: markdown
+          attendance: recorded
+        
+        - type: elections
+          path: elections/
+          format: yaml
+          anonymization: voter_privacy
+
+    # Security advisories
+    security:
+      description: "Security advisories and incident records"
+      locations:
+        primary: github.com/grey-distributed/grey/security/advisories
+        cve_database: cve.mitre.org
+      
+      records:
+        - type: advisories
+          format: markdown
+          identifiers: [cve, ghsa]
+          embargo_handling: delayed_publication
+        
+        - type: incident_reports
+          format: markdown
+          redaction: sensitive_details
+          post_mortem: required
+        
+        - type: security_audits
+          format: pdf
+          third_party: true
+          publication: after_remediation
+
+    # Telemetry and metrics
+    telemetry:
+      description: "Aggregated and anonymized telemetry data"
+      locations:
+        primary: internal (not public)
+        anonymized: archive.grey-distributed.org/telemetry
+      
+      data_types:
+        - name: deployment_stats
+          aggregation: weekly
+          anonymization: full
+          fields:
+            - version_distribution
+            - cluster_sizes
+            - geographic_distribution
+        
+        - name: performance_telemetry
+          aggregation: daily
+          anonymization: full
+          fields:
+            - latency_percentiles
+            - throughput_distribution
+            - error_rates
+        
+        - name: feature_usage
+          aggregation: weekly
+          anonymization: full
+          fields:
+            - feature_adoption
+            - api_usage_patterns
+
+  # Archive verification
+  verification:
+    integrity:
+      algorithm: sha256
+      frequency: monthly
+      cross_check: true
+      alerts: archive-team@grey-distributed.org
+    
+    availability:
+      check_frequency: weekly
+      mirror_sync: verified
+      retrieval_test: quarterly
+    
+    legal:
+      license_compliance: verified
+      export_control: compliant
+      gdpr_compliance: verified
+
+  # Disaster recovery
+  disaster_recovery:
+    scenarios:
+      - name: primary_loss
+        recovery_from: mirrors
+        rto: 24 hours
+        rpo: 1 hour
+      
+      - name: total_loss
+        recovery_from: cold_storage
+        rto: 72 hours
+        rpo: 1 day
+      
+      - name: corruption
+        detection: checksums
+        recovery_from: clean_snapshot
+        verification: full_rebuild
+    
+    cold_storage:
+      provider: multiple
+      locations:
+        - provider: AWS Glacier
+          region: us-east-1
+        - provider: Azure Cool Storage
+          region: westeurope
+        - provider: Software Heritage
+          note: perpetual open-source archive
+    
+    testing:
+      full_recovery_drill: annual
+      partial_recovery: quarterly
+      verification: after_each_drill
+
+  # Access control
+  access:
+    public:
+      - source_code
+      - releases
+      - documentation
+      - benchmarks (results)
+      - proofs
+      - governance (non-sensitive)
+      - security (post-embargo)
+    
+    restricted:
+      - telemetry (raw)
+      - security (during embargo)
+      - governance (votes before announcement)
+      - personal_data
+    
+    maintainer_only:
+      - infrastructure_secrets
+      - incident_details
+      - pre_release_materials
+
+---
+# Archive locations index
+locations:
+  primary:
+    url: https://archive.grey-distributed.org
+    type: managed
+    provider: grey-foundation
+  
+  github:
+    url: https://github.com/grey-distributed
+    type: git
+    provider: github
+  
+  software_heritage:
+    url: https://archive.softwareheritage.org
+    type: archive
+    provider: inria
+    purpose: perpetual_preservation
+  
+  internet_archive:
+    url: https://web.archive.org
+    type: snapshots
+    provider: ia
+    purpose: documentation_snapshots
+
+---
+# Archival schedule
+schedule:
+  daily:
+    - telemetry_aggregation
+    - mirror_sync_check
+  
+  weekly:
+    - availability_check
+    - benchmark_results_sync
+  
+  monthly:
+    - integrity_verification
+    - retention_enforcement
+  
+  quarterly:
+    - full_archive_snapshot
+    - disaster_recovery_test
+    - retention_review
+  
+  annual:
+    - full_disaster_recovery_drill
+    - archive_audit
+    - retention_policy_review

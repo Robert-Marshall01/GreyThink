@@ -1,0 +1,224 @@
+# Grey Distributed — Docker Compose Reproducibility Environment
+#
+# Usage:
+#   docker-compose up -d          # Start 3-node cluster
+#   docker-compose logs -f        # View logs
+#   docker-compose down -v        # Cleanup
+#
+# Environment:
+#   GREY_SEED=42                  # Deterministic seed for reproducibility
+
+version: "3.8"
+
+services:
+  # ============================================================================
+  # Grey Cluster Nodes
+  # ============================================================================
+  
+  grey-node-0:
+    image: grey-distributed:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: grey-node-0
+    hostname: grey-node-0
+    environment:
+      GREY_NODE_ID: "0"
+      GREY_LISTEN_ADDR: "0.0.0.0:5000"
+      GREY_CLUSTER_PEERS: "grey-node-1:5000,grey-node-2:5000"
+      GREY_LOG_LEVEL: "info"
+      GREY_DATA_DIR: "/var/grey"
+      GREY_SEED: "${GREY_SEED:-42}"
+      GREY_ELECTION_TIMEOUT: "150ms"
+      GREY_HEARTBEAT_INTERVAL: "50ms"
+      RUST_BACKTRACE: "1"
+    ports:
+      - "5000:5000"   # Consensus RPC
+      - "5100:5100"   # HTTP API
+      - "5200:5200"   # Metrics
+    volumes:
+      - grey-data-0:/var/grey
+    networks:
+      - grey-network
+    healthcheck:
+      test: ["CMD", "greyctl", "cluster", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  grey-node-1:
+    image: grey-distributed:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: grey-node-1
+    hostname: grey-node-1
+    environment:
+      GREY_NODE_ID: "1"
+      GREY_LISTEN_ADDR: "0.0.0.0:5000"
+      GREY_CLUSTER_PEERS: "grey-node-0:5000,grey-node-2:5000"
+      GREY_LOG_LEVEL: "info"
+      GREY_DATA_DIR: "/var/grey"
+      GREY_SEED: "${GREY_SEED:-42}"
+      GREY_ELECTION_TIMEOUT: "150ms"
+      GREY_HEARTBEAT_INTERVAL: "50ms"
+      RUST_BACKTRACE: "1"
+    ports:
+      - "5001:5000"
+      - "5101:5100"
+      - "5201:5200"
+    volumes:
+      - grey-data-1:/var/grey
+    networks:
+      - grey-network
+    healthcheck:
+      test: ["CMD", "greyctl", "cluster", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    depends_on:
+      - grey-node-0
+
+  grey-node-2:
+    image: grey-distributed:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: grey-node-2
+    hostname: grey-node-2
+    environment:
+      GREY_NODE_ID: "2"
+      GREY_LISTEN_ADDR: "0.0.0.0:5000"
+      GREY_CLUSTER_PEERS: "grey-node-0:5000,grey-node-1:5000"
+      GREY_LOG_LEVEL: "info"
+      GREY_DATA_DIR: "/var/grey"
+      GREY_SEED: "${GREY_SEED:-42}"
+      GREY_ELECTION_TIMEOUT: "150ms"
+      GREY_HEARTBEAT_INTERVAL: "50ms"
+      RUST_BACKTRACE: "1"
+    ports:
+      - "5002:5000"
+      - "5102:5100"
+      - "5202:5200"
+    volumes:
+      - grey-data-2:/var/grey
+    networks:
+      - grey-network
+    healthcheck:
+      test: ["CMD", "greyctl", "cluster", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    depends_on:
+      - grey-node-0
+
+  # ============================================================================
+  # Observability Stack
+  # ============================================================================
+
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: grey-prometheus
+    hostname: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - grey-network
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: grey-grafana
+    hostname: grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: grey123
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana-dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+    ports:
+      - "3000:3000"
+    networks:
+      - grey-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    container_name: grey-jaeger
+    hostname: jaeger
+    environment:
+      COLLECTOR_ZIPKIN_HOST_PORT: ":9411"
+    ports:
+      - "5775:5775/udp"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686"    # UI
+      - "14268:14268"    # HTTP collector
+      - "14250:14250"    # gRPC collector
+      - "9411:9411"
+    networks:
+      - grey-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # Benchmark Runner
+  # ============================================================================
+
+  benchmark:
+    image: grey-distributed:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: grey-benchmark
+    hostname: benchmark
+    environment:
+      GREY_SEED: "${GREY_SEED:-42}"
+      GREY_CLUSTER_ADDR: "grey-node-0:5000,grey-node-1:5000,grey-node-2:5000"
+    volumes:
+      - benchmark-results:/results
+    networks:
+      - grey-network
+    command: ["sleep", "infinity"]  # Keep alive for manual benchmark runs
+    profiles:
+      - benchmark
+
+# ============================================================================
+# Networks
+# ============================================================================
+
+networks:
+  grey-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# ============================================================================
+# Volumes
+# ============================================================================
+
+volumes:
+  grey-data-0:
+  grey-data-1:
+  grey-data-2:
+  prometheus-data:
+  grafana-data:
+  benchmark-results:

@@ -1,0 +1,504 @@
+{
+  "title": "Grey Distributed — Evolution Dashboard",
+  "description": "Monitoring centuries-scale evolution, preservation, and fork reconciliation",
+  "version": "1.0.0",
+  "refreshInterval": "1h",
+  "timeRange": {
+    "default": "1y",
+    "options": ["1y", "5y", "10y", "25y", "50y", "100y", "all"]
+  },
+  "variables": [
+    {
+      "name": "timeline_view",
+      "label": "Timeline View",
+      "type": "select",
+      "options": ["linear", "logarithmic"],
+      "default": "logarithmic"
+    },
+    {
+      "name": "fork_status",
+      "label": "Fork Status",
+      "type": "multiselect",
+      "options": ["active", "reconciling", "archived", "diverged"],
+      "default": "all"
+    }
+  ],
+  "sections": [
+    {
+      "title": "System Age & Health",
+      "collapsed": false,
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "System Age",
+              "type": "stat",
+              "gridPos": { "x": 0, "y": 0, "w": 6, "h": 6 },
+              "query": "grey_system_age_years",
+              "format": "years",
+              "subtitle": "Since genesis block",
+              "color": "#3b82f6"
+            },
+            {
+              "title": "Projected Lifespan",
+              "type": "stat",
+              "gridPos": { "x": 6, "y": 0, "w": 6, "h": 6 },
+              "query": "grey_projected_lifespan_years",
+              "format": "years",
+              "subtitle": "Based on sustainability metrics",
+              "thresholds": {
+                "critical": [0, 50],
+                "warning": [50, 100],
+                "ok": [100, null]
+              }
+            },
+            {
+              "title": "Long-term Health Score",
+              "type": "gauge",
+              "gridPos": { "x": 12, "y": 0, "w": 6, "h": 6 },
+              "query": "grey_longterm_health_score",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "critical": [0, 50],
+                "warning": [50, 75],
+                "ok": [75, 100]
+              }
+            },
+            {
+              "title": "Sustainability Index",
+              "type": "gauge",
+              "gridPos": { "x": 18, "y": 0, "w": 6, "h": 6 },
+              "query": "grey_sustainability_index",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "critical": [0, 50],
+                "warning": [50, 75],
+                "ok": [75, 100]
+              },
+              "subtitle": "Funding, community, technology"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Version Timeline",
+      "collapsed": false,
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Version History",
+              "type": "timeline",
+              "gridPos": { "x": 0, "y": 0, "w": 24, "h": 10 },
+              "query": "grey_version_history",
+              "fields": {
+                "start": "release_date",
+                "end": "eol_date",
+                "label": "version",
+                "group": "major_version"
+              },
+              "annotations": {
+                "lts": { "color": "#22c55e", "marker": "◆" },
+                "security": { "color": "#ef4444", "marker": "!" },
+                "milestone": { "color": "#3b82f6", "marker": "★" }
+              }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Version Adoption",
+              "type": "areachart",
+              "gridPos": { "x": 0, "y": 10, "w": 12, "h": 8 },
+              "query": "grey_version_adoption_percent",
+              "stackMode": "percent",
+              "legendFormat": "{{version}}"
+            },
+            {
+              "title": "Upgrade Path Health",
+              "type": "table",
+              "gridPos": { "x": 12, "y": 10, "w": 12, "h": 8 },
+              "query": "grey_upgrade_path_status",
+              "columns": [
+                { "field": "from_version", "label": "From", "width": "15%" },
+                { "field": "to_version", "label": "To", "width": "15%" },
+                { "field": "path_type", "label": "Type", "width": "15%" },
+                { "field": "complexity", "label": "Complexity", "width": "15%" },
+                { "field": "success_rate", "label": "Success", "width": "15%", "format": "percent" },
+                { "field": "avg_duration", "label": "Avg Duration", "width": "15%" },
+                { "field": "status", "label": "Status", "width": "10%" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Fork Ecosystem",
+      "collapsed": false,
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Active Forks",
+              "type": "stat",
+              "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+              "query": "count(grey_fork_info{status='active'})",
+              "color": "#3b82f6"
+            },
+            {
+              "title": "Reconciling",
+              "type": "stat",
+              "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+              "query": "count(grey_fork_info{status='reconciling'})",
+              "color": "#f59e0b"
+            },
+            {
+              "title": "Permanently Diverged",
+              "type": "stat",
+              "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+              "query": "count(grey_fork_info{status='diverged'})",
+              "color": "#6b7280"
+            },
+            {
+              "title": "Successfully Reconciled",
+              "type": "stat",
+              "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+              "query": "sum(grey_fork_reconciled_total)",
+              "color": "#22c55e"
+            },
+            {
+              "title": "Fork Tree",
+              "type": "tree",
+              "gridPos": { "x": 16, "y": 0, "w": 8, "h": 12 },
+              "query": "grey_fork_hierarchy",
+              "rootLabel": "Genesis",
+              "nodeColors": {
+                "active": "#3b82f6",
+                "reconciling": "#f59e0b",
+                "archived": "#6b7280",
+                "diverged": "#8b5cf6"
+              }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Fork Details",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 4, "w": 16, "h": 8 },
+              "query": "grey_fork_info",
+              "columns": [
+                { "field": "name", "label": "Fork", "width": "15%" },
+                { "field": "fork_point", "label": "Forked From", "width": "12%" },
+                { "field": "age_years", "label": "Age", "width": "8%" },
+                { "field": "divergence_commits", "label": "Divergence", "width": "10%" },
+                { "field": "active_users", "label": "Users", "width": "10%" },
+                { "field": "maintainers", "label": "Maintainers", "width": "10%" },
+                { "field": "reconciliation_status", "label": "Reconciliation", "width": "15%" },
+                { "field": "last_activity", "label": "Last Active", "width": "12%", "format": "relative" },
+                { "field": "health", "label": "Health", "width": "8%" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Preservation Status",
+      "collapsed": false,
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Archive Health",
+              "type": "gauge",
+              "gridPos": { "x": 0, "y": 0, "w": 6, "h": 6 },
+              "query": "grey_archive_health_score",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "critical": [0, 80],
+                "warning": [80, 95],
+                "ok": [95, 100]
+              }
+            },
+            {
+              "title": "Total Archived",
+              "type": "stat",
+              "gridPos": { "x": 6, "y": 0, "w": 4, "h": 3 },
+              "query": "grey_archive_total_size_tb",
+              "format": "TB",
+              "sparkline": true
+            },
+            {
+              "title": "Artifacts Count",
+              "type": "stat",
+              "gridPos": { "x": 10, "y": 0, "w": 4, "h": 3 },
+              "query": "grey_archive_artifact_count",
+              "sparkline": true
+            },
+            {
+              "title": "Last Verification",
+              "type": "stat",
+              "gridPos": { "x": 6, "y": 3, "w": 4, "h": 3 },
+              "query": "grey_archive_last_verification_days_ago",
+              "format": "days ago",
+              "thresholds": { "ok": [0, 30], "warning": [30, 90], "critical": [90, null] }
+            },
+            {
+              "title": "Integrity Verified",
+              "type": "stat",
+              "gridPos": { "x": 10, "y": 3, "w": 4, "h": 3 },
+              "query": "grey_archive_integrity_percent",
+              "unit": "%",
+              "thresholds": { "critical": [0, 99], "warning": [99, 100], "ok": [100, 100] }
+            },
+            {
+              "title": "Preservation by Tier",
+              "type": "piechart",
+              "gridPos": { "x": 14, "y": 0, "w": 5, "h": 6 },
+              "query": "grey_archive_size_by_tier",
+              "colors": {
+                "perpetual": "#3b82f6",
+                "long_term": "#22c55e",
+                "standard": "#f59e0b",
+                "operational": "#6b7280"
+              }
+            },
+            {
+              "title": "Storage Locations",
+              "type": "piechart",
+              "gridPos": { "x": 19, "y": 0, "w": 5, "h": 6 },
+              "query": "grey_archive_by_location",
+              "colors": {
+                "glacier": "#3b82f6",
+                "azure_archive": "#22c55e",
+                "software_heritage": "#8b5cf6",
+                "university_escrow": "#f59e0b"
+              }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Self-Preservation Operations",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 6, "w": 24, "h": 8 },
+              "query": "grey_preservation_operations",
+              "columns": [
+                { "field": "timestamp", "label": "Time", "width": "12%", "format": "datetime" },
+                { "field": "operation", "label": "Operation", "width": "18%" },
+                { "field": "artifact_type", "label": "Type", "width": "12%" },
+                { "field": "size", "label": "Size", "width": "10%" },
+                { "field": "locations", "label": "Locations", "width": "15%" },
+                { "field": "verification", "label": "Verified", "width": "10%" },
+                { "field": "next_verification", "label": "Next Check", "width": "13%", "format": "date" },
+                { "field": "status", "label": "Status", "width": "10%" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Knowledge Continuity",
+      "collapsed": false,
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Documentation Coverage",
+              "type": "gauge",
+              "gridPos": { "x": 0, "y": 0, "w": 6, "h": 6 },
+              "query": "grey_documentation_coverage_percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "critical": [0, 70],
+                "warning": [70, 90],
+                "ok": [90, 100]
+              }
+            },
+            {
+              "title": "Institutional Memory Index",
+              "type": "gauge",
+              "gridPos": { "x": 6, "y": 0, "w": 6, "h": 6 },
+              "query": "grey_institutional_memory_index",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "critical": [0, 60],
+                "warning": [60, 80],
+                "ok": [80, 100]
+              },
+              "subtitle": "Decision context preserved"
+            },
+            {
+              "title": "Knowledge Transfer Rate",
+              "type": "timeseries",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 6 },
+              "queries": [
+                { "expr": "grey_knowledge_creation_rate", "legendFormat": "Created" },
+                { "expr": "grey_knowledge_archived_rate", "legendFormat": "Archived" },
+                { "expr": "grey_knowledge_referenced_rate", "legendFormat": "Referenced" }
+              ]
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Critical Knowledge Gaps",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 6, "w": 12, "h": 8 },
+              "query": "grey_knowledge_gaps{severity='critical'}",
+              "columns": [
+                { "field": "area", "label": "Area", "width": "25%" },
+                { "field": "gap_description", "label": "Gap", "width": "35%" },
+                { "field": "last_expert", "label": "Last Expert", "width": "15%" },
+                { "field": "risk_level", "label": "Risk", "width": "10%" },
+                { "field": "remediation_status", "label": "Status", "width": "15%" }
+              ],
+              "rowStyles": {
+                "risk_level": {
+                  "critical": "bg-red-100",
+                  "high": "bg-orange-100",
+                  "medium": "bg-yellow-100"
+                }
+              }
+            },
+            {
+              "title": "Format Migration Status",
+              "type": "table",
+              "gridPos": { "x": 12, "y": 6, "w": 12, "h": 8 },
+              "query": "grey_format_migration_status",
+              "columns": [
+                { "field": "format", "label": "Format", "width": "20%" },
+                { "field": "artifact_count", "label": "Artifacts", "width": "15%" },
+                { "field": "status", "label": "Status", "width": "15%" },
+                { "field": "last_readable_check", "label": "Last Check", "width": "15%", "format": "relative" },
+                { "field": "migration_target", "label": "Target Format", "width": "20%" },
+                { "field": "migration_deadline", "label": "Deadline", "width": "15%", "format": "date" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Long-term Projections",
+      "collapsed": true,
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Technology Evolution Forecast",
+              "type": "timeseries",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+              "query": "grey_technology_evolution_forecast",
+              "timeRange": { "start": "now", "end": "now+50y" },
+              "annotations": [
+                { "time": "2030", "label": "Quantum-safe transition" },
+                { "time": "2040", "label": "Estimated format migration" },
+                { "time": "2050", "label": "Next major protocol" }
+              ]
+            },
+            {
+              "title": "Community Sustainability Forecast",
+              "type": "timeseries",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+              "query": "grey_community_sustainability_forecast",
+              "timeRange": { "start": "now", "end": "now+25y" },
+              "queries": [
+                { "expr": "grey_forecast_maintainers", "legendFormat": "Maintainers" },
+                { "expr": "grey_forecast_contributors", "legendFormat": "Contributors" },
+                { "expr": "grey_forecast_users", "legendFormat": "Users (log scale)" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "alerts": [
+    {
+      "name": "fork_divergence_accelerating",
+      "description": "Fork divergence is accelerating beyond reconcilable threshold",
+      "query": "rate(grey_fork_divergence_commits[30d]) > rate(grey_fork_divergence_commits[90d]) * 2",
+      "severity": "warning",
+      "annotations": {
+        "summary": "Fork {{$labels.fork_name}} divergence is accelerating"
+      }
+    },
+    {
+      "name": "archive_verification_overdue",
+      "description": "Archive verification is overdue",
+      "query": "grey_archive_last_verification_days_ago > 90",
+      "severity": "warning",
+      "annotations": {
+        "summary": "Archive verification is {{$value}} days overdue"
+      }
+    },
+    {
+      "name": "archive_integrity_failure",
+      "description": "Archive integrity check failed",
+      "query": "grey_archive_integrity_percent < 100",
+      "severity": "critical",
+      "annotations": {
+        "summary": "Archive integrity is {{$value}}% - {{$labels.failed_count}} artifacts affected"
+      }
+    },
+    {
+      "name": "knowledge_gap_critical",
+      "description": "Critical knowledge gap identified",
+      "query": "grey_knowledge_gap_count{severity='critical'} > 0",
+      "severity": "critical",
+      "annotations": {
+        "summary": "{{$value}} critical knowledge gaps require immediate attention"
+      }
+    },
+    {
+      "name": "format_migration_deadline",
+      "description": "Format migration deadline approaching",
+      "query": "grey_format_migration_deadline_days < 180",
+      "severity": "warning",
+      "annotations": {
+        "summary": "{{$labels.format}} migration due in {{$value}} days"
+      }
+    },
+    {
+      "name": "sustainability_declining",
+      "description": "Long-term sustainability index declining",
+      "query": "Grey_sustainability_index < 70",
+      "severity": "warning",
+      "annotations": {
+        "summary": "Sustainability index is {{$value}}%, investigate funding/community trends"
+      }
+    },
+    {
+      "name": "fork_reconciliation_stalled",
+      "description": "Fork reconciliation effort has stalled",
+      "query": "grey_fork_reconciliation_progress_days_stalled > 90",
+      "severity": "warning",
+      "annotations": {
+        "summary": "Reconciliation of {{$labels.fork_name}} stalled for {{$value}} days"
+      }
+    },
+    {
+      "name": "upgrade_path_broken",
+      "description": "Version upgrade path is broken",
+      "query": "grey_upgrade_path_success_rate < 0.95",
+      "severity": "critical",
+      "annotations": {
+        "summary": "Upgrade path from {{$labels.from_version}} to {{$labels.to_version}} has {{$value | percent}} success rate"
+      }
+    }
+  ]
+}

@@ -1,0 +1,470 @@
+# Grey Distributed — Cultural Artifacts Archive
+# Manifest of cultural artifacts tied to Grey Distributed's civilizational permanence
+
+---
+version: "1.0"
+last_updated: "2026-02-04"
+archive_purpose: "Preserve and catalog cultural artifacts embodying Grey Distributed's myth-tier permanence"
+
+---
+# Archive Structure
+
+archive_structure:
+  tiers:
+    - name: "Foundation"
+      description: "Core documents defining Grey Distributed identity"
+      preservation_priority: "Maximum"
+      replication_factor: 7
+      geographic_distribution: "All continents"
+      
+    - name: "Primary"
+      description: "Essential cultural artifacts for civilizational continuity"
+      preservation_priority: "Critical"
+      replication_factor: 5
+      geographic_distribution: "5+ continents"
+      
+    - name: "Secondary"
+      description: "Important cultural artifacts for historical understanding"
+      preservation_priority: "High"
+      replication_factor: 3
+      geographic_distribution: "3+ continents"
+      
+    - name: "Tertiary"
+      description: "Supporting materials for comprehensive cultural record"
+      preservation_priority: "Standard"
+      replication_factor: 2
+      geographic_distribution: "2+ continents"
+
+---
+# Foundation Tier Artifacts
+
+foundation_artifacts:
+  constitutional_documents:
+    - artifact_id: "FOUND-001"
+      title: "The Grey Constitution"
+      type: "legal_document"
+      format: ["markdown", "pdf", "txt", "printed"]
+      location: "/myth/codex/grey_constitution.md"
+      created: "2026-02-04"
+      authors: ["Foundation Council"]
+      languages: ["en", "es", "zh", "ar", "fr", "ru", "pt", "de", "ja", "hi"]
+      preservation:
+        digital: ["primary_archive", "secondary_archive", "cold_storage"]
+        physical: ["foundation_vault", "partner_institutions"]
+        distributed: ["ipfs", "arweave", "filecoin"]
+      verification:
+        checksum: "sha3-256"
+        signatures: ["foundation_council"]
+        last_verified: "2026-02-04"
+      
+    - artifact_id: "FOUND-002"
+      title: "Grey Distributed Ethical Framework"
+      type: "ethical_document"
+      format: ["markdown", "pdf", "txt", "printed"]
+      location: "/myth/codex/grey_ethics.md"
+      created: "2026-02-04"
+      authors: ["Ethics Board"]
+      languages: ["en", "es", "zh", "ar", "fr", "ru"]
+      preservation:
+        digital: ["primary_archive", "secondary_archive", "cold_storage"]
+        physical: ["foundation_vault", "partner_institutions"]
+        distributed: ["ipfs", "arweave"]
+      verification:
+        checksum: "sha3-256"
+        signatures: ["ethics_board"]
+        last_verified: "2026-02-04"
+      
+    - artifact_id: "FOUND-003"
+      title: "Grey Distributed Legal Codification"
+      type: "legal_document"
+      format: ["markdown", "pdf", "txt", "printed"]
+      location: "/myth/codex/grey_law.md"
+      created: "2026-02-04"
+      authors: ["Foundation Council", "Legal Committee"]
+      languages: ["en", "es", "zh", "fr", "de"]
+      preservation:
+        digital: ["primary_archive", "secondary_archive"]
+        physical: ["foundation_vault"]
+        distributed: ["ipfs"]
+
+---
+# Primary Tier Artifacts
+
+primary_artifacts:
+  cultural_documents:
+    - artifact_id: "PRIM-001"
+      title: "Literature Manifesto"
+      type: "manifesto"
+      format: ["markdown", "pdf", "epub", "printed"]
+      location: "/myth/culture/literature_manifesto.md"
+      created: "2026-02-04"
+      description: "Narrative linking Grey Distributed to human progress"
+      cultural_significance: "Defines Grey Distributed's mythological narrative"
+      
+    - artifact_id: "PRIM-002"
+      title: "Education Curriculum"
+      type: "educational_material"
+      format: ["markdown", "pdf", "scorm"]
+      location: "/myth/culture/education_curriculum.md"
+      created: "2026-02-04"
+      description: "Curriculum for embedding Grey Distributed in education"
+      cultural_significance: "Ensures generational knowledge transmission"
+
+  founding_records:
+    - artifact_id: "PRIM-010"
+      title: "Founding Charter"
+      type: "historical_document"
+      format: ["pdf", "printed", "archived_original"]
+      location: "/archives/founding/charter.pdf"
+      created: "2024-01-15"
+      description: "Original charter establishing Grey Distributed"
+      cultural_significance: "Historical record of founding intent"
+      
+    - artifact_id: "PRIM-011"
+      title: "First Commit"
+      type: "technical_artifact"
+      format: ["git_commit", "archived_tarball"]
+      location: "git://grey.distributed/genesis@first-commit"
+      created: "2024-01-20"
+      description: "First code commit to Grey Distributed repository"
+      cultural_significance: "Technical genesis point"
+      
+    - artifact_id: "PRIM-012"
+      title: "Founders' Video Messages"
+      type: "audiovisual"
+      format: ["mp4", "wav", "transcript"]
+      location: "/archives/founding/founder_messages/"
+      created: "2024-06-01"
+      description: "Recorded messages from founding stewards"
+      cultural_significance: "Living record of founding intent and values"
+
+  milestone_records:
+    - artifact_id: "PRIM-020"
+      title: "First Million Users"
+      type: "milestone_record"
+      format: ["markdown", "pdf", "video"]
+      location: "/archives/milestones/million_users/"
+      created: "2025-03-15"
+      description: "Documentation of first million user milestone"
+      
+    - artifact_id: "PRIM-021"
+      title: "First Continental Coverage"
+      type: "milestone_record"
+      format: ["markdown", "pdf", "map"]
+      location: "/archives/milestones/continental_coverage/"
+      created: "2025-08-22"
+      description: "Achievement of presence on all continents"
+
+  visual_identity:
+    - artifact_id: "PRIM-030"
+      title: "Grey Distributed Logo"
+      type: "visual_identity"
+      format: ["svg", "png", "eps", "ai"]
+      location: "/brand/logo/"
+      created: "2024-02-01"
+      description: "Official logo in all formats"
+      usage_guidelines: "/brand/guidelines.md"
+      
+    - artifact_id: "PRIM-031"
+      title: "Visual Identity Guidelines"
+      type: "brand_document"
+      format: ["pdf", "markdown"]
+      location: "/brand/guidelines.md"
+      created: "2024-02-15"
+      description: "Complete visual identity standards"
+
+---
+# Secondary Tier Artifacts
+
+secondary_artifacts:
+  oral_histories:
+    - artifact_id: "SEC-001"
+      title: "Founders Oral History Collection"
+      type: "oral_history"
+      format: ["mp3", "transcript", "video"]
+      location: "/archives/oral_history/founders/"
+      created: "2025-01-01"
+      count: 15
+      description: "Interviews with founding team members"
+      
+    - artifact_id: "SEC-002"
+      title: "Early Adopter Stories"
+      type: "oral_history"
+      format: ["mp3", "transcript", "video"]
+      location: "/archives/oral_history/early_adopters/"
+      created: "2025-06-01"
+      count: 50
+      description: "Experiences of first-year adopters"
+      
+    - artifact_id: "SEC-003"
+      title: "Community Voices Collection"
+      type: "oral_history"
+      format: ["mp3", "transcript"]
+      location: "/archives/oral_history/community/"
+      status: "ongoing"
+      description: "Ongoing collection of community member stories"
+
+  technical_artifacts:
+    - artifact_id: "SEC-010"
+      title: "Architecture Decision Records"
+      type: "technical_documentation"
+      format: ["markdown", "pdf"]
+      location: "/docs/adr/"
+      created: "2024-01-01"
+      status: "ongoing"
+      description: "All architectural decisions with rationale"
+      
+    - artifact_id: "SEC-011"
+      title: "Protocol Specifications"
+      type: "technical_specification"
+      format: ["markdown", "pdf", "formal_spec"]
+      location: "/specs/"
+      created: "2024-01-01"
+      status: "ongoing"
+      description: "Formal protocol specifications"
+      
+    - artifact_id: "SEC-012"
+      title: "Major Incident Reports"
+      type: "incident_documentation"
+      format: ["markdown", "pdf"]
+      location: "/archives/incidents/"
+      created: "2024-06-01"
+      status: "ongoing"
+      description: "Post-mortems of significant incidents"
+      cultural_significance: "Institutional learning record"
+
+  governance_records:
+    - artifact_id: "SEC-020"
+      title: "Governance Proceedings Archive"
+      type: "governance_record"
+      format: ["markdown", "pdf", "video"]
+      location: "/archives/governance/"
+      created: "2024-01-01"
+      status: "ongoing"
+      description: "All governance body proceedings"
+      
+    - artifact_id: "SEC-021"
+      title: "Election Records"
+      type: "governance_record"
+      format: ["markdown", "json"]
+      location: "/archives/elections/"
+      created: "2024-06-01"
+      status: "ongoing"
+      description: "Records of all elections and appointments"
+      
+    - artifact_id: "SEC-022"
+      title: "Constitutional Amendments"
+      type: "legal_record"
+      format: ["markdown", "pdf"]
+      location: "/archives/amendments/"
+      created: "2024-01-01"
+      status: "ongoing"
+      description: "All proposed and enacted amendments"
+
+  media_coverage:
+    - artifact_id: "SEC-030"
+      title: "Press Coverage Archive"
+      type: "media_archive"
+      format: ["pdf", "html", "warc"]
+      location: "/archives/media/press/"
+      created: "2024-01-01"
+      status: "ongoing"
+      description: "Archived press coverage"
+      
+    - artifact_id: "SEC-031"
+      title: "Documentary Films"
+      type: "audiovisual"
+      format: ["mp4", "prores"]
+      location: "/archives/media/documentaries/"
+      description: "Documentaries about Grey Distributed"
+
+---
+# Tertiary Tier Artifacts
+
+tertiary_artifacts:
+  community_produced:
+    - artifact_id: "TER-001"
+      title: "Community Blog Archive"
+      type: "community_content"
+      format: ["html", "warc", "markdown"]
+      location: "/archives/community/blogs/"
+      status: "ongoing"
+      description: "Archived community blog posts"
+      
+    - artifact_id: "TER-002"
+      title: "Conference Presentations"
+      type: "presentation"
+      format: ["pdf", "pptx", "video"]
+      location: "/archives/community/presentations/"
+      status: "ongoing"
+      description: "Community presentations about Grey Distributed"
+      
+    - artifact_id: "TER-003"
+      title: "Artwork and Creative Works"
+      type: "creative_work"
+      format: ["various"]
+      location: "/archives/community/art/"
+      status: "ongoing"
+      description: "Community-created artwork and creative expressions"
+
+  educational_materials:
+    - artifact_id: "TER-010"
+      title: "Tutorial Collection"
+      type: "educational"
+      format: ["markdown", "video", "interactive"]
+      location: "/education/tutorials/"
+      status: "ongoing"
+      description: "Community-created tutorials"
+      
+    - artifact_id: "TER-011"
+      title: "Course Materials"
+      type: "educational"
+      format: ["various"]
+      location: "/education/courses/"
+      status: "ongoing"
+      description: "Materials from academic courses featuring Grey Distributed"
+
+  historical_context:
+    - artifact_id: "TER-020"
+      title: "Pre-Grey Infrastructure History"
+      type: "historical_research"
+      format: ["pdf", "markdown"]
+      location: "/archives/history/pre_grey/"
+      description: "Research on infrastructure before Grey Distributed"
+      
+    - artifact_id: "TER-021"
+      title: "Comparative Analysis"
+      type: "research"
+      format: ["pdf", "markdown"]
+      location: "/archives/research/comparative/"
+      description: "Comparisons with other infrastructure projects"
+
+---
+# Preservation Policies
+
+preservation_policies:
+  format_migration:
+    review_cycle: "5 years"
+    obsolescence_threshold: "80% tool support"
+    migration_validation: "Bit-perfect where possible, semantic equivalence minimum"
+    
+  verification:
+    foundation_tier: "Annual verification with signatures"
+    primary_tier: "Annual checksum verification"
+    secondary_tier: "Biennial checksum verification"
+    tertiary_tier: "5-year checksum verification"
+    
+  replication:
+    minimum_copies: 2
+    geographic_requirements: "Different continents for critical artifacts"
+    provider_diversity: "Multiple storage providers"
+    
+  access:
+    foundation_tier: "Unrestricted public access"
+    primary_tier: "Unrestricted public access"
+    secondary_tier: "Public access, some restrictions for privacy"
+    tertiary_tier: "Public access with attribution requirements"
+
+---
+# Time Capsule Protocols
+
+time_capsules:
+  - capsule_id: "TC-2030"
+    seal_date: "2030-01-01"
+    open_date: "2050-01-01"
+    contents:
+      - "Current state snapshot"
+      - "Predictions for 2050"
+      - "Messages to future stewards"
+    locations:
+      - "Foundation vault"
+      - "Partner institution in Europe"
+      - "Partner institution in Asia"
+    verification: "Sealed with multi-party signatures"
+    
+  - capsule_id: "TC-2040"
+    seal_date: "2040-01-01"
+    open_date: "2090-01-01"
+    contents:
+      - "Current state snapshot"
+      - "Predictions for 2090"
+      - "Lessons learned from 2030 capsule"
+    status: "Planned"
+    
+  - capsule_id: "TC-CENTENNIAL"
+    seal_date: "2026-01-01"
+    open_date: "2126-01-01"
+    contents:
+      - "Complete founding era snapshot"
+      - "All Foundation tier artifacts"
+      - "Messages to 2126 stewards"
+    description: "Century capsule for 100-year continuity"
+
+---
+# Artifact Submission
+
+submission_process:
+  eligibility:
+    - "Relevant to Grey Distributed history or culture"
+    - "Quality standards met for tier"
+    - "Rights cleared for archiving"
+    
+  process:
+    1: "Submit artifact description via archive portal"
+    2: "Archive committee review (30 days)"
+    3: "Technical preparation and verification"
+    4: "Tier assignment and cataloging"
+    5: "Preservation and replication"
+    
+  contact: "archive@grey.distributed"
+
+---
+# Metrics
+
+archive_metrics:
+  total_artifacts: 89
+  by_tier:
+    foundation: 3
+    primary: 18
+    secondary: 32
+    tertiary: 36
+  by_type:
+    documents: 45
+    audiovisual: 22
+    technical: 15
+    creative: 7
+  storage:
+    total_size_tb: 128
+    replicated_size_tb: 512
+  verification:
+    last_full_verification: "2025-12-01"
+    artifacts_verified: 89
+    issues_found: 0
+
+---
+# Appendix: Artifact Categories
+
+artifact_categories:
+  - code: "document"
+    description: "Text documents, legal documents, specifications"
+    
+  - code: "audiovisual"
+    description: "Video, audio, multimedia"
+    
+  - code: "technical"
+    description: "Code, specifications, configurations"
+    
+  - code: "creative"
+    description: "Artwork, music, creative expressions"
+    
+  - code: "historical"
+    description: "Records, archives, historical documentation"
+    
+  - code: "educational"
+    description: "Curricula, tutorials, course materials"
+    
+  - code: "governance"
+    description: "Proceedings, decisions, elections"
+    
+  - code: "media"
+    description: "Press coverage, documentaries, interviews"

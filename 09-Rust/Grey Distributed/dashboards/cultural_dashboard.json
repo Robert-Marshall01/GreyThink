@@ -1,0 +1,481 @@
+{
+  "dashboard_id": "grey-cultural",
+  "title": "Grey Distributed — Cultural Integration Dashboard",
+  "description": "Monitoring Grey Distributed's integration into human civilization and culture",
+  "version": "1.0.0",
+  "refresh_interval": "1h",
+  "time_range": {
+    "default": "1y",
+    "options": ["30d", "1y", "5y", "10y", "50y", "all"]
+  },
+  "sections": [
+    {
+      "id": "cultural-overview",
+      "title": "Cultural Integration Overview",
+      "description": "High-level view of cultural penetration and recognition",
+      "layout": { "columns": 4, "rows": 2 },
+      "panels": [
+        {
+          "id": "recognition-score",
+          "title": "Recognition Score",
+          "type": "gauge",
+          "position": { "col": 0, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_cultural_recognition_score",
+          "min": 0,
+          "max": 1,
+          "description": "Public awareness and understanding of Grey Distributed"
+        },
+        {
+          "id": "trust-score",
+          "title": "Trust Score",
+          "type": "gauge",
+          "position": { "col": 1, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_cultural_trust_score",
+          "min": 0,
+          "max": 1,
+          "description": "Public trust in Grey Distributed"
+        },
+        {
+          "id": "permanence-perception",
+          "title": "Permanence Perception",
+          "type": "gauge",
+          "position": { "col": 2, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_perceived_permanence_score",
+          "min": 0,
+          "max": 1,
+          "description": "Public belief in Grey's long-term existence"
+        },
+        {
+          "id": "cultural-integration-stage",
+          "title": "Integration Stage",
+          "type": "status",
+          "position": { "col": 3, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_cultural_integration_stage",
+          "states": {
+            "novel": { "color": "blue", "label": "Novel Technology" },
+            "familiar": { "color": "cyan", "label": "Familiar Tool" },
+            "infrastructure": { "color": "green", "label": "Infrastructure" },
+            "institution": { "color": "gold", "label": "Institution" },
+            "civilizational": { "color": "purple", "label": "Civilizational Fixture" }
+          }
+        },
+        {
+          "id": "cultural-timeline",
+          "title": "Cultural Milestones",
+          "type": "timeline",
+          "position": { "col": 0, "row": 1, "width": 4, "height": 1 },
+          "metrics": [
+            "grey_education_milestones",
+            "grey_media_mentions",
+            "grey_policy_references",
+            "grey_cultural_artifacts"
+          ],
+          "annotations": true
+        }
+      ]
+    },
+    {
+      "id": "education-integration",
+      "title": "Education Integration",
+      "description": "Integration of Grey Distributed into educational systems",
+      "layout": { "columns": 4, "rows": 2 },
+      "panels": [
+        {
+          "id": "curriculum-adoption",
+          "title": "Curriculum Adoption",
+          "type": "stat",
+          "position": { "col": 0, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_curriculum_adoption_percent",
+          "format": "percent",
+          "description": "Percentage of educational systems including Grey"
+        },
+        {
+          "id": "students-reached",
+          "title": "Students Reached",
+          "type": "stat",
+          "position": { "col": 1, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_students_reached_total",
+          "format": "number",
+          "sparkline": true
+        },
+        {
+          "id": "institutions-teaching",
+          "title": "Institutions Teaching",
+          "type": "stat",
+          "position": { "col": 2, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_teaching_institutions_count",
+          "format": "number"
+        },
+        {
+          "id": "education-levels",
+          "title": "Education Levels",
+          "type": "piechart",
+          "position": { "col": 3, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_education_by_level",
+          "categories": ["primary", "secondary", "university", "professional"]
+        },
+        {
+          "id": "curriculum-by-region",
+          "title": "Curriculum Adoption by Region",
+          "type": "geomap",
+          "position": { "col": 0, "row": 1, "width": 2, "height": 1 },
+          "metric": "grey_curriculum_adoption_by_region",
+          "color_scale": {
+            "min": 0,
+            "max": 1,
+            "colors": ["#f0f0f0", "#4a90d9", "#1a365d"]
+          }
+        },
+        {
+          "id": "education-growth",
+          "title": "Education Integration Growth",
+          "type": "timeseries",
+          "position": { "col": 2, "row": 1, "width": 2, "height": 1 },
+          "metrics": [
+            { "name": "grey_curriculum_adoption_percent", "label": "Adoption %" },
+            { "name": "grey_students_reached_yoy_growth", "label": "Student Growth %" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "literature-arts",
+      "title": "Literature & Arts",
+      "description": "Grey Distributed in literature, media, and artistic expression",
+      "layout": { "columns": 4, "rows": 2 },
+      "panels": [
+        {
+          "id": "academic-citations",
+          "title": "Academic Citations",
+          "type": "stat",
+          "position": { "col": 0, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_academic_citations_total",
+          "format": "number",
+          "sparkline": true
+        },
+        {
+          "id": "media-mentions",
+          "title": "Media Mentions",
+          "type": "stat",
+          "position": { "col": 1, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_media_mentions_monthly",
+          "format": "number",
+          "sparkline": true
+        },
+        {
+          "id": "artistic-works",
+          "title": "Artistic Works",
+          "type": "stat",
+          "position": { "col": 2, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_artistic_works_catalogued",
+          "format": "number"
+        },
+        {
+          "id": "sentiment-score",
+          "title": "Public Sentiment",
+          "type": "gauge",
+          "position": { "col": 3, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_public_sentiment_score",
+          "min": -1,
+          "max": 1,
+          "thresholds": [
+            { "value": -1, "color": "red" },
+            { "value": 0, "color": "yellow" },
+            { "value": 0.5, "color": "green" }
+          ]
+        },
+        {
+          "id": "media-coverage-type",
+          "title": "Media Coverage by Type",
+          "type": "piechart",
+          "position": { "col": 0, "row": 1, "width": 1, "height": 1 },
+          "metric": "grey_media_coverage_by_type",
+          "categories": ["news", "opinion", "academic", "artistic", "social"]
+        },
+        {
+          "id": "literature-timeline",
+          "title": "Notable Publications",
+          "type": "table",
+          "position": { "col": 1, "row": 1, "width": 2, "height": 1 },
+          "metric": "grey_notable_publications",
+          "columns": [
+            { "field": "year", "label": "Year" },
+            { "field": "title", "label": "Title" },
+            { "field": "type", "label": "Type" },
+            { "field": "impact", "label": "Impact", "type": "number" }
+          ],
+          "limit": 10
+        },
+        {
+          "id": "cultural-themes",
+          "title": "Cultural Themes",
+          "type": "wordcloud",
+          "position": { "col": 3, "row": 1, "width": 1, "height": 1 },
+          "metric": "grey_cultural_themes",
+          "max_words": 30
+        }
+      ]
+    },
+    {
+      "id": "artifact-archive",
+      "title": "Cultural Artifact Archive",
+      "description": "Status of cultural artifacts tied to Grey Distributed",
+      "layout": { "columns": 4, "rows": 2 },
+      "panels": [
+        {
+          "id": "artifacts-total",
+          "title": "Total Artifacts",
+          "type": "stat",
+          "position": { "col": 0, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_cultural_artifacts_total",
+          "format": "number"
+        },
+        {
+          "id": "archive-health",
+          "title": "Archive Health",
+          "type": "gauge",
+          "position": { "col": 1, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_cultural_archive_health",
+          "min": 0,
+          "max": 1
+        },
+        {
+          "id": "format-diversity",
+          "title": "Format Diversity",
+          "type": "stat",
+          "position": { "col": 2, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_artifact_format_count",
+          "format": "number"
+        },
+        {
+          "id": "redundancy-level",
+          "title": "Redundancy Level",
+          "type": "stat",
+          "position": { "col": 3, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_artifact_redundancy_level",
+          "format": "number",
+          "suffix": "x"
+        },
+        {
+          "id": "artifacts-by-category",
+          "title": "Artifacts by Category",
+          "type": "barchart",
+          "position": { "col": 0, "row": 1, "width": 2, "height": 1 },
+          "metric": "grey_artifacts_by_category",
+          "groupBy": "category"
+        },
+        {
+          "id": "artifacts-by-era",
+          "title": "Artifacts by Era",
+          "type": "timeseries",
+          "position": { "col": 2, "row": 1, "width": 2, "height": 1 },
+          "metric": "grey_artifacts_by_creation_date",
+          "cumulative": true
+        }
+      ]
+    },
+    {
+      "id": "policy-governance",
+      "title": "Policy & Governance Integration",
+      "description": "Integration into legal and governance frameworks",
+      "layout": { "columns": 4, "rows": 2 },
+      "panels": [
+        {
+          "id": "jurisdictions-recognizing",
+          "title": "Recognizing Jurisdictions",
+          "type": "stat",
+          "position": { "col": 0, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_recognizing_jurisdictions_count",
+          "format": "number"
+        },
+        {
+          "id": "legal-references",
+          "title": "Legal References",
+          "type": "stat",
+          "position": { "col": 1, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_legal_references_total",
+          "format": "number",
+          "sparkline": true
+        },
+        {
+          "id": "regulatory-compliance",
+          "title": "Regulatory Compliance",
+          "type": "gauge",
+          "position": { "col": 2, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_regulatory_compliance_score",
+          "min": 0,
+          "max": 1
+        },
+        {
+          "id": "policy-influence",
+          "title": "Policy Influence Score",
+          "type": "gauge",
+          "position": { "col": 3, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_policy_influence_score",
+          "min": 0,
+          "max": 1
+        },
+        {
+          "id": "recognition-map",
+          "title": "Legal Recognition by Jurisdiction",
+          "type": "geomap",
+          "position": { "col": 0, "row": 1, "width": 2, "height": 1 },
+          "metric": "grey_legal_recognition_by_jurisdiction",
+          "color_scale": {
+            "min": 0,
+            "max": 3,
+            "labels": ["None", "Referenced", "Regulated", "Enshrined"]
+          }
+        },
+        {
+          "id": "policy-timeline",
+          "title": "Policy Milestones",
+          "type": "timeline",
+          "position": { "col": 2, "row": 1, "width": 2, "height": 1 },
+          "metric": "grey_policy_milestones",
+          "annotations": true
+        }
+      ]
+    },
+    {
+      "id": "cross-generational",
+      "title": "Cross-Generational Impact",
+      "description": "Impact across generations and long-term cultural embedding",
+      "layout": { "columns": 4, "rows": 2 },
+      "panels": [
+        {
+          "id": "generational-awareness",
+          "title": "Awareness by Generation",
+          "type": "barchart",
+          "position": { "col": 0, "row": 0, "width": 2, "height": 1 },
+          "metric": "grey_awareness_by_generation",
+          "groupBy": "generation",
+          "categories": ["silent", "boomer", "genx", "millennial", "genz", "alpha"]
+        },
+        {
+          "id": "native-users",
+          "title": "Native Users",
+          "type": "stat",
+          "position": { "col": 2, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_native_users_percent",
+          "format": "percent",
+          "description": "Users who grew up with Grey as infrastructure"
+        },
+        {
+          "id": "cultural-permanence-index",
+          "title": "Cultural Permanence Index",
+          "type": "gauge",
+          "position": { "col": 3, "row": 0, "width": 1, "height": 1 },
+          "metric": "grey_cultural_permanence_index",
+          "min": 0,
+          "max": 1,
+          "description": "Likelihood of cultural permanence"
+        },
+        {
+          "id": "intergenerational-transfer",
+          "title": "Intergenerational Knowledge Transfer",
+          "type": "sankey",
+          "position": { "col": 0, "row": 1, "width": 2, "height": 1 },
+          "metric": "grey_intergenerational_knowledge_flow",
+          "nodes": ["founders", "early_adopters", "mainstream", "natives", "future"]
+        },
+        {
+          "id": "cultural-embedding-projection",
+          "title": "Cultural Embedding Projection",
+          "type": "forecast",
+          "position": { "col": 2, "row": 1, "width": 2, "height": 1 },
+          "metric": "grey_cultural_embedding_score",
+          "forecast_horizon": "50y",
+          "confidence_bands": [0.5, 0.8, 0.95]
+        }
+      ]
+    }
+  ],
+  "alerts": [
+    {
+      "id": "trust-declining",
+      "name": "Trust Score Declining",
+      "description": "Public trust in Grey Distributed is declining",
+      "severity": "high",
+      "condition": {
+        "metric": "grey_cultural_trust_score_trend",
+        "operator": "<",
+        "threshold": -0.1
+      },
+      "for": "30d",
+      "notifications": ["council", "communications"]
+    },
+    {
+      "id": "recognition-low",
+      "name": "Recognition Score Low",
+      "description": "Cultural recognition has dropped below target",
+      "severity": "medium",
+      "condition": {
+        "metric": "grey_cultural_recognition_score",
+        "operator": "<",
+        "threshold": 0.5
+      },
+      "for": "90d",
+      "notifications": ["communications"]
+    },
+    {
+      "id": "archive-health-critical",
+      "name": "Archive Health Critical",
+      "description": "Cultural artifact archive health is degraded",
+      "severity": "high",
+      "condition": {
+        "metric": "grey_cultural_archive_health",
+        "operator": "<",
+        "threshold": 0.8
+      },
+      "for": "7d",
+      "notifications": ["preservation-team"]
+    },
+    {
+      "id": "negative-sentiment-spike",
+      "name": "Negative Sentiment Spike",
+      "description": "Public sentiment has turned negative",
+      "severity": "high",
+      "condition": {
+        "metric": "grey_public_sentiment_score",
+        "operator": "<",
+        "threshold": 0
+      },
+      "for": "7d",
+      "notifications": ["council", "communications"]
+    },
+    {
+      "id": "education-stagnation",
+      "name": "Education Integration Stagnating",
+      "description": "Educational integration growth has stalled",
+      "severity": "medium",
+      "condition": {
+        "metric": "grey_students_reached_yoy_growth",
+        "operator": "<",
+        "threshold": 0.05
+      },
+      "for": "1y",
+      "notifications": ["education-team"]
+    },
+    {
+      "id": "generational-gap",
+      "name": "Generational Awareness Gap",
+      "description": "Significant awareness gap between generations",
+      "severity": "medium",
+      "condition": {
+        "metric": "grey_generational_awareness_variance",
+        "operator": ">",
+        "threshold": 0.3
+      },
+      "for": "180d",
+      "notifications": ["communications", "education-team"]
+    }
+  ],
+  "links": [
+    { "title": "Education Curriculum", "url": "../myth/culture/education_curriculum.md" },
+    { "title": "Literature Manifesto", "url": "../myth/culture/literature_manifesto.md" },
+    { "title": "Artifacts Archive", "url": "../myth/culture/artifacts_archive.yaml" },
+    { "title": "Grey Constitution", "url": "../myth/codex/grey_constitution.md" },
+    { "title": "Myth-Tier Overview", "url": "../docs/myth_tier_overview.md" }
+  ]
+}

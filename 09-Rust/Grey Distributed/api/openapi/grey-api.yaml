@@ -1,0 +1,933 @@
+# =============================================================================
+# Grey Distributed — OpenAPI Specification
+# =============================================================================
+#
+# REST API for Grey Distributed task scheduling and cluster management.
+#
+# Features:
+# - Task submission, status, and cancellation
+# - Cluster health and resource monitoring
+# - Security attestation and tenant isolation
+#
+# Authentication:
+# - Bearer token (API key or JWT)
+# - HMAC request signing (optional)
+#
+# Versioning:
+# - URL path versioning (/api/v1/...)
+# - Backward compatible within major version
+#
+# =============================================================================
+
+openapi: "3.1.0"
+
+info:
+  title: Grey Distributed API
+  version: "1.0.0"
+  description: |
+    REST API for Grey Distributed — a secure, fault-tolerant distributed 
+    task execution platform with TEE support.
+    
+    ## Authentication
+    
+    All requests require authentication via Bearer token:
+    
+    ```
+    Authorization: Bearer <api-key>
+    ```
+    
+    ## Tenant Isolation
+    
+    Multi-tenant deployments require tenant ID header:
+    
+    ```
+    X-Grey-Tenant-ID: <tenant-id>
+    ```
+    
+    ## Rate Limiting
+    
+    Requests are rate-limited per tenant. When exceeded:
+    - Response: 429 Too Many Requests
+    - Header: Retry-After (seconds)
+    
+    ## Error Handling
+    
+    All errors return JSON with:
+    - `error`: Error code
+    - `message`: Human-readable description
+    - `details`: Additional context (optional)
+    
+  contact:
+    name: Grey Platform Team
+    email: platform@grey.io
+    url: https://grey.io/docs
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: https://api.grey.io
+    description: Production
+  - url: https://staging-api.grey.io
+    description: Staging
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: Tasks
+    description: Task submission, status, and management
+  - name: Cluster
+    description: Cluster health and resource monitoring
+  - name: Security
+    description: Attestation and tenant isolation
+
+# =============================================================================
+# Security Schemes
+# =============================================================================
+
+security:
+  - bearerAuth: []
+  - apiKeyAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT or API key token
+      
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Grey-API-Key
+      description: API key header
+
+  # ===========================================================================
+  # Common Parameters
+  # ===========================================================================
+  
+  parameters:
+    tenantId:
+      name: X-Grey-Tenant-ID
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Tenant identifier for multi-tenant deployments
+      
+    taskId:
+      name: task_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Unique task identifier
+      
+    nodeId:
+      name: node_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Cluster node identifier
+
+  # ===========================================================================
+  # Request/Response Schemas
+  # ===========================================================================
+  
+  schemas:
+    # -------------------------------------------------------------------------
+    # Task Schemas
+    # -------------------------------------------------------------------------
+    
+    TaskType:
+      type: string
+      enum:
+        - stateless
+        - stateful
+        - pipeline
+        - batch
+      description: |
+        Task execution type:
+        - `stateless`: Pure computation, no shared state
+        - `stateful`: Maintains state across invocations
+        - `pipeline`: DAG of dependent tasks
+        - `batch`: Multiple independent tasks
+    
+    TaskStatus:
+      type: string
+      enum:
+        - pending
+        - queued
+        - running
+        - completed
+        - failed
+        - cancelled
+        - timeout
+      description: Task lifecycle state
+    
+    TaskSubmitRequest:
+      type: object
+      required:
+        - type
+        - payload
+      properties:
+        type:
+          $ref: '#/components/schemas/TaskType'
+        payload:
+          type: object
+          additionalProperties: true
+          description: Task-specific input data
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 5
+          description: Execution priority (higher = more urgent)
+        timeout_seconds:
+          type: integer
+          minimum: 1
+          maximum: 86400
+          description: Maximum execution time
+        idempotency_key:
+          type: string
+          maxLength: 256
+          description: Unique key for request deduplication
+        dependencies:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Task IDs that must complete first
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+          description: Key-value pairs for organization
+        tee_required:
+          type: boolean
+          default: false
+          description: Require TEE (enclave) execution
+      example:
+        type: stateless
+        payload:
+          function: process_data
+          input: [1, 2, 3, 4, 5]
+        priority: 7
+        labels:
+          env: production
+          team: data-science
+    
+    TaskBatchRequest:
+      type: object
+      required:
+        - tasks
+      properties:
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskSubmitRequest'
+          minItems: 1
+          maxItems: 1000
+        wait:
+          type: boolean
+          default: false
+          description: Wait for all tasks to complete
+    
+    PipelineStage:
+      type: object
+      required:
+        - id
+        - type
+        - payload
+      properties:
+        id:
+          type: string
+          description: Stage identifier (unique within pipeline)
+        type:
+          $ref: '#/components/schemas/TaskType'
+        payload:
+          type: object
+          additionalProperties: true
+        depends_on:
+          type: array
+          items:
+            type: string
+          description: Stage IDs this stage depends on
+    
+    TaskResponse:
+      type: object
+      properties:
+        task_id:
+          type: string
+          format: uuid
+          description: Unique task identifier
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        result:
+          type: object
+          nullable: true
+          description: Task result (when completed)
+        error:
+          type: string
+          nullable: true
+          description: Error message (when failed)
+        proof_artifact:
+          type: string
+          format: byte
+          nullable: true
+          description: TEE proof (hex-encoded)
+        execution_node:
+          type: string
+          nullable: true
+          description: Node that executed the task
+        retry_count:
+          type: integer
+          default: 0
+      example:
+        task_id: "550e8400-e29b-41d4-a716-446655440000"
+        status: completed
+        created_at: "2024-01-15T10:30:00Z"
+        updated_at: "2024-01-15T10:30:05Z"
+        result:
+          output: [2, 4, 6, 8, 10]
+        execution_node: "grey-worker-7"
+        retry_count: 0
+    
+    TaskListResponse:
+      type: object
+      properties:
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskResponse'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+    
+    TaskReplayRequest:
+      type: object
+      required:
+        - original_task_id
+      properties:
+        original_task_id:
+          type: string
+          format: uuid
+        at_timestamp:
+          type: string
+          format: date-time
+          description: Point-in-time state reconstruction
+        payload_override:
+          type: object
+          additionalProperties: true
+          description: Modified payload for replay
+    
+    # -------------------------------------------------------------------------
+    # Cluster Schemas
+    # -------------------------------------------------------------------------
+    
+    ClusterHealthResponse:
+      type: object
+      properties:
+        healthy:
+          type: boolean
+        nodes:
+          type: object
+          properties:
+            total:
+              type: integer
+            active:
+              type: integer
+            draining:
+              type: integer
+            quarantined:
+              type: integer
+        utilization:
+          type: object
+          properties:
+            cpu:
+              type: number
+              format: float
+            memory:
+              type: number
+              format: float
+        queue:
+          type: object
+          properties:
+            depth:
+              type: integer
+            oldest_task_age_seconds:
+              type: number
+        throughput:
+          type: object
+          properties:
+            tasks_per_second:
+              type: number
+            tasks_completed_1h:
+              type: integer
+        consensus:
+          type: object
+          properties:
+            leader:
+              type: string
+            term:
+              type: integer
+            quorum_satisfied:
+              type: boolean
+      example:
+        healthy: true
+        nodes:
+          total: 15
+          active: 14
+          draining: 1
+          quarantined: 0
+        utilization:
+          cpu: 0.72
+          memory: 0.65
+        queue:
+          depth: 1234
+          oldest_task_age_seconds: 2.5
+        throughput:
+          tasks_per_second: 5000
+          tasks_completed_1h: 18000000
+        consensus:
+          leader: grey-coordinator-0
+          term: 42
+          quorum_satisfied: true
+    
+    ClusterNodeResponse:
+      type: object
+      properties:
+        node_id:
+          type: string
+        role:
+          type: string
+          enum: [coordinator, worker]
+        status:
+          type: string
+          enum: [active, draining, quarantined, offline]
+        address:
+          type: string
+        cpu_cores:
+          type: integer
+        memory_gb:
+          type: number
+        tasks_running:
+          type: integer
+        uptime_seconds:
+          type: integer
+        tee_enabled:
+          type: boolean
+    
+    TenantUsageResponse:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+        quotas:
+          type: object
+          properties:
+            cpu_cores:
+              type: object
+              properties:
+                limit:
+                  type: integer
+                used:
+                  type: integer
+            memory_gb:
+              type: object
+              properties:
+                limit:
+                  type: integer
+                used:
+                  type: integer
+            max_concurrent_tasks:
+              type: object
+              properties:
+                limit:
+                  type: integer
+                used:
+                  type: integer
+        throttled:
+          type: boolean
+        tasks_submitted_24h:
+          type: integer
+        tasks_completed_24h:
+          type: integer
+    
+    # -------------------------------------------------------------------------
+    # Security Schemas
+    # -------------------------------------------------------------------------
+    
+    AttestationResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        node_id:
+          type: string
+        platform:
+          type: string
+          enum: [sgx, sev, tdx, none]
+        mrenclave:
+          type: string
+          nullable: true
+          description: SGX enclave measurement
+        mrsigner:
+          type: string
+          nullable: true
+          description: SGX signer measurement
+        verified_at:
+          type: string
+          format: date-time
+        quote:
+          type: string
+          format: byte
+          nullable: true
+          description: Raw attestation quote (hex-encoded)
+      example:
+        valid: true
+        node_id: grey-worker-7
+        platform: sgx
+        mrenclave: "a1b2c3d4..."
+        mrsigner: "e5f6g7h8..."
+        verified_at: "2024-01-15T10:30:00Z"
+    
+    IsolationStatusResponse:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+        isolation_level:
+          type: string
+          enum: [namespace, enclave, vm]
+        boundaries:
+          type: object
+          properties:
+            network:
+              type: boolean
+            storage:
+              type: boolean
+            compute:
+              type: boolean
+        violations:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              type:
+                type: string
+              severity:
+                type: string
+        last_verified:
+          type: string
+          format: date-time
+    
+    # -------------------------------------------------------------------------
+    # Error Schemas
+    # -------------------------------------------------------------------------
+    
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          nullable: true
+          additionalProperties: true
+        request_id:
+          type: string
+          description: Request ID for support
+      example:
+        error: VALIDATION_ERROR
+        message: "Invalid task type"
+        details:
+          field: type
+          allowed_values: [stateless, stateful, pipeline, batch]
+        request_id: "req-abc123"
+
+# =============================================================================
+# API Paths
+# =============================================================================
+
+paths:
+  # ===========================================================================
+  # Task Endpoints
+  # ===========================================================================
+  
+  /api/v1/tasks:
+    post:
+      tags: [Tasks]
+      summary: Submit a task
+      description: |
+        Submit a new task to the Grey cluster for execution.
+        
+        The task will be queued and scheduled based on priority and dependencies.
+        Returns immediately with task ID; use GET to poll for status.
+        
+        **Idempotency**: If `idempotency_key` is provided, duplicate submissions
+        return the existing task instead of creating a new one.
+      operationId: submitTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskSubmitRequest'
+      responses:
+        '201':
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+        '403':
+          description: Not authorized
+        '429':
+          description: Rate limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying
+    
+    get:
+      tags: [Tasks]
+      summary: List tasks
+      description: |
+        List tasks with optional filtering by status, labels, and time range.
+        Results are paginated.
+      operationId: listTasks
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/TaskStatus'
+        - name: labels
+          in: query
+          schema:
+            type: string
+          description: JSON-encoded label filters
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Only tasks created after this time
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            maximum: 1000
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Task list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskListResponse'
+        '401':
+          description: Authentication required
+  
+  /api/v1/tasks/batch:
+    post:
+      tags: [Tasks]
+      summary: Submit batch of tasks
+      description: |
+        Submit multiple tasks in a single request.
+        
+        More efficient than individual submissions for large batches.
+        If `wait` is true, blocks until all tasks complete.
+      operationId: submitBatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskBatchRequest'
+      responses:
+        '201':
+          description: Batch created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TaskResponse'
+                  batch_id:
+                    type: string
+        '400':
+          description: Validation error
+        '401':
+          description: Authentication required
+  
+  /api/v1/tasks/replay:
+    post:
+      tags: [Tasks]
+      summary: Replay a task
+      description: |
+        Replay a previously executed task, optionally with modified payload
+        or point-in-time state reconstruction.
+        
+        Useful for debugging or re-running failed tasks.
+      operationId: replayTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskReplayRequest'
+      responses:
+        '201':
+          description: Replay task created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '404':
+          description: Original task not found
+        '401':
+          description: Authentication required
+  
+  /api/v1/tasks/{task_id}:
+    parameters:
+      - $ref: '#/components/parameters/taskId'
+    
+    get:
+      tags: [Tasks]
+      summary: Get task status
+      description: Get current status and result of a task.
+      operationId: getTaskStatus
+      responses:
+        '200':
+          description: Task details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '404':
+          description: Task not found
+        '401':
+          description: Authentication required
+    
+    delete:
+      tags: [Tasks]
+      summary: Cancel task
+      description: |
+        Cancel a pending or running task.
+        
+        Returns true if cancellation was accepted.
+        Note: Task may complete before cancellation takes effect.
+      operationId: cancelTask
+      responses:
+        '200':
+          description: Cancellation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cancelled:
+                    type: boolean
+                  message:
+                    type: string
+        '404':
+          description: Task not found
+        '401':
+          description: Authentication required
+  
+  /api/v1/tasks/{task_id}/proof:
+    parameters:
+      - $ref: '#/components/parameters/taskId'
+    
+    get:
+      tags: [Tasks]
+      summary: Get task proof
+      description: |
+        Retrieve the proof artifact for a completed TEE task.
+        
+        Only available for tasks that executed in TEE enclaves.
+        Proof contains attestation data and execution trace.
+      operationId: getTaskProof
+      responses:
+        '200':
+          description: Proof artifact
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  proof:
+                    type: string
+                    format: byte
+                    description: Hex-encoded proof bytes
+                  algorithm:
+                    type: string
+                  verified:
+                    type: boolean
+        '404':
+          description: Task not found or no proof available
+        '401':
+          description: Authentication required
+
+  # ===========================================================================
+  # Cluster Endpoints
+  # ===========================================================================
+  
+  /api/v1/cluster:
+    get:
+      tags: [Cluster]
+      summary: Get cluster health
+      description: |
+        Get overall cluster health, resource utilization, and throughput metrics.
+      operationId: getClusterHealth
+      responses:
+        '200':
+          description: Cluster health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterHealthResponse'
+        '401':
+          description: Authentication required
+  
+  /api/v1/cluster/nodes:
+    get:
+      tags: [Cluster]
+      summary: List cluster nodes
+      description: Get detailed information about all cluster nodes.
+      operationId: listClusterNodes
+      responses:
+        '200':
+          description: Node list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ClusterNodeResponse'
+        '401':
+          description: Authentication required
+  
+  /api/v1/cluster/usage:
+    get:
+      tags: [Cluster]
+      summary: Get tenant usage
+      description: |
+        Get resource usage and quota status for the current tenant.
+      operationId: getTenantUsage
+      responses:
+        '200':
+          description: Usage information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantUsageResponse'
+        '401':
+          description: Authentication required
+
+  # ===========================================================================
+  # Security Endpoints
+  # ===========================================================================
+  
+  /api/v1/security/attestation:
+    post:
+      tags: [Security]
+      summary: Request attestation
+      description: |
+        Request fresh TEE attestation from the cluster.
+        
+        Useful for verifying cluster security before sensitive operations.
+      operationId: requestAttestation
+      responses:
+        '200':
+          description: Attestation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttestationResponse'
+        '401':
+          description: Authentication required
+  
+  /api/v1/security/attestation/{node_id}:
+    parameters:
+      - $ref: '#/components/parameters/nodeId'
+    
+    get:
+      tags: [Security]
+      summary: Verify node attestation
+      description: |
+        Verify TEE attestation for a specific node.
+        
+        Returns platform-specific measurements (SGX mrenclave, etc.)
+      operationId: verifyNodeAttestation
+      responses:
+        '200':
+          description: Attestation details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttestationResponse'
+        '404':
+          description: Node not found
+        '401':
+          description: Authentication required
+  
+  /api/v1/security/isolation:
+    get:
+      tags: [Security]
+      summary: Get isolation status
+      description: |
+        Get isolation status for the current tenant.
+        
+        Returns information about isolation boundaries,
+        configured policies, and any detected violations.
+      operationId: getIsolationStatus
+      responses:
+        '200':
+          description: Isolation status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IsolationStatusResponse'
+        '401':
+          description: Authentication required

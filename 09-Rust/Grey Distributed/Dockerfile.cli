@@ -1,0 +1,57 @@
+# =============================================================================
+# Grey Distributed CLI - Lightweight Dockerfile 
+# =============================================================================
+#
+# Minimal image containing only the greyctl CLI tool.
+# Useful for CI/CD pipelines and client-only deployments.
+#
+# Build:
+#   docker build -f Dockerfile.cli -t greyctl:latest .
+#
+# Run:
+#   docker run greyctl:latest cluster health
+#
+# =============================================================================
+
+FROM golang:1.22-alpine AS builder
+
+RUN apk add --no-cache git ca-certificates
+
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_TIME=unknown
+
+WORKDIR /build
+
+COPY go.mod go.sum* ./
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -trimpath \
+    -ldflags "-s -w \
+        -X main.Version=${VERSION} \
+        -X main.Commit=${COMMIT} \
+        -X main.BuildTime=${BUILD_TIME}" \
+    -o /build/bin/greyctl \
+    ./cmd/greyctl
+
+# -----------------------------------------------------------------------------
+# Minimal runtime image
+# -----------------------------------------------------------------------------
+FROM alpine:3.19
+
+RUN apk add --no-cache ca-certificates && rm -rf /var/cache/apk/*
+
+RUN addgroup -g 1000 grey && \
+    adduser -u 1000 -G grey -h /home/grey -D grey
+
+COPY --from=builder /build/bin/greyctl /usr/local/bin/greyctl
+RUN chmod +x /usr/local/bin/greyctl
+
+USER grey
+WORKDIR /home/grey
+
+ENTRYPOINT ["/usr/local/bin/greyctl"]
+CMD ["--help"]

@@ -1,0 +1,477 @@
+# Grey Distributed — Government Federation Policy
+#
+# Policy framework for sovereign cluster federation in government deployments.
+# Defines security classifications, data handling rules, and federation protocols.
+
+apiVersion: grey.io/v1
+kind: FederationPolicy
+metadata:
+  name: government-federation-policy
+  namespace: grey-system
+  labels:
+    sector: government
+    classification: official
+    compliance: [fedramp, fisma, itar]
+  annotations:
+    description: "Sovereign cluster federation policy for government workloads"
+    version: "2.1.0"
+    lastReviewed: "2026-01-15"
+    nextReview: "2026-07-15"
+
+spec:
+  # ==========================================================================
+  # Sovereignty Configuration
+  # ==========================================================================
+  sovereignty:
+    # Primary jurisdiction for this cluster
+    jurisdiction: US
+    
+    # Data residency requirements
+    dataResidency:
+      primaryRegion: us-gov-east
+      allowedRegions:
+        - us-gov-east
+        - us-gov-west
+      prohibitedRegions:
+        - "*"  # All non-US-GOV regions
+      enforceAtRest: true
+      enforceInTransit: true
+    
+    # Legal framework
+    legalFramework:
+      primaryLaw: "Federal Information Security Management Act (FISMA)"
+      additionalRequirements:
+        - name: FedRAMP
+          level: Moderate
+        - name: ITAR
+          applicable: conditional
+          conditions: "Defense-related workloads"
+        - name: CJIS
+          applicable: conditional
+          conditions: "Criminal justice workloads"
+
+  # ==========================================================================
+  # Security Classification
+  # ==========================================================================
+  classification:
+    # Supported classification levels
+    levels:
+      - name: UNCLASSIFIED
+        code: U
+        color: green
+        federationAllowed: true
+        crossBorderAllowed: false
+        
+      - name: CUI
+        code: CUI
+        color: yellow
+        federationAllowed: true
+        crossBorderAllowed: false
+        markingRequired: true
+        handlingCaveats:
+          - FOUO
+          - LES
+          - NOFORN
+          
+      - name: SECRET
+        code: S
+        color: red
+        federationAllowed: limited
+        federationPartners: [us-gov-cleared]
+        crossBorderAllowed: false
+        airgapRequired: true
+        markingRequired: true
+    
+    # Default for unmarked data
+    defaultLevel: CUI
+    
+    # Classification marking requirements
+    marking:
+      bannerRequired: true
+      footerRequired: true
+      metadataRequired: true
+      auditMarkingChanges: true
+
+  # ==========================================================================
+  # Federation Rules
+  # ==========================================================================
+  federation:
+    # Federation mode
+    mode: controlled
+    
+    # Partner cluster tiers
+    partnerTiers:
+      - tier: 1
+        name: FedGov-Primary
+        description: "Federal government partner clusters"
+        trustLevel: high
+        autoApprove: false
+        requirements:
+          - fedrampAuthorization: true
+          - fismaCompliant: true
+          - continuousMonitoring: true
+          
+      - tier: 2
+        name: FedGov-Secondary
+        description: "State/local government clusters"
+        trustLevel: medium
+        autoApprove: false
+        requirements:
+          - stateRampAuthorization: true
+          - securityAssessment: true
+          
+      - tier: 3
+        name: Contractor
+        description: "Cleared contractor clusters"
+        trustLevel: conditional
+        autoApprove: false
+        requirements:
+          - fedrampAuthorization: true
+          - contractApproval: true
+          - facilitySecurityClearance: true
+    
+    # Resource sharing policies
+    resourceSharing:
+      enabled: true
+      
+      # What can be shared
+      allowedResources:
+        - type: compute
+          maxSharePercent: 30
+          classificationLimit: UNCLASSIFIED
+          
+        - type: storage
+          maxSharePercent: 20
+          classificationLimit: UNCLASSIFIED
+          encryptionRequired: true
+          
+        - type: network
+          maxSharePercent: 25
+          classificationLimit: UNCLASSIFIED
+      
+      # Priority rules
+      priority:
+        localWorkloadsFirst: true
+        missionCriticalReserve: 40  # percent
+        
+      # Approval workflow
+      approvalRequired:
+        threshold: 1000  # tokens
+        approvers:
+          - role: federation-admin
+          - role: security-officer
+        escalationPath:
+          - level: 1
+            timeout: 4h
+            approver: federation-admin
+          - level: 2
+            timeout: 8h
+            approver: ciso
+    
+    # Cross-cluster attestation
+    attestation:
+      required: true
+      frequency: 1h
+      
+      attestationTypes:
+        - securityPosture
+        - complianceStatus
+        - resourceAvailability
+        - operationalHealth
+      
+      failurePolicy:
+        action: quarantine
+        gracePeriod: 30m
+        notifyRoles: [security-officer, federation-admin]
+
+  # ==========================================================================
+  # Network Security
+  # ==========================================================================
+  network:
+    # Encryption requirements
+    encryption:
+      algorithm: AES-256-GCM
+      keyExchange: ECDH-P384
+      certificateAuthority: government-pki
+      certificateRotation: 90d
+      
+    # Connection requirements
+    connections:
+      type: dedicated  # dedicated | vpn | internet
+      
+      # For dedicated connections
+      dedicated:
+        provider: government-network
+        bandwidth: 10Gbps
+        redundancy: dual-path
+        
+      # For VPN fallback
+      vpn:
+        type: ipsec
+        encryption: aes-256-gcm
+        authentication: certificate
+        ikeVersion: 2
+    
+    # Firewall rules
+    firewallPolicy:
+      defaultAction: deny
+      
+      allowedPorts:
+        - port: 443
+          protocol: tcp
+          description: "Grey API (TLS)"
+        - port: 6443
+          protocol: tcp
+          description: "Control plane"
+        - port: 10250-10255
+          protocol: tcp
+          description: "Node communication"
+      
+      ipAllowlist:
+        - cidr: 10.0.0.0/8
+          description: "Government network"
+        - cidr: 172.16.0.0/12
+          description: "Contractor VPN"
+      
+      geoBlocking:
+        enabled: true
+        allowedCountries: [US]
+
+  # ==========================================================================
+  # Access Control
+  # ==========================================================================
+  accessControl:
+    # Identity provider requirements
+    identityProvider:
+      type: piv  # CAC/PIV required
+      fallback: none
+      mfaRequired: true
+      phishingResistantMfa: true
+      
+    # Role definitions
+    roles:
+      - name: federation-admin
+        description: "Manages federation relationships"
+        clearanceRequired: SECRET
+        permissions:
+          - federation:*
+          - partner:*
+          - policy:read
+          
+      - name: security-officer
+        description: "Security oversight"
+        clearanceRequired: SECRET
+        permissions:
+          - security:*
+          - audit:*
+          - policy:*
+          
+      - name: operator
+        description: "Day-to-day operations"
+        clearanceRequired: CUI
+        permissions:
+          - cluster:read
+          - workload:*
+          - monitoring:read
+          
+      - name: auditor
+        description: "Compliance auditing"
+        clearanceRequired: CUI
+        readOnly: true
+        permissions:
+          - audit:read
+          - compliance:read
+          - federation:read
+    
+    # Session requirements
+    session:
+      maxDuration: 8h
+      idleTimeout: 15m
+      reauthenticationRequired: true
+      concurrentSessions: 1
+
+  # ==========================================================================
+  # Audit & Compliance
+  # ==========================================================================
+  audit:
+    # Logging requirements
+    logging:
+      level: comprehensive
+      
+      events:
+        - category: authentication
+          retention: 7y
+        - category: authorization
+          retention: 7y
+        - category: dataAccess
+          retention: 7y
+        - category: configuration
+          retention: 7y
+        - category: federation
+          retention: 7y
+      
+      destinations:
+        - type: immutableStorage
+          location: us-gov-east
+          encryption: true
+        - type: siem
+          connector: splunk-gov
+          realtime: true
+    
+    # Compliance reporting
+    compliance:
+      frameworks:
+        - name: FISMA
+          controlFamily: NIST-800-53
+          assessmentFrequency: annual
+          continuousMonitoring: true
+          
+        - name: FedRAMP
+          level: Moderate
+          assessmentFrequency: annual
+          continuousMonitoring: monthly
+      
+      # Automated compliance checks
+      automatedChecks:
+        enabled: true
+        frequency: 1h
+        alertThreshold: medium
+        
+        checks:
+          - name: encryption-at-rest
+            control: SC-28
+            critical: true
+          - name: encryption-in-transit
+            control: SC-8
+            critical: true
+          - name: access-control
+            control: AC-2
+            critical: true
+          - name: audit-logging
+            control: AU-2
+            critical: true
+          - name: configuration-baseline
+            control: CM-2
+            critical: false
+
+  # ==========================================================================
+  # Incident Response
+  # ==========================================================================
+  incidentResponse:
+    # Classification of incidents
+    severityLevels:
+      - level: critical
+        description: "Active threat, data breach, service outage"
+        responseTime: 15m
+        notifyAgency: true
+        cisa: true
+        
+      - level: high
+        description: "Potential breach, compliance violation"
+        responseTime: 1h
+        notifyAgency: true
+        
+      - level: medium
+        description: "Security anomaly, policy violation"
+        responseTime: 4h
+        
+      - level: low
+        description: "Minor issue, informational"
+        responseTime: 24h
+    
+    # Notification chain
+    notificationChain:
+      - role: security-operations-center
+        method: [automated, phone]
+        timeout: 5m
+      - role: incident-commander
+        method: [phone, email]
+        timeout: 15m
+      - role: ciso
+        method: [phone, email]
+        timeout: 30m
+      - role: agency-cio
+        method: [phone, email]
+        conditions: [critical, high]
+    
+    # Reporting requirements
+    reporting:
+      usaCert:
+        required: true
+        threshold: high
+        timeframe: 1h
+      cisa:
+        required: true
+        threshold: critical
+        timeframe: 24h
+
+  # ==========================================================================
+  # Disaster Recovery
+  # ==========================================================================
+  disasterRecovery:
+    # Recovery objectives
+    objectives:
+      rto: 4h   # Recovery Time Objective
+      rpo: 1h   # Recovery Point Objective
+      
+    # Backup configuration
+    backup:
+      frequency: 1h
+      retention: 90d
+      encryption: true
+      offsite: true
+      offsiteRegion: us-gov-west
+      
+    # Failover configuration
+    failover:
+      automatic: false  # Manual approval required
+      approvalRequired: true
+      approvers: [ciso, system-owner]
+      
+    # Testing requirements
+    testing:
+      frequency: quarterly
+      scope: full
+      documentation: required
+
+---
+# Partner Cluster Definitions
+apiVersion: grey.io/v1
+kind: FederationPartner
+metadata:
+  name: dod-partner-cluster
+  namespace: grey-system
+  labels:
+    sector: government
+    agency: dod
+    tier: "1"
+
+spec:
+  displayName: "DoD Partner Cluster"
+  
+  endpoints:
+    control: "https://grey.dod.mil:6443"
+    api: "https://api.grey.dod.mil"
+    
+  authentication:
+    type: mutual-tls
+    certificateIssuer: dod-pki
+    
+  classification:
+    maxLevel: SECRET
+    
+  capabilities:
+    compute: true
+    storage: true
+    network: true
+    
+  quotas:
+    inboundTokens: 100000
+    outboundTokens: 100000
+    
+  status:
+    approved: true
+    approvedBy: federation-admin
+    approvedAt: "2025-12-01T00:00:00Z"
+    lastAttestation: "2026-02-04T10:00:00Z"
+    attestationStatus: verified

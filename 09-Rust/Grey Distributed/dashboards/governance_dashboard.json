@@ -1,0 +1,954 @@
+{
+  "__metadata": {
+    "name": "Grey Governance Dashboard",
+    "version": "1.0.0",
+    "description": "Monitors tenant rights, resource allocation policies, and dispute resolution",
+    "author": "Grey Distributed Team"
+  },
+  "dashboard": {
+    "id": null,
+    "uid": "grey-governance",
+    "title": "Grey Governance Dashboard",
+    "description": "Real-time visibility into governance policies, tenant rights, and arbitration",
+    "tags": ["grey", "governance", "tenants", "policies", "disputes"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "1m",
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "annotations": {
+      "list": [
+        {
+          "name": "Policy Changes",
+          "datasource": "Prometheus",
+          "enable": true,
+          "expr": "changes(grey_governance_policy_version[1m]) > 0",
+          "iconColor": "rgba(255, 193, 7, 1)",
+          "titleFormat": "Policy Updated",
+          "textFormat": "Policy: {{policy_name}} v{{version}}"
+        },
+        {
+          "name": "Disputes Opened",
+          "datasource": "Prometheus",
+          "enable": true,
+          "expr": "increase(grey_governance_disputes_opened_total[1m]) > 0",
+          "iconColor": "rgba(255, 96, 96, 1)",
+          "titleFormat": "Dispute Opened",
+          "textFormat": "Tenant: {{tenant_id}}, Type: {{dispute_type}}"
+        }
+      ]
+    },
+    "templating": {
+      "list": [
+        {
+          "name": "tenant",
+          "label": "Tenant",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(grey_governance_tenant_info, tenant_id)",
+          "current": { "text": "All", "value": "$__all" },
+          "multi": true,
+          "includeAll": true,
+          "allValue": ".*"
+        },
+        {
+          "name": "tier",
+          "label": "Tenant Tier",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(grey_governance_tenant_info, tier)",
+          "current": { "text": "All", "value": "$__all" },
+          "multi": true,
+          "includeAll": true
+        },
+        {
+          "name": "policy",
+          "label": "Policy",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(grey_governance_policy_info, policy_name)",
+          "current": { "text": "All", "value": "$__all" },
+          "multi": true,
+          "includeAll": true
+        }
+      ]
+    },
+    "rows": [
+      {
+        "title": "Governance Overview",
+        "collapse": false,
+        "panels": [
+          {
+            "id": 1,
+            "type": "stat",
+            "title": "Total Tenants",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+            "targets": [
+              {
+                "expr": "count(grey_governance_tenant_info{tenant_id=~\"$tenant\"})",
+                "legendFormat": ""
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "thresholds": {
+                  "steps": [{ "color": "blue", "value": null }]
+                }
+              }
+            }
+          },
+          {
+            "id": 2,
+            "type": "stat",
+            "title": "Active Policies",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+            "targets": [
+              {
+                "expr": "count(grey_governance_policy_info{policy_name=~\"$policy\", status=\"active\"})",
+                "legendFormat": ""
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "thresholds": {
+                  "steps": [{ "color": "green", "value": null }]
+                }
+              }
+            }
+          },
+          {
+            "id": 3,
+            "type": "stat",
+            "title": "Open Disputes",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+            "targets": [
+              {
+                "expr": "sum(grey_governance_disputes_open{tenant_id=~\"$tenant\"})",
+                "legendFormat": ""
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "thresholds": {
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 1 },
+                    { "color": "orange", "value": 5 },
+                    { "color": "red", "value": 10 }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 4,
+            "type": "stat",
+            "title": "SLA Compliance Rate",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+            "targets": [
+              {
+                "expr": "(sum(grey_governance_sla_met{tenant_id=~\"$tenant\"}) / sum(grey_governance_sla_total{tenant_id=~\"$tenant\"})) * 100",
+                "legendFormat": ""
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "thresholds": {
+                  "steps": [
+                    { "color": "red", "value": null },
+                    { "color": "yellow", "value": 95 },
+                    { "color": "green", "value": 99 }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 5,
+            "type": "stat",
+            "title": "Quota Utilization",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+            "targets": [
+              {
+                "expr": "(sum(grey_governance_quota_used{tenant_id=~\"$tenant\"}) / sum(grey_governance_quota_limit{tenant_id=~\"$tenant\"})) * 100",
+                "legendFormat": ""
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "thresholds": {
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 70 },
+                    { "color": "orange", "value": 85 },
+                    { "color": "red", "value": 95 }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 6,
+            "type": "stat",
+            "title": "Policy Violations (24h)",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+            "targets": [
+              {
+                "expr": "sum(increase(grey_governance_policy_violations_total{tenant_id=~\"$tenant\"}[24h]))",
+                "legendFormat": ""
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "thresholds": {
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 1 },
+                    { "color": "red", "value": 10 }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "Tenant Rights & Isolation",
+        "collapse": false,
+        "panels": [
+          {
+            "id": 10,
+            "type": "table",
+            "title": "Tenant Status",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 0, "y": 4, "w": 12, "h": 10 },
+            "targets": [
+              {
+                "expr": "grey_governance_tenant_info{tenant_id=~\"$tenant\", tier=~\"$tier\"}",
+                "format": "table",
+                "instant": true
+              }
+            ],
+            "transformations": [
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": { "__name__": true, "job": true, "instance": true },
+                  "renameByName": {
+                    "tenant_id": "Tenant ID",
+                    "tier": "Tier",
+                    "isolation_level": "Isolation",
+                    "cpu_quota": "CPU Quota",
+                    "memory_quota": "Memory Quota",
+                    "status": "Status"
+                  }
+                }
+              }
+            ],
+            "fieldConfig": {
+              "overrides": [
+                {
+                  "matcher": { "id": "byName", "options": "Status" },
+                  "properties": [
+                    {
+                      "id": "mappings",
+                      "value": [
+                        { "type": "value", "options": { "active": { "text": "Active", "color": "green" } } },
+                        { "type": "value", "options": { "suspended": { "text": "Suspended", "color": "orange" } } },
+                        { "type": "value", "options": { "terminated": { "text": "Terminated", "color": "red" } } }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "matcher": { "id": "byName", "options": "Tier" },
+                  "properties": [
+                    {
+                      "id": "mappings",
+                      "value": [
+                        { "type": "value", "options": { "enterprise": { "text": "Enterprise", "color": "purple" } } },
+                        { "type": "value", "options": { "business": { "text": "Business", "color": "blue" } } },
+                        { "type": "value", "options": { "standard": { "text": "Standard", "color": "green" } } }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": 11,
+            "type": "bargauge",
+            "title": "Isolation Score by Tenant",
+            "description": "Tenant isolation enforcement score (0-100)",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 12, "y": 4, "w": 6, "h": 10 },
+            "targets": [
+              {
+                "expr": "grey_governance_isolation_score{tenant_id=~\"$tenant\"}",
+                "legendFormat": "{{tenant_id}}"
+              }
+            ],
+            "options": {
+              "orientation": "horizontal",
+              "displayMode": "gradient",
+              "showUnfilled": true
+            },
+            "fieldConfig": {
+              "defaults": {
+                "min": 0,
+                "max": 100,
+                "thresholds": {
+                  "steps": [
+                    { "color": "red", "value": null },
+                    { "color": "yellow", "value": 70 },
+                    { "color": "green", "value": 90 }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 12,
+            "type": "timeseries",
+            "title": "Isolation Violations Over Time",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 18, "y": 4, "w": 6, "h": 10 },
+            "targets": [
+              {
+                "expr": "sum(rate(grey_governance_isolation_violations_total{tenant_id=~\"$tenant\"}[5m])) by (tenant_id, violation_type)",
+                "legendFormat": "{{tenant_id}}: {{violation_type}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "ops",
+                "custom": {
+                  "drawStyle": "bars",
+                  "fillOpacity": 50
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "Resource Allocation",
+        "collapse": false,
+        "panels": [
+          {
+            "id": 20,
+            "type": "timeseries",
+            "title": "CPU Quota Utilization by Tenant",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 0, "y": 14, "w": 8, "h": 8 },
+            "targets": [
+              {
+                "expr": "(grey_governance_cpu_used{tenant_id=~\"$tenant\"} / grey_governance_cpu_quota{tenant_id=~\"$tenant\"}) * 100",
+                "legendFormat": "{{tenant_id}}"
+              }
+            ],
+            "options": {
+              "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] }
+            },
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "min": 0,
+                "max": 100,
+                "custom": {
+                  "fillOpacity": 10,
+                  "lineWidth": 2
+                },
+                "thresholds": {
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 80 },
+                    { "color": "red", "value": 95 }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 21,
+            "type": "timeseries",
+            "title": "Memory Quota Utilization by Tenant",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 8, "y": 14, "w": 8, "h": 8 },
+            "targets": [
+              {
+                "expr": "(grey_governance_memory_used{tenant_id=~\"$tenant\"} / grey_governance_memory_quota{tenant_id=~\"$tenant\"}) * 100",
+                "legendFormat": "{{tenant_id}}"
+              }
+            ],
+            "options": {
+              "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] }
+            },
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "min": 0,
+                "max": 100,
+                "custom": {
+                  "fillOpacity": 10,
+                  "lineWidth": 2
+                },
+                "thresholds": {
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 80 },
+                    { "color": "red", "value": 95 }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 22,
+            "type": "timeseries",
+            "title": "Storage Quota Utilization by Tenant",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 16, "y": 14, "w": 8, "h": 8 },
+            "targets": [
+              {
+                "expr": "(grey_governance_storage_used{tenant_id=~\"$tenant\"} / grey_governance_storage_quota{tenant_id=~\"$tenant\"}) * 100",
+                "legendFormat": "{{tenant_id}}"
+              }
+            ],
+            "options": {
+              "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] }
+            },
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "min": 0,
+                "max": 100,
+                "thresholds": {
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 80 },
+                    { "color": "red", "value": 95 }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "Quota Enforcement & Fairness",
+        "collapse": false,
+        "panels": [
+          {
+            "id": 30,
+            "type": "gauge",
+            "title": "Fairness Index",
+            "description": "Jain's Fairness Index (1.0 = perfectly fair)",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 0, "y": 22, "w": 6, "h": 8 },
+            "targets": [
+              {
+                "expr": "grey_governance_fairness_index",
+                "legendFormat": ""
+              }
+            ],
+            "options": {
+              "orientation": "horizontal",
+              "showThresholdLabels": true,
+              "showThresholdMarkers": true
+            },
+            "fieldConfig": {
+              "defaults": {
+                "min": 0,
+                "max": 1,
+                "decimals": 3,
+                "thresholds": {
+                  "steps": [
+                    { "color": "red", "value": null },
+                    { "color": "yellow", "value": 0.8 },
+                    { "color": "green", "value": 0.95 }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 31,
+            "type": "timeseries",
+            "title": "Quota Throttling Events",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 6, "y": 22, "w": 9, "h": 8 },
+            "targets": [
+              {
+                "expr": "sum(rate(grey_governance_quota_throttle_total{tenant_id=~\"$tenant\"}[5m])) by (tenant_id, resource_type)",
+                "legendFormat": "{{tenant_id}} ({{resource_type}})"
+              }
+            ],
+            "options": {
+              "legend": { "displayMode": "table", "placement": "right" }
+            },
+            "fieldConfig": {
+              "defaults": {
+                "unit": "ops",
+                "custom": {
+                  "fillOpacity": 20,
+                  "stacking": { "mode": "normal" }
+                }
+              }
+            }
+          },
+          {
+            "id": 32,
+            "type": "timeseries",
+            "title": "Burst Allowance Usage",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 15, "y": 22, "w": 9, "h": 8 },
+            "targets": [
+              {
+                "expr": "(grey_governance_burst_used{tenant_id=~\"$tenant\"} / grey_governance_burst_limit{tenant_id=~\"$tenant\"}) * 100",
+                "legendFormat": "{{tenant_id}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "min": 0,
+                "max": 100,
+                "thresholds": {
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 50 },
+                    { "color": "orange", "value": 80 },
+                    { "color": "red", "value": 100 }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "Dispute Resolution",
+        "collapse": false,
+        "panels": [
+          {
+            "id": 40,
+            "type": "stat",
+            "title": "Disputes Resolved (30d)",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 0, "y": 30, "w": 4, "h": 4 },
+            "targets": [
+              {
+                "expr": "sum(increase(grey_governance_disputes_resolved_total[30d]))"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "thresholds": {
+                  "steps": [{ "color": "blue", "value": null }]
+                }
+              }
+            }
+          },
+          {
+            "id": 41,
+            "type": "stat",
+            "title": "Avg Resolution Time",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 4, "y": 30, "w": 4, "h": 4 },
+            "targets": [
+              {
+                "expr": "avg(grey_governance_dispute_resolution_time_seconds{tenant_id=~\"$tenant\"})"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "s",
+                "thresholds": {
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 86400 },
+                    { "color": "red", "value": 604800 }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 42,
+            "type": "stat",
+            "title": "Escalated to Arbitration",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 8, "y": 30, "w": 4, "h": 4 },
+            "targets": [
+              {
+                "expr": "sum(grey_governance_disputes_escalated{tenant_id=~\"$tenant\"})"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "thresholds": {
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "orange", "value": 1 },
+                    { "color": "red", "value": 5 }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 43,
+            "type": "table",
+            "title": "Active Disputes",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 0, "y": 34, "w": 12, "h": 8 },
+            "targets": [
+              {
+                "expr": "grey_governance_dispute_info{tenant_id=~\"$tenant\", status!=\"resolved\"}",
+                "format": "table",
+                "instant": true
+              }
+            ],
+            "transformations": [
+              {
+                "id": "organize",
+                "options": {
+                  "renameByName": {
+                    "dispute_id": "Dispute ID",
+                    "tenant_id": "Tenant",
+                    "dispute_type": "Type",
+                    "priority": "Priority",
+                    "status": "Status",
+                    "created_at": "Created",
+                    "sla_deadline": "SLA Deadline"
+                  }
+                }
+              }
+            ],
+            "fieldConfig": {
+              "overrides": [
+                {
+                  "matcher": { "id": "byName", "options": "Priority" },
+                  "properties": [
+                    {
+                      "id": "mappings",
+                      "value": [
+                        { "type": "value", "options": { "critical": { "text": "Critical", "color": "red" } } },
+                        { "type": "value", "options": { "high": { "text": "High", "color": "orange" } } },
+                        { "type": "value", "options": { "medium": { "text": "Medium", "color": "yellow" } } },
+                        { "type": "value", "options": { "low": { "text": "Low", "color": "green" } } }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "matcher": { "id": "byName", "options": "Status" },
+                  "properties": [
+                    {
+                      "id": "mappings",
+                      "value": [
+                        { "type": "value", "options": { "open": { "text": "Open", "color": "blue" } } },
+                        { "type": "value", "options": { "investigating": { "text": "Investigating", "color": "yellow" } } },
+                        { "type": "value", "options": { "escalated": { "text": "Escalated", "color": "orange" } } },
+                        { "type": "value", "options": { "pending_tenant": { "text": "Pending Tenant", "color": "purple" } } }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": 44,
+            "type": "piechart",
+            "title": "Disputes by Type",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 12, "y": 34, "w": 6, "h": 8 },
+            "targets": [
+              {
+                "expr": "sum(grey_governance_disputes_open{tenant_id=~\"$tenant\"}) by (dispute_type)",
+                "legendFormat": "{{dispute_type}}"
+              }
+            ],
+            "options": {
+              "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] },
+              "pieType": "donut"
+            }
+          },
+          {
+            "id": 45,
+            "type": "timeseries",
+            "title": "Dispute Timeline",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 18, "y": 34, "w": 6, "h": 8 },
+            "targets": [
+              {
+                "expr": "sum(increase(grey_governance_disputes_opened_total{tenant_id=~\"$tenant\"}[1h]))",
+                "legendFormat": "Opened"
+              },
+              {
+                "expr": "sum(increase(grey_governance_disputes_resolved_total{tenant_id=~\"$tenant\"}[1h]))",
+                "legendFormat": "Resolved"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "custom": {
+                  "drawStyle": "bars",
+                  "fillOpacity": 50,
+                  "barAlignment": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "Policy Compliance",
+        "collapse": false,
+        "panels": [
+          {
+            "id": 50,
+            "type": "table",
+            "title": "Active Policies",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 0, "y": 42, "w": 12, "h": 8 },
+            "targets": [
+              {
+                "expr": "grey_governance_policy_info{policy_name=~\"$policy\"}",
+                "format": "table",
+                "instant": true
+              }
+            ],
+            "transformations": [
+              {
+                "id": "organize",
+                "options": {
+                  "renameByName": {
+                    "policy_name": "Policy",
+                    "version": "Version",
+                    "scope": "Scope",
+                    "enforcement": "Enforcement",
+                    "last_updated": "Last Updated"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "id": 51,
+            "type": "timeseries",
+            "title": "Policy Violations by Type",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 12, "y": 42, "w": 12, "h": 8 },
+            "targets": [
+              {
+                "expr": "sum(rate(grey_governance_policy_violations_total{tenant_id=~\"$tenant\", policy_name=~\"$policy\"}[5m])) by (policy_name, violation_type)",
+                "legendFormat": "{{policy_name}}: {{violation_type}}"
+              }
+            ],
+            "options": {
+              "legend": { "displayMode": "table", "placement": "right" }
+            },
+            "fieldConfig": {
+              "defaults": {
+                "unit": "ops",
+                "custom": {
+                  "fillOpacity": 20
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "SLA Tracking",
+        "collapse": false,
+        "panels": [
+          {
+            "id": 60,
+            "type": "gauge",
+            "title": "SLA Compliance by Tier",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 0, "y": 50, "w": 12, "h": 8 },
+            "targets": [
+              {
+                "expr": "(sum(grey_governance_sla_met{tier=~\"$tier\"}) by (tier) / sum(grey_governance_sla_total{tier=~\"$tier\"}) by (tier)) * 100",
+                "legendFormat": "{{tier}}"
+              }
+            ],
+            "options": {
+              "orientation": "horizontal",
+              "showThresholdLabels": true
+            },
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "min": 0,
+                "max": 100,
+                "thresholds": {
+                  "steps": [
+                    { "color": "red", "value": null },
+                    { "color": "yellow", "value": 95 },
+                    { "color": "green", "value": 99 }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 61,
+            "type": "timeseries",
+            "title": "SLA Breaches Over Time",
+            "datasource": "Prometheus",
+            "gridPos": { "x": 12, "y": 50, "w": 12, "h": 8 },
+            "targets": [
+              {
+                "expr": "sum(rate(grey_governance_sla_breach_total{tenant_id=~\"$tenant\"}[1h])) by (tenant_id, sla_type)",
+                "legendFormat": "{{tenant_id}}: {{sla_type}}"
+              }
+            ],
+            "options": {
+              "legend": { "displayMode": "table", "placement": "right" }
+            },
+            "fieldConfig": {
+              "defaults": {
+                "custom": {
+                  "drawStyle": "bars",
+                  "fillOpacity": 50
+                }
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "alerts": [
+    {
+      "name": "QuotaExhausted",
+      "condition": "B",
+      "data": [
+        {
+          "refId": "A",
+          "model": {
+            "expr": "(grey_governance_quota_used / grey_governance_quota_limit) * 100"
+          }
+        },
+        {
+          "refId": "B",
+          "model": {
+            "type": "threshold",
+            "expression": "A",
+            "conditions": [
+              { "evaluator": { "params": [95], "type": "gt" } }
+            ]
+          }
+        }
+      ],
+      "for": "5m",
+      "labels": { "severity": "warning", "team": "platform" },
+      "annotations": {
+        "summary": "Tenant quota nearly exhausted",
+        "description": "Tenant {{ $labels.tenant_id }} has used {{ $value }}% of {{ $labels.resource_type }} quota."
+      }
+    },
+    {
+      "name": "DisputeEscalated",
+      "condition": "B",
+      "data": [
+        {
+          "refId": "A",
+          "model": {
+            "expr": "increase(grey_governance_disputes_escalated_total[5m])"
+          }
+        },
+        {
+          "refId": "B",
+          "model": {
+            "type": "threshold",
+            "expression": "A",
+            "conditions": [
+              { "evaluator": { "params": [0], "type": "gt" } }
+            ]
+          }
+        }
+      ],
+      "for": "0m",
+      "labels": { "severity": "warning", "team": "governance" },
+      "annotations": {
+        "summary": "Dispute escalated to arbitration",
+        "description": "Dispute {{ $labels.dispute_id }} for tenant {{ $labels.tenant_id }} has been escalated."
+      }
+    },
+    {
+      "name": "SLABreach",
+      "condition": "B",
+      "data": [
+        {
+          "refId": "A",
+          "model": {
+            "expr": "increase(grey_governance_sla_breach_total[5m])"
+          }
+        },
+        {
+          "refId": "B",
+          "model": {
+            "type": "threshold",
+            "expression": "A",
+            "conditions": [
+              { "evaluator": { "params": [0], "type": "gt" } }
+            ]
+          }
+        }
+      ],
+      "for": "0m",
+      "labels": { "severity": "critical", "team": "platform" },
+      "annotations": {
+        "summary": "SLA breach detected",
+        "description": "SLA breach for tenant {{ $labels.tenant_id }}: {{ $labels.sla_type }}."
+      }
+    },
+    {
+      "name": "FairnessIndexLow",
+      "condition": "B",
+      "data": [
+        {
+          "refId": "A",
+          "model": {
+            "expr": "grey_governance_fairness_index"
+          }
+        },
+        {
+          "refId": "B",
+          "model": {
+            "type": "threshold",
+            "expression": "A",
+            "conditions": [
+              { "evaluator": { "params": [0.8], "type": "lt" } }
+            ]
+          }
+        }
+      ],
+      "for": "10m",
+      "labels": { "severity": "warning", "team": "governance" },
+      "annotations": {
+        "summary": "Resource allocation fairness degraded",
+        "description": "Fairness index is {{ $value }}, below the 0.8 threshold."
+      }
+    }
+  ]
+}

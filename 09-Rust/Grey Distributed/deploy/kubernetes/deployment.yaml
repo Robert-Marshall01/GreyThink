@@ -1,0 +1,690 @@
+# =============================================================================
+# Grey Distributed — Kubernetes Deployment Manifests
+# =============================================================================
+#
+# This file defines the core deployments for Grey Distributed:
+#   1. Coordinator nodes — Run consensus, scheduling, governance
+#   2. Worker nodes — Execute tasks, store data shards
+#   3. Gateway nodes — External API, load balancing
+#
+# Architecture:
+#   ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+#   │   Gateway   │────▶│ Coordinator │────▶│   Worker    │
+#   │   (3 pods)  │     │  (3-5 pods) │     │  (N pods)   │
+#   └─────────────┘     └─────────────┘     └─────────────┘
+#
+# Design Decisions:
+#   - Odd number of coordinators for Raft quorum (3 or 5)
+#   - Workers scale independently based on workload
+#   - Anti-affinity ensures pods spread across nodes/zones
+#   - PodDisruptionBudget maintains quorum during updates
+#
+# =============================================================================
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: grey-coordinator
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: coordinator
+    app.kubernetes.io/part-of: grey-distributed
+spec:
+  serviceName: grey-coordinator-headless
+  replicas: 3  # Odd number for Raft consensus quorum
+  podManagementPolicy: Parallel  # Faster bootstrap, all pods start together
+  
+  # Rolling update strategy preserves quorum
+  # - maxUnavailable: 1 ensures 2/3 coordinators always running
+  # - Partition allows staged rollouts (set to 0 for full rollout)
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+  
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grey
+      app.kubernetes.io/component: coordinator
+  
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grey
+        app.kubernetes.io/component: coordinator
+        grey.io/role: consensus
+      annotations:
+        # Prometheus scraping
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+        # Checksum triggers rollout on config change
+        checksum/config: "{{ .Values.configChecksum }}"
+    
+    spec:
+      # Service account for RBAC and pod identity
+      serviceAccountName: grey-coordinator
+      
+      # Security context — run as non-root, read-only filesystem
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      
+      # Anti-affinity spreads coordinators across failure domains
+      # This is CRITICAL for fault tolerance
+      affinity:
+        podAntiAffinity:
+          # Hard requirement: no two coordinators on same node
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: coordinator
+              topologyKey: kubernetes.io/hostname
+          # Soft preference: spread across zones
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/component: coordinator
+                topologyKey: topology.kubernetes.io/zone
+      
+      # Tolerate dedicated node taints
+      tolerations:
+        - key: "grey.io/dedicated"
+          operator: "Equal"
+          value: "coordinator"
+          effect: "NoSchedule"
+      
+      # Graceful shutdown allows Raft leadership transfer
+      terminationGracePeriodSeconds: 60
+      
+      containers:
+        - name: coordinator
+          image: ghcr.io/grey-systems/grey-distributed:latest
+          imagePullPolicy: IfNotPresent
+          
+          # Container-level security
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          
+          # Command with coordinator mode
+          command:
+            - /usr/local/bin/greyd
+          args:
+            - --mode=coordinator
+            - --config=/etc/grey/config.yaml
+            - --data-dir=/var/lib/grey/data
+            - --node-id=$(POD_NAME)
+          
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            # Memory limit for Go runtime
+            - name: GOMEMLIMIT
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.memory
+            # CPU limit for GOMAXPROCS
+            - name: GOMAXPROCS
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.cpu
+          
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: grpc
+              containerPort: 9090
+              protocol: TCP
+            - name: raft
+              containerPort: 7070
+              protocol: TCP
+            - name: gossip
+              containerPort: 7071
+              protocol: UDP
+          
+          # Resource limits — critical for scheduler fairness
+          # These match Grey Optimizer governance settings
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1"
+            limits:
+              memory: "4Gi"
+              cpu: "2"
+          
+          # Health checks
+          # - Liveness: restart if coordinator is stuck
+          # - Readiness: exclude from service until ready for traffic
+          # - Startup: allow time for Raft log replay
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30  # Allow 2.5 min for log replay
+          
+          volumeMounts:
+            - name: config
+              mountPath: /etc/grey
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/grey/data
+            - name: tls-certs
+              mountPath: /etc/grey/certs
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      
+      volumes:
+        - name: config
+          configMap:
+            name: grey-config
+        - name: tls-certs
+          secret:
+            secretName: grey-tls
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 100Mi
+  
+  # Persistent volume for Raft log and state
+  # Using volumeClaimTemplates for stable storage identity
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: grey
+          app.kubernetes.io/component: coordinator
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: ssd  # Fast storage for Raft log
+        resources:
+          requests:
+            storage: 50Gi
+
+---
+# =============================================================================
+# Worker Deployment — Horizontally scalable task executors
+# =============================================================================
+#
+# Workers are stateless (task state in coordinators) and can scale
+# based on workload. They register with coordinators on startup.
+#
+# Scaling considerations:
+#   - Minimum 3 for data replication factor
+#   - Scale based on CPU/memory utilization
+#   - Use HPA for automatic scaling
+#
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grey-worker
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: grey-distributed
+spec:
+  replicas: 5
+  
+  # Rolling update with surge for zero-downtime deploys
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+  
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grey
+      app.kubernetes.io/component: worker
+  
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grey
+        app.kubernetes.io/component: worker
+        grey.io/role: executor
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    
+    spec:
+      serviceAccountName: grey-worker
+      
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      
+      # Spread workers across nodes, prefer zone spreading
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/component: worker
+                topologyKey: kubernetes.io/hostname
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/component: worker
+                topologyKey: topology.kubernetes.io/zone
+      
+      # Faster shutdown for workers — they're stateless
+      terminationGracePeriodSeconds: 30
+      
+      containers:
+        - name: worker
+          image: ghcr.io/grey-systems/grey-distributed:latest
+          imagePullPolicy: IfNotPresent
+          
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          
+          command:
+            - /usr/local/bin/greyd
+          args:
+            - --mode=worker
+            - --config=/etc/grey/config.yaml
+            - --coordinator-endpoints=grey-coordinator-headless:7070
+            - --node-id=$(POD_NAME)
+          
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: GOMEMLIMIT
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.memory
+            - name: GOMAXPROCS
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.cpu
+          
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: grpc
+              containerPort: 9090
+              protocol: TCP
+          
+          # Workers get more resources for task execution
+          resources:
+            requests:
+              memory: "4Gi"
+              cpu: "2"
+            limits:
+              memory: "8Gi"
+              cpu: "4"
+          
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          
+          volumeMounts:
+            - name: config
+              mountPath: /etc/grey
+              readOnly: true
+            - name: tls-certs
+              mountPath: /etc/grey/certs
+              readOnly: true
+            - name: work
+              mountPath: /var/lib/grey/work
+            - name: tmp
+              mountPath: /tmp
+      
+      volumes:
+        - name: config
+          configMap:
+            name: grey-config
+        - name: tls-certs
+          secret:
+            secretName: grey-tls
+        - name: work
+          emptyDir:
+            sizeLimit: 10Gi
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 100Mi
+
+---
+# =============================================================================
+# Gateway Deployment — External API and load balancing
+# =============================================================================
+#
+# Gateways handle external traffic, authentication, and route to
+# appropriate coordinators/workers. Stateless and highly scalable.
+#
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grey-gateway
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/part-of: grey-distributed
+spec:
+  replicas: 3
+  
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0  # Zero downtime for external API
+  
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grey
+      app.kubernetes.io/component: gateway
+  
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grey
+        app.kubernetes.io/component: gateway
+        grey.io/role: ingress
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    
+    spec:
+      serviceAccountName: grey-gateway
+      
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: gateway
+              topologyKey: kubernetes.io/hostname
+      
+      terminationGracePeriodSeconds: 30
+      
+      containers:
+        - name: gateway
+          image: ghcr.io/grey-systems/grey-distributed:latest
+          imagePullPolicy: IfNotPresent
+          
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          
+          command:
+            - /usr/local/bin/greyd
+          args:
+            - --mode=gateway
+            - --config=/etc/grey/config.yaml
+            - --coordinator-endpoints=grey-coordinator-headless:7070
+          
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: grpc
+              containerPort: 9090
+              protocol: TCP
+          
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "1"
+          
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          
+          volumeMounts:
+            - name: config
+              mountPath: /etc/grey
+              readOnly: true
+            - name: tls-certs
+              mountPath: /etc/grey/certs
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      
+      volumes:
+        - name: config
+          configMap:
+            name: grey-config
+        - name: tls-certs
+          secret:
+            secretName: grey-tls
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 50Mi
+
+---
+# =============================================================================
+# Horizontal Pod Autoscaler — Automatic worker scaling
+# =============================================================================
+#
+# Scales workers based on CPU/memory utilization and custom metrics
+# from Grey Optimizer (queue depth, task latency).
+#
+# =============================================================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: grey-worker-hpa
+  namespace: grey-system
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: grey-worker
+  
+  minReplicas: 3   # Minimum for replication factor
+  maxReplicas: 50  # Cost ceiling
+  
+  metrics:
+    # Scale on CPU — primary signal
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    
+    # Scale on memory — secondary signal
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+    
+    # Scale on custom metrics from Grey Optimizer
+    # Requires prometheus-adapter or custom metrics API
+    - type: Pods
+      pods:
+        metric:
+          name: grey_scheduler_queue_depth
+        target:
+          type: AverageValue
+          averageValue: "100"
+  
+  behavior:
+    # Scale up aggressively
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+        - type: Pods
+          value: 5
+          periodSeconds: 60
+      selectPolicy: Max
+    
+    # Scale down conservatively to avoid thrashing
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+      selectPolicy: Min
+
+---
+# =============================================================================
+# Pod Disruption Budgets — Maintain availability during updates
+# =============================================================================
+#
+# PDBs prevent Kubernetes from evicting too many pods simultaneously
+# during voluntary disruptions (node drain, cluster upgrade).
+#
+# =============================================================================
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: grey-coordinator-pdb
+  namespace: grey-system
+spec:
+  # Maintain quorum: for 3 coordinators, need 2 available
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grey
+      app.kubernetes.io/component: coordinator
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: grey-worker-pdb
+  namespace: grey-system
+spec:
+  # Allow some workers to be unavailable
+  maxUnavailable: 25%
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grey
+      app.kubernetes.io/component: worker
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: grey-gateway-pdb
+  namespace: grey-system
+spec:
+  # At least 2 gateways for high availability
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grey
+      app.kubernetes.io/component: gateway

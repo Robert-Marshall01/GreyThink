@@ -1,0 +1,769 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "grey-adoption-government",
+    "title": "Grey Distributed — Government Adoption Dashboard",
+    "description": "Monitors government deployment compliance, security posture, federation status, and authorization metrics",
+    "tags": ["grey", "adoption", "government", "fedramp", "fisma", "compliance"],
+    "timezone": "browser",
+    "schemaVersion": 39,
+    "version": 1,
+    "refresh": "1m",
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "fiscalYearStartMonth": 9,
+    "graphTooltip": 1,
+    "panels": [
+      {
+        "id": 1,
+        "type": "stat",
+        "title": "Authorization Status",
+        "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "textMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              { "type": "value", "options": { "authorized": { "text": "ATO", "color": "green" } } },
+              { "type": "value", "options": { "provisional": { "text": "P-ATO", "color": "yellow" } } },
+              { "type": "value", "options": { "pending": { "text": "PENDING", "color": "orange" } } },
+              { "type": "value", "options": { "expired": { "text": "EXPIRED", "color": "red" } } },
+              { "type": "value", "options": { "revoked": { "text": "REVOKED", "color": "red" } } }
+            ]
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_gov_authorization_status",
+            "legendFormat": "ATO Status",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "type": "stat",
+        "title": "Security Posture Score",
+        "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 70 },
+                { "color": "green", "value": 85 }
+              ]
+            },
+            "unit": "short",
+            "max": 100
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_gov_security_posture_score",
+            "legendFormat": "Score",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "type": "stat",
+        "title": "Control Coverage",
+        "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 90 },
+                { "color": "green", "value": 95 }
+              ]
+            },
+            "unit": "percent",
+            "decimals": 1
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_gov_control_coverage_percent",
+            "legendFormat": "Coverage",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "type": "stat",
+        "title": "Open POA&M Items",
+        "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 10 },
+                { "color": "red", "value": 25 }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_gov_poam_open_count",
+            "legendFormat": "Open Items",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "type": "stat",
+        "title": "Overdue POA&M",
+        "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 1 },
+                { "color": "red", "value": 5 }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_gov_poam_overdue_count",
+            "legendFormat": "Overdue",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "type": "stat",
+        "title": "Days to ATO Expiry",
+        "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 60 },
+                { "color": "green", "value": 180 }
+              ]
+            },
+            "unit": "days"
+          }
+        },
+        "targets": [
+          {
+            "expr": "(grey_gov_ato_expiry_timestamp - time()) / 86400",
+            "legendFormat": "Days",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "type": "row",
+        "title": "NIST 800-53 Control Status",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 4 },
+        "collapsed": false
+      },
+      {
+        "id": 8,
+        "type": "bargauge",
+        "title": "Control Family Compliance",
+        "gridPos": { "h": 10, "w": 12, "x": 0, "y": 5 },
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient",
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "showUnfilled": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 80 },
+                { "color": "green", "value": 95 }
+              ]
+            },
+            "unit": "percent",
+            "max": 100,
+            "min": 0
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_gov_control_family_compliance_percent",
+            "legendFormat": "{{family_code}} - {{family_name}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "type": "table",
+        "title": "POA&M Details",
+        "gridPos": { "h": 10, "w": 12, "x": 12, "y": 5 },
+        "options": {
+          "showHeader": true,
+          "footer": { "show": true, "reducer": ["count"] }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "auto",
+              "displayMode": "auto"
+            }
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Risk" },
+              "properties": [
+                {
+                  "id": "custom.displayMode",
+                  "value": "color-background"
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    { "type": "value", "options": { "Critical": { "color": "dark-red", "text": "CRITICAL" } } },
+                    { "type": "value", "options": { "High": { "color": "red", "text": "HIGH" } } },
+                    { "type": "value", "options": { "Moderate": { "color": "orange", "text": "MODERATE" } } },
+                    { "type": "value", "options": { "Low": { "color": "green", "text": "LOW" } } }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "Status" },
+              "properties": [
+                {
+                  "id": "custom.displayMode",
+                  "value": "color-text"
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    { "type": "value", "options": { "Open": { "color": "yellow" } } },
+                    { "type": "value", "options": { "Overdue": { "color": "red" } } },
+                    { "type": "value", "options": { "Closed": { "color": "green" } } }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "targets": [
+          {
+            "expr": "grey_gov_poam_entries",
+            "format": "table",
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "renameByName": {
+                "poam_id": "ID",
+                "control_id": "Control",
+                "weakness": "Weakness",
+                "risk_level": "Risk",
+                "status": "Status",
+                "scheduled_completion": "Due Date",
+                "responsible": "Owner"
+              },
+              "excludeByName": {
+                "Time": true,
+                "__name__": true
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "type": "row",
+        "title": "Continuous Monitoring",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+        "collapsed": false
+      },
+      {
+        "id": 11,
+        "type": "timeseries",
+        "title": "Vulnerability Scan Results",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+        "options": {
+          "legend": { "displayMode": "table", "placement": "right" }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "stacking": { "mode": "normal" }
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            { "matcher": { "id": "byName", "options": "Critical" }, "properties": [{ "id": "color", "value": { "fixedColor": "dark-red" } }] },
+            { "matcher": { "id": "byName", "options": "High" }, "properties": [{ "id": "color", "value": { "fixedColor": "red" } }] },
+            { "matcher": { "id": "byName", "options": "Medium" }, "properties": [{ "id": "color", "value": { "fixedColor": "orange" } }] },
+            { "matcher": { "id": "byName", "options": "Low" }, "properties": [{ "id": "color", "value": { "fixedColor": "yellow" } }] }
+          ]
+        },
+        "targets": [
+          {
+            "expr": "grey_gov_vulnerability_count",
+            "legendFormat": "{{severity}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "type": "timeseries",
+        "title": "Configuration Compliance",
+        "gridPos": { "h": 8, "w": 6, "x": 12, "y": 16 },
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 90 },
+                { "color": "green", "value": 98 }
+              ]
+            },
+            "custom": {
+              "lineWidth": 2,
+              "fillOpacity": 20
+            },
+            "unit": "percent",
+            "max": 100
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_gov_config_compliance_percent",
+            "legendFormat": "STIG Compliance",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 13,
+        "type": "stat",
+        "title": "Mean Time to Patch",
+        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 16 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 24 },
+                { "color": "red", "value": 72 }
+              ]
+            },
+            "unit": "h"
+          }
+        },
+        "targets": [
+          {
+            "expr": "grey_gov_mttp_hours{severity=\"critical\"}",
+            "legendFormat": "MTTP Critical",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 14,
+        "type": "stat",
+        "title": "Last ConMon Report",
+        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 20 },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 25 },
+                { "color": "red", "value": 32 }
+              ]
+            },
+            "unit": "days"
+          }
+        },
+        "targets": [
+          {
+            "expr": "(time() - grey_gov_last_conmon_report_timestamp) / 86400",
+            "legendFormat": "Days Ago",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 15,
+        "type": "row",
+        "title": "Federation & Attestation",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 24 },
+        "collapsed": false
+      },
+      {
+        "id": 16,
+        "type": "table",
+        "title": "Federation Partners",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 25 },
+        "options": {
+          "showHeader": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": { "align": "auto" }
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Attestation" },
+              "properties": [
+                {
+                  "id": "custom.displayMode",
+                  "value": "color-background"
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    { "type": "value", "options": { "Verified": { "color": "green" } } },
+                    { "type": "value", "options": { "Pending": { "color": "yellow" } } },
+                    { "type": "value", "options": { "Failed": { "color": "red" } } },
+                    { "type": "value", "options": { "Expired": { "color": "orange" } } }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "targets": [
+          {
+            "expr": "grey_gov_federation_partner_status",
+            "format": "table",
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "renameByName": {
+                "partner_id": "Partner ID",
+                "partner_name": "Name",
+                "tier": "Tier",
+                "classification_limit": "Max Classification",
+                "attestation_status": "Attestation",
+                "last_attestation": "Last Verified"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 17,
+        "type": "timeseries",
+        "title": "Cross-Agency Data Requests",
+        "gridPos": { "h": 8, "w": 6, "x": 12, "y": 25 },
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "lineWidth": 1,
+              "fillOpacity": 10
+            },
+            "unit": "short"
+          }
+        },
+        "targets": [
+          {
+            "expr": "rate(grey_gov_cross_agency_requests_total[5m]) * 60",
+            "legendFormat": "{{partner}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 18,
+        "type": "piechart",
+        "title": "Data by Classification",
+        "gridPos": { "h": 8, "w": 6, "x": 18, "y": 25 },
+        "options": {
+          "legend": { "displayMode": "table", "placement": "right" },
+          "pieType": "donut",
+          "reduceOptions": { "calcs": ["lastNotNull"] }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "unit": "bytes"
+          },
+          "overrides": [
+            { "matcher": { "id": "byName", "options": "UNCLASSIFIED" }, "properties": [{ "id": "color", "value": { "fixedColor": "green" } }] },
+            { "matcher": { "id": "byName", "options": "CUI" }, "properties": [{ "id": "color", "value": { "fixedColor": "yellow" } }] },
+            { "matcher": { "id": "byName", "options": "SECRET" }, "properties": [{ "id": "color", "value": { "fixedColor": "red" } }] }
+          ]
+        },
+        "targets": [
+          {
+            "expr": "grey_gov_data_volume_by_classification",
+            "legendFormat": "{{classification}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 19,
+        "type": "row",
+        "title": "Audit & Incident Response",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 33 },
+        "collapsed": false
+      },
+      {
+        "id": 20,
+        "type": "timeseries",
+        "title": "Security Events by Category",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 34 },
+        "options": {
+          "legend": { "displayMode": "table", "placement": "right" }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "lineWidth": 1,
+              "fillOpacity": 20,
+              "stacking": { "mode": "normal" }
+            },
+            "unit": "short"
+          }
+        },
+        "targets": [
+          {
+            "expr": "rate(grey_gov_security_events_total[5m]) * 60",
+            "legendFormat": "{{category}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 21,
+        "type": "table",
+        "title": "Recent Incidents",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 34 },
+        "options": {
+          "showHeader": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": { "align": "auto" }
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Severity" },
+              "properties": [
+                {
+                  "id": "custom.displayMode",
+                  "value": "color-background"
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    { "type": "value", "options": { "Critical": { "color": "dark-red" } } },
+                    { "type": "value", "options": { "High": { "color": "red" } } },
+                    { "type": "value", "options": { "Medium": { "color": "orange" } } },
+                    { "type": "value", "options": { "Low": { "color": "yellow" } } }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "targets": [
+          {
+            "expr": "grey_gov_incidents{status!=\"closed\"}",
+            "format": "table",
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "renameByName": {
+                "incident_id": "ID",
+                "severity": "Severity",
+                "description": "Description",
+                "status": "Status",
+                "assigned_to": "Assigned",
+                "created_at": "Created"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "datasource",
+          "type": "datasource",
+          "query": "prometheus",
+          "current": { "selected": true, "text": "Prometheus", "value": "Prometheus" }
+        },
+        {
+          "name": "baseline",
+          "type": "custom",
+          "query": "Low,Moderate,High",
+          "current": { "text": "Moderate", "value": "Moderate" }
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "name": "ATO Events",
+          "enable": true,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "changes(grey_gov_ato_status[1h]) > 0",
+          "iconColor": "purple"
+        },
+        {
+          "name": "ConMon Reports",
+          "enable": true,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "grey_gov_conmon_report_submitted == 1",
+          "iconColor": "blue"
+        },
+        {
+          "name": "Security Incidents",
+          "enable": true,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "grey_gov_incident_created == 1",
+          "iconColor": "red"
+        }
+      ]
+    }
+  },
+  "alerts": [
+    {
+      "name": "ATO Expiring Soon",
+      "condition": "(grey_gov_ato_expiry_timestamp - time()) / 86400 < 90",
+      "severity": "warning",
+      "message": "Authorization to Operate expires in {{ $value | humanizeDuration }}",
+      "notifications": ["isso", "ao-office", "ciso"]
+    },
+    {
+      "name": "Critical Vulnerability Detected",
+      "condition": "grey_gov_vulnerability_count{severity=\"Critical\"} > 0",
+      "severity": "critical",
+      "message": "{{ $value }} critical vulnerabilities detected - 24h remediation SLA",
+      "notifications": ["security-team", "isso", "soc"]
+    },
+    {
+      "name": "POA&M Overdue",
+      "condition": "grey_gov_poam_overdue_count > 0",
+      "severity": "warning",
+      "message": "{{ $value }} POA&M items are overdue",
+      "notifications": ["isso", "compliance-team"]
+    },
+    {
+      "name": "Federation Attestation Failure",
+      "condition": "grey_gov_federation_partner_status{attestation_status=\"Failed\"} == 1",
+      "severity": "critical",
+      "message": "Federation partner {{ $labels.partner_name }} attestation failed",
+      "notifications": ["federation-admin", "security-team"]
+    },
+    {
+      "name": "Security Incident Created",
+      "condition": "increase(grey_gov_incidents_total[5m]) > 0",
+      "severity": "critical",
+      "message": "New security incident created",
+      "notifications": ["soc", "incident-response", "isso"]
+    },
+    {
+      "name": "ConMon Report Overdue",
+      "condition": "(time() - grey_gov_last_conmon_report_timestamp) / 86400 > 30",
+      "severity": "warning",
+      "message": "Continuous monitoring report is overdue",
+      "notifications": ["isso", "compliance-team"]
+    }
+  ]
+}

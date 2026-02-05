@@ -1,0 +1,339 @@
+# =============================================================================
+# Grey Distributed — Vertical Scaling Policy
+# =============================================================================
+#
+# Coordinator (and critical component) vertical scaling rules.
+#
+# Why Vertical Scaling for Coordinators:
+#   - Coordinators cannot horizontally scale beyond 5-7 nodes (Raft limitation)
+#   - More CPU/memory per coordinator improves consensus performance
+#   - Log replication and snapshot performance scale with resources
+#
+# Tradeoffs:
+#   - Vertical scaling requires pod restart (brief unavailability)
+#   - Larger instances are less cost-efficient per resource unit
+#   - Over-provisioning wastes money, under-provisioning hurts performance
+#
+# This policy uses VPA recommendations with manual approval gates.
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grey-vertical-scaling-policy
+  namespace: grey-production
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: scaling
+data:
+  policy.yaml: |
+    # ==========================================================================
+    # Global Settings
+    # ==========================================================================
+    version: "1.0"
+    policyName: "grey-vertical-scaling"
+    
+    # ==========================================================================
+    # Coordinator Vertical Scaling
+    # ==========================================================================
+    coordinators:
+      target:
+        kind: StatefulSet
+        name: grey-coordinator
+        namespace: grey-production
+      
+      # Resource boundaries
+      resourceLimits:
+        cpu:
+          min: "2"              # Never go below 2 cores
+          max: "16"             # Never exceed 16 cores
+          step: "2"             # Scale in 2-core increments
+        memory:
+          min: "4Gi"            # Never go below 4GB
+          max: "32Gi"           # Never exceed 32GB
+          step: "4Gi"           # Scale in 4GB increments
+      
+      # Scaling triggers
+      triggers:
+        # CPU-based vertical scaling
+        - name: cpu-pressure
+          type: Resource
+          metric:
+            name: cpu
+            window: 15m         # 15-minute average
+          scaleUp:
+            threshold: 85       # Scale up when > 85% utilization
+            targetUtilization: 60
+          scaleDown:
+            threshold: 30       # Scale down when < 30% utilization
+            sustainedMinutes: 60
+        
+        # Memory-based vertical scaling
+        - name: memory-pressure
+          type: Resource
+          metric:
+            name: memory
+            window: 15m
+          scaleUp:
+            threshold: 90       # Scale up when > 90% utilization
+            targetUtilization: 70
+          scaleDown:
+            threshold: 40
+            sustainedMinutes: 60
+        
+        # Raft-specific metrics
+        - name: raft-log-replication-lag
+          type: Custom
+          metric:
+            name: grey_raft_replication_lag_seconds
+            window: 5m
+          scaleUp:
+            threshold: 5.0      # Scale up if lag > 5 seconds
+            note: "Indicates coordinator cannot keep up with replication"
+        
+        - name: raft-snapshot-duration
+          type: Custom
+          metric:
+            name: grey_raft_snapshot_duration_seconds
+            window: 30m
+          scaleUp:
+            threshold: 300      # Scale up if snapshots take > 5 minutes
+            note: "Long snapshots indicate memory pressure"
+      
+      # Scaling behavior
+      behavior:
+        # Only scale during maintenance windows (rolling update)
+        maintenanceWindow:
+          enabled: true
+          schedule:
+            cron: "0 3 * * *"   # 3 AM daily
+            timezone: "UTC"
+            durationMinutes: 120
+        
+        # Manual approval required for production
+        approvalRequired: true
+        approvalTimeout: 24h
+        
+        # One coordinator at a time to maintain quorum
+        maxConcurrentUpdates: 1
+        
+        # Wait for coordinator to rejoin cluster before next update
+        waitForHealthy: true
+        healthCheckTimeout: 10m
+    
+    # ==========================================================================
+    # Worker Vertical Scaling (Optional)
+    # ==========================================================================
+    workers:
+      target:
+        kind: StatefulSet
+        name: grey-worker
+        namespace: grey-production
+      
+      # Workers primarily use horizontal scaling, but VPA helps right-size
+      mode: "Auto"              # Allow automatic adjustments
+      
+      resourceLimits:
+        cpu:
+          min: "1"
+          max: "8"
+          step: "1"
+        memory:
+          min: "2Gi"
+          max: "16Gi"
+          step: "2Gi"
+      
+      # More aggressive scaling for workers
+      triggers:
+        - name: cpu-squeeze
+          type: Resource
+          metric:
+            name: cpu
+            window: 5m
+          scaleUp:
+            threshold: 95       # Workers at 95% CPU
+            targetUtilization: 70
+          scaleDown:
+            threshold: 25
+            sustainedMinutes: 30
+        
+        - name: memory-squeeze
+          type: Resource
+          metric:
+            name: memory
+            window: 5m
+          scaleUp:
+            threshold: 95
+            targetUtilization: 70
+          scaleDown:
+            threshold: 30
+            sustainedMinutes: 30
+        
+        - name: task-oom-kills
+          type: Custom
+          metric:
+            name: grey_worker_oom_kills_total
+            window: 1h
+          scaleUp:
+            threshold: 1        # Any OOM kill triggers scale-up
+            note: "OOM indicates memory under-provisioned"
+      
+      behavior:
+        # Workers can scale without maintenance window
+        maintenanceWindow:
+          enabled: false
+        
+        # Auto-apply for workers
+        approvalRequired: false
+        
+        # Parallel updates (workers are stateless)
+        maxConcurrentUpdates: 10
+        
+        # Quick health check
+        healthCheckTimeout: 2m
+    
+    # ==========================================================================
+    # Instance Type Recommendations
+    # ==========================================================================
+    instanceTypes:
+      coordinators:
+        # Recommended progression based on load
+        tiers:
+          - name: small
+            cpu: 4
+            memory: 8Gi
+            instanceType: "m6i.xlarge"
+            suitableFor: "Light load, < 1000 tasks/s"
+          
+          - name: medium
+            cpu: 8
+            memory: 16Gi
+            instanceType: "m6i.2xlarge"
+            suitableFor: "Medium load, 1000-5000 tasks/s"
+          
+          - name: large
+            cpu: 16
+            memory: 32Gi
+            instanceType: "m6i.4xlarge"
+            suitableFor: "High load, > 5000 tasks/s"
+        
+        # Recommendation logic
+        sizing:
+          basedOn:
+            - metric: grey_raft_log_entries_per_second
+              weight: 0.4
+            - metric: grey_coordinator_active_connections
+              weight: 0.3
+            - metric: grey_raft_snapshot_size_bytes
+              weight: 0.3
+      
+      workers:
+        tiers:
+          - name: small
+            cpu: 2
+            memory: 4Gi
+            instanceType: "m6i.large"
+            suitableFor: "Small tasks, quick execution"
+          
+          - name: medium
+            cpu: 4
+            memory: 8Gi
+            instanceType: "m6i.xlarge"
+            suitableFor: "Standard workloads"
+          
+          - name: large
+            cpu: 8
+            memory: 16Gi
+            instanceType: "m6i.2xlarge"
+            suitableFor: "Memory-intensive tasks"
+
+---
+# =============================================================================
+# Kubernetes VPA Manifest — Coordinators
+# =============================================================================
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: grey-coordinator-vpa
+  namespace: grey-production
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: grey-coordinator
+  updatePolicy:
+    updateMode: "Off"           # Recommend only, manual application
+  resourcePolicy:
+    containerPolicies:
+      - containerName: coordinator
+        minAllowed:
+          cpu: "2"
+          memory: "4Gi"
+        maxAllowed:
+          cpu: "16"
+          memory: "32Gi"
+        controlledResources: ["cpu", "memory"]
+        controlledValues: RequestsAndLimits
+
+---
+# =============================================================================
+# Kubernetes VPA Manifest — Workers
+# =============================================================================
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: grey-worker-vpa
+  namespace: grey-production
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: grey-worker
+  updatePolicy:
+    updateMode: "Auto"          # Automatic updates for workers
+    minReplicas: 2              # Keep at least 2 running during updates
+  resourcePolicy:
+    containerPolicies:
+      - containerName: worker
+        minAllowed:
+          cpu: "1"
+          memory: "2Gi"
+        maxAllowed:
+          cpu: "8"
+          memory: "16Gi"
+        controlledResources: ["cpu", "memory"]
+        controlledValues: RequestsOnly  # Only adjust requests, not limits
+
+---
+# =============================================================================
+# VPA Recommendation Exporter
+# =============================================================================
+# Exports VPA recommendations as Prometheus metrics for visibility
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vpa-recommendation-exporter
+  namespace: grey-production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vpa-recommendation-exporter
+  template:
+    metadata:
+      labels:
+        app: vpa-recommendation-exporter
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      containers:
+        - name: exporter
+          image: grey-distributed/vpa-exporter:v1.0.0
+          ports:
+            - containerPort: 9090
+          env:
+            - name: VPA_NAMESPACE
+              value: grey-production
+            - name: VPA_NAMES
+              value: "grey-coordinator-vpa,grey-worker-vpa"

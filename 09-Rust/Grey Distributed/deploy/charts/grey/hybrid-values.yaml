@@ -1,0 +1,427 @@
+# =============================================================================
+# Grey Distributed — Hybrid Deployment Values
+# =============================================================================
+#
+# Values file for hybrid deployments combining cloud and edge sites.
+# This configuration enables:
+#   • Primary cloud cluster for coordination
+#   • Secondary cloud region for DR
+#   • Edge sites with local processing
+#
+# Architecture:
+#   ┌─────────────────────────────────────────────────────────────────────────┐
+#   │                           Cloud (Primary)                               │
+#   │  ┌─────────────────────────────────────────────────────────────────┐    │
+#   │  │ AWS us-east-1                                                   │    │
+#   │  │ • 5 coordinators (m6i.xlarge)                                   │    │
+#   │  │ • 10 workers (m6i.large)                                        │    │
+#   │  │ • Global consensus authority                                     │    │
+#   │  └─────────────────────────────────────────────────────────────────┘    │
+#   └─────────────────────────────────────────────────────────────────────────┘
+#                                     │
+#           ┌─────────────────────────┴─────────────────────────┐
+#           │                                                   │
+#   ┌───────▼───────┐                                   ┌───────▼───────┐
+#   │ Cloud (DR)    │                                   │ Edge Sites    │
+#   │ us-west-2     │                                   │ Various       │
+#   │ • 3 standby   │◄──────────────────────────────────│ • Local       │
+#   │ • Async repl  │        Federation Mesh            │   consensus   │
+#   └───────────────┘                                   │ • Async sync  │
+#                                                       └───────────────┘
+#
+# Usage:
+#   helm upgrade grey ./charts/grey \
+#     -f hybrid-values.yaml \
+#     --set site.id=cloud-primary \
+#     --set site.region=us-east-1
+#
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Global Configuration
+# -----------------------------------------------------------------------------
+global:
+  # Environment identifier
+  environment: production
+  
+  # Docker registry
+  imageRegistry: ghcr.io/grey-systems
+  
+  # Image pull secrets (if using private registry)
+  imagePullSecrets: []
+
+# -----------------------------------------------------------------------------
+# Site Configuration
+# -----------------------------------------------------------------------------
+# Each site deployment sets these values appropriately
+site:
+  id: ""          # cloud-primary, cloud-dr, edge-factory-01, etc.
+  region: ""      # AWS region or edge location name
+  type: cloud     # cloud, dr, edge
+  
+  # Site hierarchy
+  hierarchy:
+    parent: ""              # Parent site for edge (cloud-primary)
+    children: []            # Child sites for cloud
+
+# -----------------------------------------------------------------------------
+# Cloud Primary Configuration
+# -----------------------------------------------------------------------------
+# Use this section when deploying: --set site.type=cloud
+cloud:
+  # Coordinator tier
+  coordinators:
+    replicas: 5
+    
+    resources:
+      requests:
+        memory: "8Gi"
+        cpu: "2"
+      limits:
+        memory: "16Gi"
+        cpu: "4"
+    
+    persistence:
+      storageClass: "grey-ssd-high-iops"
+      size: 100Gi
+    
+    # Spread across zones
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                grey.io/component: coordinator
+            topologyKey: topology.kubernetes.io/zone
+    
+    nodeSelector:
+      grey.io/role: coordinator
+      
+  # Worker tier
+  workers:
+    replicas: 10
+    
+    resources:
+      requests:
+        memory: "4Gi"
+        cpu: "1"
+      limits:
+        memory: "8Gi"
+        cpu: "2"
+    
+    persistence:
+      storageClass: "grey-ssd"
+      size: 50Gi
+    
+    autoscaling:
+      enabled: true
+      minReplicas: 5
+      maxReplicas: 20
+      targetCPU: 70
+      targetMemory: 80
+    
+    nodeSelector:
+      grey.io/role: worker
+
+# -----------------------------------------------------------------------------
+# DR Site Configuration
+# -----------------------------------------------------------------------------
+# Use this section when deploying: --set site.type=dr
+dr:
+  # Reduced replica count
+  coordinators:
+    replicas: 3
+    
+    resources:
+      requests:
+        memory: "8Gi"
+        cpu: "2"
+      limits:
+        memory: "16Gi"
+        cpu: "4"
+  
+  workers:
+    replicas: 5
+    
+    resources:
+      requests:
+        memory: "4Gi"
+        cpu: "1"
+      limits:
+        memory: "8Gi"
+        cpu: "2"
+  
+  # DR-specific settings
+  settings:
+    # Async replication from primary
+    replicationMode: async
+    replicationLagMaxSec: 60
+    
+    # Auto-promote on primary failure
+    autoPromote:
+      enabled: true
+      detectionTimeoutSec: 30
+      
+    # Health checks against primary
+    primaryHealthCheck:
+      intervalSec: 5
+      failureThreshold: 3
+
+# -----------------------------------------------------------------------------
+# Federation Mesh
+# -----------------------------------------------------------------------------
+federation:
+  enabled: true
+  
+  # All sites in the mesh
+  sites:
+    - id: cloud-primary
+      type: cloud
+      host: grey-primary.example.com
+      port: 9191
+      priority: 100  # Highest priority
+      
+    - id: cloud-dr
+      type: dr
+      host: grey-dr.example.com
+      port: 9191
+      priority: 50
+      
+    # Edge sites registered dynamically
+    # - id: edge-factory-01
+    #   type: edge
+    #   host: 10.0.1.100
+    #   port: 9191
+    #   priority: 10
+    
+  # Cross-site consensus
+  consensus:
+    # Cloud sites participate in global consensus
+    globalQuorum: true
+    
+    # Edge sites use local consensus
+    localQuorumForEdge: true
+    
+  # Sync configuration
+  sync:
+    # Cloud-to-cloud: sync replication
+    cloudToCloud:
+      mode: sync
+      quorum: 2
+      timeoutMs: 5000
+      
+    # Edge-to-cloud: async with batching
+    edgeToCloud:
+      mode: async
+      batchSize: 1000
+      intervalMs: 5000
+      compression: true
+      
+    # Cloud-to-edge: push updates
+    cloudToEdge:
+      mode: push
+      batchSize: 500
+      maxDelayMs: 1000
+      
+  # Conflict resolution
+  conflicts:
+    # Global strategy
+    default: cloud-master
+    
+    # Per-collection overrides
+    perCollection:
+      telemetry: merge-all       # Merge all telemetry from all sites
+      commands: cloud-master     # Cloud is authoritative for commands
+      localState: local-master   # Each site owns its local state
+      
+  # mTLS for cross-site communication
+  tls:
+    enabled: true
+    certSecret: federation-certs
+    caSecret: federation-ca
+    
+    # Certificate rotation
+    rotation:
+      enabled: true
+      durationDays: 90
+      renewBeforeDays: 30
+
+# -----------------------------------------------------------------------------
+# Storage Configuration
+# -----------------------------------------------------------------------------
+storage:
+  # Primary storage class
+  storageClass: grey-ssd
+  
+  # Data partitioning
+  sharding:
+    enabled: true
+    shards: 16
+    replicationFactor: 3
+    
+  # Cross-region replication
+  replication:
+    enabled: true
+    targets:
+      - region: us-west-2
+        bucket: grey-backup-dr
+        encryptionKeyArn: arn:aws:kms:us-west-2:...
+        
+  # Backup configuration
+  backup:
+    enabled: true
+    schedule: "0 */6 * * *"  # Every 6 hours
+    retention: 30            # Days
+    provider: s3
+    bucket: grey-backups
+    
+  # Snapshot configuration
+  snapshots:
+    enabled: true
+    interval: 1h
+    maxCount: 24
+
+# -----------------------------------------------------------------------------
+# Network Configuration
+# -----------------------------------------------------------------------------
+network:
+  # Service type varies by site type
+  service:
+    cloud:
+      type: LoadBalancer
+      annotations:
+        service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+        service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    edge:
+      type: NodePort
+      
+  # Ingress for cloud sites
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - host: grey.example.com
+        
+  # Service mesh integration
+  serviceMesh:
+    enabled: true
+    provider: istio  # Options: istio, linkerd, none
+    mtls: STRICT
+
+# -----------------------------------------------------------------------------
+# Observability
+# -----------------------------------------------------------------------------
+observability:
+  # Centralized logging
+  logging:
+    enabled: true
+    provider: cloudwatch  # Options: cloudwatch, elasticsearch, loki
+    retentionDays: 30
+    
+  # Distributed tracing
+  tracing:
+    enabled: true
+    provider: xray  # Options: xray, jaeger, tempo
+    sampleRate: 0.1
+    
+  # Metrics and dashboards
+  metrics:
+    enabled: true
+    prometheus:
+      enabled: true
+      retention: 15d
+    grafana:
+      enabled: true
+      dashboards:
+        - grey-overview
+        - grey-consensus
+        - grey-federation
+        - grey-storage
+        - grey-tenants
+        
+  # Alerting
+  alerting:
+    enabled: true
+    channels:
+      - type: pagerduty
+        integration: grey-critical
+        severity: critical
+      - type: slack
+        webhook: https://hooks.slack.com/...
+        severity: warning
+
+# -----------------------------------------------------------------------------
+# Security
+# -----------------------------------------------------------------------------
+security:
+  # Pod security standards
+  podSecurityStandard: restricted
+  
+  # Network policies
+  networkPolicy:
+    enabled: true
+    # Allow cross-namespace for monitoring
+    allowNamespaces:
+      - monitoring
+      - istio-system
+      
+  # Secrets management
+  secrets:
+    provider: aws-secrets-manager  # Options: aws-secrets-manager, vault, k8s
+    rotationEnabled: true
+    
+  # Runtime security
+  runtime:
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    seccompProfile: RuntimeDefault
+
+# -----------------------------------------------------------------------------
+# Governance
+# -----------------------------------------------------------------------------
+governance:
+  # Multi-tenant configuration
+  multiTenant:
+    enabled: true
+    maxTenants: 1000
+    
+  # Resource quotas
+  quotas:
+    enabled: true
+    defaults:
+      maxMemoryMB: 2048
+      maxCPUMillicores: 1000
+      maxStorageGB: 100
+      maxTasksPerSecond: 100
+      
+  # Rate limiting
+  rateLimiting:
+    enabled: true
+    globalLimit: 10000  # Requests per second
+    perTenantLimit: 1000
+    
+  # Cost allocation
+  costTracking:
+    enabled: true
+    provider: aws-cost-explorer
+
+# -----------------------------------------------------------------------------
+# Maintenance
+# -----------------------------------------------------------------------------
+maintenance:
+  # Automatic updates
+  autoUpdate:
+    enabled: false  # Manual updates for production
+    schedule: "0 3 * * 0"  # Sunday 3 AM
+    
+  # Automatic compaction
+  compaction:
+    enabled: true
+    schedule: "0 2 * * *"  # Daily 2 AM
+    
+  # Certificate renewal
+  certRenewal:
+    enabled: true
+    renewBefore: 30d

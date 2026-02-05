@@ -1,0 +1,464 @@
+# Grey Distributed - Formal Verification CI/CD Pipeline
+#
+# This workflow ensures correctness at every stage:
+#   1. TLA+ model checking on spec changes
+#   2. Unit tests with invariant checking
+#   3. Property-based testing
+#   4. Integration tests with chaos injection
+#
+# Verification runs on:
+#   - Every push to main
+#   - Every pull request
+#   - Nightly (extended verification)
+
+name: Formal Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'specs/tla/**'
+      - 'pkg/**'
+      - 'cmd/**'
+      - '.github/workflows/verify.yml'
+  pull_request:
+    branches: [main]
+  schedule:
+    # Nightly at 2 AM UTC for extended verification
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      extended:
+        description: 'Run extended verification'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  GO_VERSION: '1.22'
+  TLA_TOOLS_VERSION: '1.8.0'
+
+jobs:
+  # ============================================================
+  # Stage 1: TLA+ Model Checking
+  # ============================================================
+  tla-verification:
+    name: TLA+ Model Check
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        spec:
+          - name: GreyConsensus
+            config: GreyConsensus.cfg
+            timeout: 30
+          - name: GreyReplication
+            config: ""  # Uses defaults
+            timeout: 20
+          - name: GreyScheduler
+            config: ""
+            timeout: 25
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Cache TLA+ Tools
+        uses: actions/cache@v4
+        with:
+          path: ~/.tla
+          key: tla-tools-${{ env.TLA_TOOLS_VERSION }}
+      
+      - name: Install TLA+ Tools
+        run: |
+          mkdir -p ~/.tla
+          if [ ! -f ~/.tla/tla2tools.jar ]; then
+            wget -q https://github.com/tlaplus/tlaplus/releases/download/v${{ env.TLA_TOOLS_VERSION }}/tla2tools.jar \
+                 -O ~/.tla/tla2tools.jar
+          fi
+          echo "TLA_JAR=~/.tla/tla2tools.jar" >> $GITHUB_ENV
+      
+      - name: Run TLC Model Checker - ${{ matrix.spec.name }}
+        timeout-minutes: ${{ matrix.spec.timeout }}
+        run: |
+          cd specs/tla
+          
+          # Build command
+          CMD="java -XX:+UseParallelGC -Xmx4g -jar $TLA_JAR"
+          
+          # Add config if specified
+          if [ -n "${{ matrix.spec.config }}" ]; then
+            CMD="$CMD -config ${{ matrix.spec.config }}"
+          fi
+          
+          # Add spec file and flags
+          CMD="$CMD -workers auto -deadlock ${{ matrix.spec.name }}.tla"
+          
+          echo "Running: $CMD"
+          $CMD
+      
+      - name: Upload TLC Output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tlc-output-${{ matrix.spec.name }}
+          path: specs/tla/*.out
+          retention-days: 7
+
+  # ============================================================
+  # Stage 2: Go Unit Tests with Invariant Checking
+  # ============================================================
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: tla-verification
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      
+      - name: Download Dependencies
+        run: go mod download
+      
+      - name: Run Tests with Coverage
+        run: |
+          go test -v -race -coverprofile=coverage.out ./...
+      
+      - name: Check Coverage Threshold
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+          echo "Total coverage: $COVERAGE%"
+          
+          # Require 80% coverage
+          if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+            echo "::error::Coverage $COVERAGE% is below 80% threshold"
+            exit 1
+          fi
+      
+      - name: Upload Coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.out
+          retention-days: 7
+
+  # ============================================================
+  # Stage 3: Property-Based Testing
+  # ============================================================
+  property-tests:
+    name: Property-Based Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      
+      - name: Run Property Tests
+        run: |
+          # Property tests with more iterations
+          go test -v -tags=property -count=100 ./pkg/verification/...
+      
+      - name: Run Fuzz Tests
+        if: github.event_name == 'schedule' || github.event.inputs.extended == 'true'
+        run: |
+          # Run each fuzz test for 30 seconds
+          for pkg in $(go list ./...); do
+            go test -fuzz=. -fuzztime=30s $pkg || true
+          done
+
+  # ============================================================
+  # Stage 4: Invariant Verification Tests
+  # ============================================================
+  invariant-tests:
+    name: Invariant Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      
+      - name: Run Invariant Tests
+        run: |
+          go test -v -tags=invariants ./pkg/verification/...
+      
+      - name: Verify All Invariants Registered
+        run: |
+          # Check that all TLA+ invariants have corresponding runtime checks
+          echo "Checking invariant coverage..."
+          
+          # Extract invariant names from TLA+ specs
+          TLA_INVARIANTS=$(grep -h "^[A-Za-z]*Invariant\|^Agreement\|^LogMatching\|^NoQuotaViolation" \
+                          specs/tla/*.tla | grep -oE "^[A-Za-z]+" | sort -u)
+          
+          # Check each is registered in Go code
+          for inv in $TLA_INVARIANTS; do
+            if ! grep -q "\"$inv\"" pkg/verification/invariants.go; then
+              echo "::warning::TLA+ invariant '$inv' not found in runtime checks"
+            fi
+          done
+
+  # ============================================================
+  # Stage 5: Integration Tests
+  # ============================================================
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [invariant-tests, property-tests]
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      
+      - name: Build Binary
+        run: make build
+      
+      - name: Start Test Cluster
+        run: |
+          chmod +x ./deploy/cluster.sh
+          ./deploy/cluster.sh start 3
+          sleep 10  # Wait for cluster to stabilize
+      
+      - name: Run Integration Tests
+        run: |
+          go test -v -tags=integration ./tests/integration/...
+      
+      - name: Check Cluster Health
+        run: |
+          # Verify no invariant violations occurred
+          for node in 1 2 3; do
+            LOG="./data/cluster/logs/node-$node.log"
+            if grep -q "INVARIANT VIOLATION" "$LOG" 2>/dev/null; then
+              echo "::error::Invariant violation in node $node"
+              cat "$LOG"
+              exit 1
+            fi
+          done
+      
+      - name: Stop Cluster
+        if: always()
+        run: ./deploy/cluster.sh stop
+
+  # ============================================================
+  # Stage 6: Chaos Testing (Nightly Only)
+  # ============================================================
+  chaos-tests:
+    name: Chaos Testing
+    runs-on: ubuntu-latest
+    needs: integration-tests
+    if: github.event_name == 'schedule' || github.event.inputs.extended == 'true'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      
+      - name: Build Binary
+        run: make build
+      
+      - name: Start Test Cluster
+        run: |
+          ./deploy/cluster.sh start 5
+          sleep 15
+      
+      - name: Run Chaos Scenarios
+        run: |
+          # Scenario 1: Kill leader
+          echo "=== Scenario: Kill Leader ==="
+          LEADER=$(curl -s http://localhost:8080/v1/status | jq -r '.leader' || echo "1")
+          ./deploy/cluster.sh kill $LEADER
+          sleep 5
+          
+          # Verify new leader elected
+          NEW_LEADER=$(curl -s http://localhost:8080/v1/status | jq -r '.leader' || echo "")
+          if [ "$NEW_LEADER" == "$LEADER" ] || [ -z "$NEW_LEADER" ]; then
+            echo "::error::Leader election failed after killing node $LEADER"
+            exit 1
+          fi
+          echo "New leader: $NEW_LEADER"
+          
+          # Restart killed node
+          ./deploy/cluster.sh restart $LEADER
+          sleep 5
+          
+          # Scenario 2: Network partition (simulated via kill)
+          echo "=== Scenario: Network Partition ==="
+          ./deploy/cluster.sh kill 4
+          ./deploy/cluster.sh kill 5
+          sleep 5
+          
+          # Verify quorum still works (3 of 5)
+          RESPONSE=$(curl -s -w "%{http_code}" http://localhost:8080/health || echo "000")
+          if [ "$RESPONSE" != "200" ]; then
+            echo "::error::Cluster unhealthy during partition"
+            exit 1
+          fi
+          
+          # Recover partition
+          ./deploy/cluster.sh restart 4
+          ./deploy/cluster.sh restart 5
+          sleep 10
+          
+          # Scenario 3: Rapid leader churn
+          echo "=== Scenario: Rapid Leader Churn ==="
+          for i in {1..5}; do
+            LEADER=$(curl -s http://localhost:8080/v1/status | jq -r '.leader' || echo "1")
+            ./deploy/cluster.sh kill $LEADER
+            sleep 3
+            ./deploy/cluster.sh restart $LEADER
+            sleep 5
+          done
+      
+      - name: Verify Invariants
+        run: |
+          # Check no invariant violations in any node
+          VIOLATIONS=0
+          for node in 1 2 3 4 5; do
+            LOG="./data/cluster/logs/node-$node.log"
+            if grep -q "SAFETY VIOLATION\|INVARIANT VIOLATION" "$LOG" 2>/dev/null; then
+              echo "::error::Invariant violation in node $node"
+              grep "VIOLATION" "$LOG"
+              VIOLATIONS=$((VIOLATIONS + 1))
+            fi
+          done
+          
+          if [ $VIOLATIONS -gt 0 ]; then
+            exit 1
+          fi
+      
+      - name: Stop Cluster
+        if: always()
+        run: ./deploy/cluster.sh stop
+
+  # ============================================================
+  # Stage 7: Extended TLA+ Verification (Nightly Only)
+  # ============================================================
+  extended-verification:
+    name: Extended TLA+ Verification
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.inputs.extended == 'true'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Install TLA+ Tools
+        run: |
+          mkdir -p ~/.tla
+          wget -q https://github.com/tlaplus/tlaplus/releases/download/v${{ env.TLA_TOOLS_VERSION }}/tla2tools.jar \
+               -O ~/.tla/tla2tools.jar
+      
+      - name: Extended Consensus Check (5 nodes, 5 terms)
+        timeout-minutes: 120
+        run: |
+          cd specs/tla
+          
+          # Create extended config
+          cat > GreyConsensus-extended.cfg << EOF
+          CONSTANTS
+              Nodes = {n1, n2, n3, n4, n5}
+              MaxTerm = 5
+              MaxLogLength = 5
+              Values = {v1, v2, v3}
+          
+          SYMMETRY Permutations(Nodes)
+          
+          INVARIANTS
+              TypeInvariant
+              Agreement
+              LogMatching
+              CommittedEntriesNeverRollback
+          
+          PROPERTIES
+              EventualLeader
+          
+          SPECIFICATION Spec
+          EOF
+          
+          java -XX:+UseParallelGC -Xmx8g -jar ~/.tla/tla2tools.jar \
+               -config GreyConsensus-extended.cfg \
+               -workers auto \
+               -deadlock \
+               GreyConsensus.tla
+      
+      - name: Upload Extended Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: extended-tlc-output
+          path: specs/tla/*.out
+          retention-days: 30
+
+  # ============================================================
+  # Summary
+  # ============================================================
+  verification-summary:
+    name: Verification Summary
+    runs-on: ubuntu-latest
+    needs: [tla-verification, unit-tests, property-tests, invariant-tests, integration-tests]
+    if: always()
+    
+    steps:
+      - name: Check Results
+        run: |
+          echo "## Verification Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "| Stage | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| TLA+ Model Check | ${{ needs.tla-verification.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Unit Tests | ${{ needs.unit-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Property Tests | ${{ needs.property-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Invariant Tests | ${{ needs.invariant-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Integration Tests | ${{ needs.integration-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          
+          # Fail if any required job failed
+          if [ "${{ needs.tla-verification.result }}" != "success" ] || \
+             [ "${{ needs.unit-tests.result }}" != "success" ] || \
+             [ "${{ needs.invariant-tests.result }}" != "success" ]; then
+            echo "::error::Verification failed"
+            exit 1
+          fi
+      
+      - name: Notify on Failure
+        if: failure() && github.event_name == 'schedule'
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          channel-id: '#grey-alerts'
+          slack-message: |
+            :x: Grey Verification Failed
+            
+            Workflow: ${{ github.workflow }}
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}

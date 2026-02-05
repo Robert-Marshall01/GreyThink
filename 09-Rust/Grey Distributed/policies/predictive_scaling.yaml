@@ -1,0 +1,403 @@
+# =============================================================================
+# Grey Distributed — Predictive Scaling Policy
+# =============================================================================
+#
+# Workload history-based predictive scaling for Grey clusters.
+#
+# How It Works:
+#   1. Collects historical workload patterns (queue depth, task rate, latency)
+#   2. Uses ML model to forecast future demand
+#   3. Pre-scales capacity before demand arrives
+#   4. Adjusts predictions based on feedback
+#
+# Benefits:
+#   - Reduces cold-start latency during traffic spikes
+#   - Avoids reactive scaling lag (2-5 min delay)
+#   - Better resource efficiency through proactive management
+#
+# Tradeoffs:
+#   - Requires historical data (cold-start period)
+#   - Predictions may be wrong (safety margins needed)
+#   - More complex to debug than reactive scaling
+#
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grey-predictive-scaling-policy
+  namespace: grey-production
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: scaling
+data:
+  policy.yaml: |
+    # ==========================================================================
+    # Global Settings
+    # ==========================================================================
+    version: "1.0"
+    policyName: "grey-predictive-scaling"
+    
+    # Enable/disable predictive scaling
+    enabled: true
+    
+    # Fallback to reactive scaling if prediction fails
+    fallbackToReactive: true
+    
+    # ==========================================================================
+    # Data Collection
+    # ==========================================================================
+    dataCollection:
+      # Metrics to collect for prediction
+      metrics:
+        - name: task_submission_rate
+          query: "sum(rate(grey_tasks_submitted_total[5m]))"
+          aggregation: avg
+          resolution: 1m
+        
+        - name: queue_depth
+          query: "sum(grey_scheduler_queue_depth)"
+          aggregation: avg
+          resolution: 1m
+        
+        - name: worker_utilization
+          query: "avg(grey_worker_cpu_utilization)"
+          aggregation: avg
+          resolution: 1m
+        
+        - name: task_completion_rate
+          query: "sum(rate(grey_tasks_completed_total[5m]))"
+          aggregation: avg
+          resolution: 1m
+        
+        - name: p99_latency
+          query: "histogram_quantile(0.99, sum(rate(grey_task_duration_seconds_bucket[5m])) by (le))"
+          aggregation: avg
+          resolution: 5m
+      
+      # Data retention for historical analysis
+      retention:
+        rawData: 7d           # Keep 7 days of raw metrics
+        aggregatedData: 90d   # Keep 90 days of hourly aggregates
+        modelData: 365d       # Keep 1 year of model data
+      
+      # Storage backend
+      storage:
+        type: prometheus
+        remoteWrite:
+          url: "http://prometheus:9090/api/v1/write"
+    
+    # ==========================================================================
+    # Prediction Model
+    # ==========================================================================
+    predictionModel:
+      # Model type
+      type: "prophet"           # Options: prophet, lstm, arima, ensemble
+      
+      # Training configuration
+      training:
+        # Minimum data required before making predictions
+        minimumHistoryDays: 14
+        
+        # Retrain frequency
+        retrainSchedule:
+          cron: "0 2 * * 0"    # Sunday 2 AM
+          timezone: "UTC"
+        
+        # Seasonality patterns to detect
+        seasonality:
+          daily: true          # Intraday patterns
+          weekly: true         # Day-of-week patterns
+          yearly: false        # Annual patterns (long-term only)
+        
+        # Holidays and special events
+        holidays:
+          enabled: true
+          calendar: "US"
+          customEvents:
+            - name: "BlackFriday"
+              dates: ["2025-11-28", "2026-11-27"]
+            - name: "CyberMonday"
+              dates: ["2025-12-01", "2026-11-30"]
+      
+      # Prediction parameters
+      prediction:
+        # How far ahead to predict
+        horizonMinutes: 60
+        
+        # Prediction interval (how often to generate new predictions)
+        intervalMinutes: 5
+        
+        # Confidence level for prediction bounds
+        confidenceLevel: 0.95
+        
+        # Use upper bound of prediction (conservative)
+        useUpperBound: true
+        boundMultiplier: 1.1    # Add 10% safety margin
+    
+    # ==========================================================================
+    # Scaling Actions
+    # ==========================================================================
+    scalingActions:
+      # Time to pre-scale before predicted demand
+      preScaleLeadTimeMinutes: 10
+      
+      # Minimum predicted increase to trigger scale-out
+      minPredictedIncreasePercent: 15
+      
+      # Worker scaling based on predictions
+      workers:
+        target:
+          kind: StatefulSet
+          name: grey-worker
+          namespace: grey-production
+        
+        # Prediction-to-capacity mapping
+        capacityMapping:
+          # Predicted tasks/s → Required workers
+          # Formula: workers = ceil(predicted_rate / tasks_per_worker)
+          tasksPerWorker: 50     # Each worker handles ~50 tasks/s
+          
+          # Override formula for specific ranges
+          tiers:
+            - predictedRateMin: 0
+              predictedRateMax: 1000
+              workers: 50        # Minimum 50 workers
+            
+            - predictedRateMin: 1000
+              predictedRateMax: 5000
+              workers: 100
+            
+            - predictedRateMin: 5000
+              predictedRateMax: 10000
+              workers: 150
+            
+            - predictedRateMin: 10000
+              predictedRateMax: null
+              formula: "ceil(predicted_rate / 50)"
+        
+        # Limits
+        limits:
+          minReplicas: 50
+          maxReplicas: 250
+        
+        # Behavior
+        behavior:
+          # How quickly to scale based on predictions
+          scaleUpSpeed: aggressive
+          scaleDownSpeed: conservative
+          
+          # Don't scale down based on predictions alone
+          predictiveScaleDownEnabled: false
+    
+    # ==========================================================================
+    # Pattern Detection
+    # ==========================================================================
+    patternDetection:
+      # Detect recurring patterns
+      patterns:
+        - name: morning-ramp
+          description: "Gradual increase in traffic 8 AM - 10 AM"
+          detection:
+            metric: task_submission_rate
+            pattern: "monotonic_increase"
+            windowHours: [8, 10]
+            confidenceThreshold: 0.8
+          action:
+            preScaleMinutesBefore: 30
+            targetUtilization: 50     # Pre-scale to 50% utilization
+        
+        - name: lunchtime-dip
+          description: "Traffic decrease during lunch"
+          detection:
+            metric: task_submission_rate
+            pattern: "monotonic_decrease"
+            windowHours: [12, 13]
+            confidenceThreshold: 0.7
+          action:
+            skipScaleDown: true       # Don't scale down, traffic returns
+        
+        - name: end-of-day-spike
+          description: "Batch job submission at 5 PM"
+          detection:
+            metric: task_submission_rate
+            pattern: "spike"
+            windowHours: [17, 18]
+            confidenceThreshold: 0.85
+          action:
+            preScaleMinutesBefore: 45
+            targetUtilization: 40
+        
+        - name: weekend-low
+          description: "Reduced traffic on weekends"
+          detection:
+            metric: task_submission_rate
+            pattern: "sustained_low"
+            daysOfWeek: [6, 0]        # Saturday, Sunday
+            confidenceThreshold: 0.9
+          action:
+            allowScaleDown: true
+            minCapacityPercent: 30
+    
+    # ==========================================================================
+    # Feedback Loop
+    # ==========================================================================
+    feedbackLoop:
+      # Track prediction accuracy
+      accuracy:
+        # Compare predicted vs actual
+        evaluationWindowMinutes: 60
+        
+        # Metrics to track
+        metrics:
+          - name: prediction_mape
+            description: "Mean Absolute Percentage Error"
+            target: 0.15            # Target 15% MAPE
+            alertThreshold: 0.30    # Alert if > 30%
+          
+          - name: scale_event_accuracy
+            description: "Did we scale correctly before demand?"
+            target: 0.90            # 90% of scale events should be timely
+      
+      # Adaptive adjustments
+      adaptation:
+        # Increase safety margin if predictions are inaccurate
+        adjustSafetyMargin: true
+        
+        # Learning rate for model updates
+        learningRate: 0.1
+        
+        # Anomaly detection
+        anomalyDetection:
+          enabled: true
+          # Ignore predictions during anomalies
+          fallbackToReactive: true
+    
+    # ==========================================================================
+    # Alerting
+    # ==========================================================================
+    alerts:
+      - name: prediction-accuracy-low
+        condition: "prediction_mape > 0.30"
+        severity: warning
+        message: "Predictive scaling accuracy degraded"
+      
+      - name: model-stale
+        condition: "model_age_hours > 168"  # 7 days
+        severity: warning
+        message: "Prediction model needs retraining"
+      
+      - name: unexpected-spike
+        condition: "actual_rate > predicted_upper_bound * 1.5"
+        severity: critical
+        message: "Traffic spike exceeded predictions by 50%"
+
+---
+# =============================================================================
+# AWS Predictive Scaling Policy
+# =============================================================================
+# Native AWS implementation for ASG
+resource "aws_autoscaling_policy" "grey_predictive" {
+  name                   = "grey-workers-predictive"
+  autoscaling_group_name = "grey-workers"
+  policy_type            = "PredictiveScaling"
+  
+  predictive_scaling_configuration {
+    mode                         = "ForecastAndScale"
+    scheduling_buffer_time       = 600    # 10 min before predicted load
+    max_capacity_breach_behavior = "IncreaseMaxCapacity"
+    max_capacity_buffer          = 20     # Allow 20% above max
+    
+    metric_specification {
+      target_value = 70
+      
+      predefined_load_metric_specification {
+        predefined_metric_type = "ASGTotalCPUUtilization"
+        resource_label         = "grey-workers"
+      }
+      
+      predefined_scaling_metric_specification {
+        predefined_metric_type = "ASGAverageCPUUtilization"
+        resource_label         = "grey-workers"
+      }
+    }
+  }
+}
+
+---
+# =============================================================================
+# Prediction Engine Deployment
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grey-prediction-engine
+  namespace: grey-production
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: grey-prediction-engine
+  template:
+    metadata:
+      labels:
+        app: grey-prediction-engine
+    spec:
+      containers:
+        - name: predictor
+          image: grey-distributed/prediction-engine:v1.0.0
+          ports:
+            - containerPort: 8080
+              name: api
+            - containerPort: 9090
+              name: metrics
+          env:
+            - name: PROMETHEUS_URL
+              value: "http://prometheus:9090"
+            - name: MODEL_TYPE
+              value: "prophet"
+            - name: PREDICTION_HORIZON_MINUTES
+              value: "60"
+            - name: CONFIDENCE_LEVEL
+              value: "0.95"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+          volumeMounts:
+            - name: model-data
+              mountPath: /var/lib/grey/models
+        
+        - name: scaler
+          image: grey-distributed/predictive-scaler:v1.0.0
+          env:
+            - name: PREDICTION_API
+              value: "http://localhost:8080"
+            - name: K8S_NAMESPACE
+              value: grey-production
+            - name: TARGET_STATEFULSET
+              value: grey-worker
+            - name: PRE_SCALE_LEAD_MINUTES
+              value: "10"
+      
+      volumes:
+        - name: model-data
+          persistentVolumeClaim:
+            claimName: grey-prediction-models
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grey-prediction-models
+  namespace: grey-production
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: ssd-standard

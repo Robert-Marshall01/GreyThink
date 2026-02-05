@@ -1,0 +1,499 @@
+{
+  "title": "Grey Distributed — Global Energy Grid Dashboard",
+  "description": "Real-time visualization of worldwide electricity grid coordination",
+  "version": "1.0.0",
+  "refreshInterval": "5s",
+  "timeRange": {
+    "default": "1h",
+    "options": ["5m", "15m", "1h", "6h", "24h", "7d"]
+  },
+  "variables": [
+    {
+      "name": "region",
+      "label": "Region",
+      "type": "multiselect",
+      "options": ["north_america", "western_europe", "east_asia", "south_asia", "middle_east", "africa", "south_america", "oceania"],
+      "default": "all"
+    },
+    {
+      "name": "grid_type",
+      "label": "Grid Type",
+      "type": "select",
+      "options": ["all", "transmission", "distribution", "microgrid"],
+      "default": "all"
+    }
+  ],
+  "sections": [
+    {
+      "title": "Global Overview",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Total Generation",
+              "type": "stat",
+              "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+              "query": "sum(grey_energy_generation_gw)",
+              "unit": "GW",
+              "sparkline": true,
+              "color": "#22c55e"
+            },
+            {
+              "title": "Total Demand",
+              "type": "stat",
+              "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+              "query": "sum(grey_energy_demand_gw)",
+              "unit": "GW",
+              "sparkline": true,
+              "color": "#3b82f6"
+            },
+            {
+              "title": "Grid Balance",
+              "type": "gauge",
+              "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+              "query": "(sum(grey_energy_generation_gw) - sum(grey_energy_demand_gw)) / sum(grey_energy_demand_gw) * 100",
+              "unit": "%",
+              "min": -10,
+              "max": 10,
+              "thresholds": {
+                "critical": [-10, -5],
+                "warning": [-5, -2],
+                "ok": [-2, 2],
+                "warning_high": [2, 5],
+                "critical_high": [5, 10]
+              }
+            },
+            {
+              "title": "Cross-Border Flows",
+              "type": "stat",
+              "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+              "query": "sum(grey_energy_cross_border_gw)",
+              "unit": "GW",
+              "subtitle": "Active transfers"
+            },
+            {
+              "title": "Renewable %",
+              "type": "gauge",
+              "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+              "query": "sum(grey_energy_renewable_gw) / sum(grey_energy_generation_gw) * 100",
+              "unit": "%",
+              "thresholds": {
+                "critical": [0, 30],
+                "warning": [30, 50],
+                "ok": [50, 100]
+              }
+            },
+            {
+              "title": "Grid Stability",
+              "type": "stat",
+              "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+              "query": "avg(grey_energy_frequency_hz)",
+              "unit": "Hz",
+              "subtitle": "Target: 50.00/60.00",
+              "thresholds": {
+                "critical": [0, 49.5],
+                "warning": [49.5, 49.9],
+                "ok": [49.9, 50.1]
+              }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Global Energy Flow",
+              "type": "sankey",
+              "gridPos": { "x": 0, "y": 4, "w": 16, "h": 12 },
+              "query": "grey_energy_flow_gw",
+              "groupBy": ["source_region", "dest_region"],
+              "valueField": "flow_gw",
+              "colors": {
+                "north_america": "#3b82f6",
+                "western_europe": "#22c55e",
+                "east_asia": "#f59e0b",
+                "south_asia": "#a855f7",
+                "middle_east": "#ef4444",
+                "africa": "#06b6d4",
+                "south_america": "#84cc16",
+                "oceania": "#f97316"
+              }
+            },
+            {
+              "title": "Generation by Source",
+              "type": "piechart",
+              "gridPos": { "x": 16, "y": 4, "w": 8, "h": 6 },
+              "query": "sum by (source) (grey_energy_generation_gw)",
+              "colors": {
+                "solar": "#fbbf24",
+                "wind": "#22c55e",
+                "hydro": "#3b82f6",
+                "nuclear": "#a855f7",
+                "natural_gas": "#6b7280",
+                "coal": "#1f2937"
+              }
+            },
+            {
+              "title": "Regional Status",
+              "type": "worldmap",
+              "gridPos": { "x": 16, "y": 10, "w": 8, "h": 6 },
+              "query": "grey_energy_regional_status",
+              "colorField": "status",
+              "colors": {
+                "normal": "#22c55e",
+                "stressed": "#f59e0b",
+                "emergency": "#ef4444",
+                "blackout": "#1f2937"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Frequency & Stability",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Global Frequency Deviation",
+              "type": "timeseries",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "grey_energy_frequency_hz{region='north_america'}",
+                  "legendFormat": "North America (60Hz)"
+                },
+                {
+                  "expr": "grey_energy_frequency_hz{region='western_europe'}",
+                  "legendFormat": "Europe (50Hz)"
+                },
+                {
+                  "expr": "grey_energy_frequency_hz{region='east_asia'}",
+                  "legendFormat": "East Asia"
+                }
+              ],
+              "yAxis": {
+                "label": "Frequency (Hz)",
+                "decimals": 3
+              },
+              "thresholdLines": [
+                { "value": 50.0, "color": "#22c55e", "label": "Nominal 50Hz" },
+                { "value": 60.0, "color": "#22c55e", "label": "Nominal 60Hz" }
+              ]
+            },
+            {
+              "title": "Inertia by Region",
+              "type": "barchart",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+              "query": "grey_energy_system_inertia_gws",
+              "xAxis": { "label": "Region" },
+              "yAxis": { "label": "Inertia (GW·s)" },
+              "orientation": "horizontal",
+              "thresholds": [
+                { "value": 100, "color": "#ef4444", "label": "Critical" },
+                { "value": 200, "color": "#22c55e", "label": "Healthy" }
+              ]
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Voltage Profile",
+              "type": "heatmap",
+              "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+              "query": "grey_energy_voltage_deviation_percent",
+              "xAxis": "time",
+              "yAxis": "substation",
+              "colorScale": {
+                "colors": ["#22c55e", "#fbbf24", "#ef4444"],
+                "min": -5,
+                "max": 5
+              }
+            },
+            {
+              "title": "ROCOF Events",
+              "type": "timeline",
+              "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+              "query": "grey_energy_rocof_event",
+              "fields": {
+                "time": "timestamp",
+                "title": "description",
+                "type": "severity"
+              },
+              "colors": {
+                "minor": "#fbbf24",
+                "major": "#f97316",
+                "critical": "#ef4444"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Cross-Border Coordination",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Active Interconnections",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 10 },
+              "query": "grey_energy_interconnection",
+              "columns": [
+                { "field": "name", "label": "Interconnection", "width": "25%" },
+                { "field": "source", "label": "From", "width": "15%" },
+                { "field": "dest", "label": "To", "width": "15%" },
+                { "field": "capacity_gw", "label": "Capacity", "width": "12%", "format": "number" },
+                { "field": "flow_gw", "label": "Current Flow", "width": "12%", "format": "number" },
+                { "field": "utilization", "label": "Util %", "width": "10%", "format": "percent" },
+                { "field": "status", "label": "Status", "width": "11%" }
+              ],
+              "rowStyles": {
+                "utilization": {
+                  ">0.9": "bg-red-100",
+                  ">0.7": "bg-yellow-100",
+                  "<=0.7": "bg-green-100"
+                }
+              }
+            },
+            {
+              "title": "Scheduled vs Actual Flows",
+              "type": "timeseries",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 10 },
+              "queries": [
+                {
+                  "expr": "grey_energy_scheduled_flow_gw",
+                  "legendFormat": "Scheduled"
+                },
+                {
+                  "expr": "grey_energy_actual_flow_gw",
+                  "legendFormat": "Actual"
+                },
+                {
+                  "expr": "grey_energy_actual_flow_gw - grey_energy_scheduled_flow_gw",
+                  "legendFormat": "Deviation"
+                }
+              ],
+              "yAxis": { "label": "Power (GW)" }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Congestion Map",
+              "type": "nodegraph",
+              "gridPos": { "x": 0, "y": 10, "w": 24, "h": 10 },
+              "query": "grey_energy_transmission_congestion",
+              "nodes": {
+                "query": "grey_energy_substations",
+                "label": "name",
+                "color": "status"
+              },
+              "edges": {
+                "query": "grey_energy_lines",
+                "source": "from_station",
+                "target": "to_station",
+                "color": "congestion_level"
+              },
+              "layout": "geographic"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Renewable Integration",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Solar Generation Forecast",
+              "type": "timeseries",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "grey_energy_solar_forecast_gw",
+                  "legendFormat": "Forecast"
+                },
+                {
+                  "expr": "grey_energy_solar_actual_gw",
+                  "legendFormat": "Actual"
+                }
+              ],
+              "timeRange": { "from": "-6h", "to": "+6h" },
+              "annotations": {
+                "sunrise": true,
+                "sunset": true
+              }
+            },
+            {
+              "title": "Wind Generation Forecast",
+              "type": "timeseries",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "grey_energy_wind_forecast_gw",
+                  "legendFormat": "Forecast"
+                },
+                {
+                  "expr": "grey_energy_wind_actual_gw",
+                  "legendFormat": "Actual"
+                }
+              ],
+              "timeRange": { "from": "-6h", "to": "+6h" }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Storage State of Charge",
+              "type": "gauge",
+              "gridPos": { "x": 0, "y": 8, "w": 6, "h": 8 },
+              "query": "avg(grey_energy_storage_soc_percent)",
+              "unit": "%",
+              "thresholds": {
+                "critical": [0, 20],
+                "warning": [20, 40],
+                "ok": [40, 100]
+              }
+            },
+            {
+              "title": "Curtailment",
+              "type": "stat",
+              "gridPos": { "x": 6, "y": 8, "w": 6, "h": 4 },
+              "query": "sum(grey_energy_curtailed_gw)",
+              "unit": "GW",
+              "subtitle": "Renewable curtailment",
+              "color": "#f59e0b"
+            },
+            {
+              "title": "Ramp Rate",
+              "type": "stat",
+              "gridPos": { "x": 6, "y": 12, "w": 6, "h": 4 },
+              "query": "max(grey_energy_ramp_rate_gw_min)",
+              "unit": "GW/min",
+              "subtitle": "Current system ramp"
+            },
+            {
+              "title": "Duck Curve",
+              "type": "timeseries",
+              "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+              "query": "grey_energy_net_load_gw",
+              "timeRange": { "from": "now/d", "to": "now/d+1d" },
+              "annotations": [
+                { "time": "sunrise", "label": "Solar ramp" },
+                { "time": "sunset", "label": "Evening peak" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Consensus & Coordination",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Grid Consensus Status",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+              "query": "grey_consensus_grid_status",
+              "columns": [
+                { "field": "region", "label": "Region", "width": "20%" },
+                { "field": "nodes", "label": "Nodes", "width": "10%" },
+                { "field": "consensus_round", "label": "Round", "width": "15%" },
+                { "field": "latency_ms", "label": "Latency", "width": "15%" },
+                { "field": "last_agreement", "label": "Last Agreement", "width": "20%", "format": "relative" },
+                { "field": "status", "label": "Status", "width": "20%" }
+              ]
+            },
+            {
+              "title": "Dispatch Coordination Latency",
+              "type": "timeseries",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "histogram_quantile(0.50, grey_energy_dispatch_latency_ms)",
+                  "legendFormat": "p50"
+                },
+                {
+                  "expr": "histogram_quantile(0.95, grey_energy_dispatch_latency_ms)",
+                  "legendFormat": "p95"
+                },
+                {
+                  "expr": "histogram_quantile(0.99, grey_energy_dispatch_latency_ms)",
+                  "legendFormat": "p99"
+                }
+              ],
+              "yAxis": { "label": "Latency (ms)" },
+              "thresholdLines": [
+                { "value": 100, "color": "#22c55e", "label": "Target" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "alerts": [
+    {
+      "name": "frequency_deviation",
+      "description": "Grid frequency outside normal range",
+      "query": "abs(grey_energy_frequency_hz - grey_energy_nominal_frequency_hz) > 0.5",
+      "severity": "critical",
+      "annotations": {
+        "summary": "{{$labels.region}} grid frequency at {{$value}}Hz"
+      }
+    },
+    {
+      "name": "interconnection_overload",
+      "description": "Cross-border interconnection approaching capacity",
+      "query": "grey_energy_interconnection_utilization > 0.95",
+      "severity": "critical",
+      "annotations": {
+        "summary": "{{$labels.interconnection}} at {{$value | percent}} capacity"
+      }
+    },
+    {
+      "name": "generation_shortfall",
+      "description": "Generation below demand",
+      "query": "sum(grey_energy_demand_gw) - sum(grey_energy_generation_gw) > 5",
+      "severity": "critical",
+      "annotations": {
+        "summary": "Global generation shortfall of {{$value}}GW"
+      }
+    },
+    {
+      "name": "renewable_curtailment_high",
+      "description": "High renewable curtailment detected",
+      "query": "sum(grey_energy_curtailed_gw) / sum(grey_energy_renewable_capacity_gw) > 0.2",
+      "severity": "warning",
+      "annotations": {
+        "summary": "Renewable curtailment at {{$value | percent}}"
+      }
+    },
+    {
+      "name": "storage_depleted",
+      "description": "Grid storage nearly depleted",
+      "query": "avg(grey_energy_storage_soc_percent) < 10",
+      "severity": "critical",
+      "annotations": {
+        "summary": "Grid storage at {{$value}}% - evening peak at risk"
+      }
+    },
+    {
+      "name": "consensus_partition",
+      "description": "Energy grid consensus partition detected",
+      "query": "grey_consensus_grid_partitioned == 1",
+      "severity": "critical",
+      "annotations": {
+        "summary": "Grid consensus partitioned - {{$labels.region}} isolated"
+      }
+    }
+  ]
+}

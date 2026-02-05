@@ -1,0 +1,74 @@
+# =============================================================================
+# Prometheus Configuration for Grey Distributed Local Development
+# =============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: grey-local
+    environment: development
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093
+
+# Rule files
+# rule_files:
+#   - /etc/prometheus/rules/*.yml
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Grey Coordinators
+  - job_name: 'grey-coordinator'
+    static_configs:
+      - targets:
+          - 'grey-coordinator-1:9090'
+          - 'grey-coordinator-2:9090'
+          - 'grey-coordinator-3:9090'
+    metrics_path: /metrics
+    scheme: http
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):\d+'
+        replacement: '${1}'
+      - source_labels: []
+        target_label: component
+        replacement: 'coordinator'
+
+  # Grey Workers (uses DNS discovery for scaled services)
+  - job_name: 'grey-worker'
+    dns_sd_configs:
+      - names:
+          - 'grey-worker'
+        type: 'A'
+        port: 9090
+    metrics_path: /metrics
+    scheme: http
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+      - source_labels: []
+        target_label: component
+        replacement: 'worker'
+
+  # Grey Gateway
+  - job_name: 'grey-gateway'
+    static_configs:
+      - targets:
+          - 'grey-gateway:9090'
+    metrics_path: /metrics
+    scheme: http
+    relabel_configs:
+      - source_labels: []
+        target_label: component
+        replacement: 'gateway'

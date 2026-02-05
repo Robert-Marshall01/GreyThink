@@ -1,0 +1,260 @@
+# =============================================================================
+# Grey Distributed — Edge Site Helm Values
+# =============================================================================
+#
+# Values file for deploying Grey Distributed at edge locations.
+# Use with: helm upgrade --install grey-edge ./charts/grey -f edge-values.yaml
+#
+# Edge Deployment Pattern:
+#   • Constrained resources (1-3 nodes typically)
+#   • Intermittent connectivity to cloud
+#   • Local data processing with async replication
+#   • Offline operation capability
+#
+# Cost Estimate: ~$50-100/month (on small edge hardware)
+#
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Deployment Mode
+# -----------------------------------------------------------------------------
+mode: edge  # Options: cloud, edge, hybrid
+
+# Site identity for federation
+site:
+  id: ""        # Override via --set site.id=edge-site-01
+  region: ""    # Override via --set site.region=us-west-edge
+  type: edge
+
+# -----------------------------------------------------------------------------
+# Coordinator Configuration (Edge-optimized)
+# -----------------------------------------------------------------------------
+# On edge, coordinators are lightweight. Often a single coordinator suffices.
+coordinators:
+  replicas: 1  # Single coordinator for small edge
+  
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "250m"
+  
+  # Faster consensus for local network
+  consensus:
+    electionTimeoutMs: 200
+    heartbeatIntervalMs: 20
+    maxLogEntries: 10000  # Smaller log on edge
+  
+  persistence:
+    enabled: true
+    storageClass: "local-path"  # K3s default, adjust for your edge K8s
+    size: 10Gi
+  
+  nodeSelector: {}
+  tolerations:
+    - key: "node.kubernetes.io/edge"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+# -----------------------------------------------------------------------------
+# Worker Configuration (Edge-optimized)
+# -----------------------------------------------------------------------------
+workers:
+  replicas: 2  # Minimal workers for task execution
+  
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  
+  # Limited task parallelism on edge
+  scheduler:
+    maxConcurrentTasks: 10
+    workerSlots: 4
+    fairnessEnabled: true
+  
+  persistence:
+    enabled: true
+    storageClass: "local-path"
+    size: 20Gi
+  
+  tolerations:
+    - key: "node.kubernetes.io/edge"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+# -----------------------------------------------------------------------------
+# Federation Configuration
+# -----------------------------------------------------------------------------
+federation:
+  enabled: true
+  
+  # Cloud endpoints for synchronization
+  cloudEndpoints:
+    - host: "grey-primary.example.com"
+      port: 9191
+    - host: "grey-secondary.example.com"
+      port: 9191
+  
+  # Sync behavior
+  sync:
+    interval: 5s       # Sync every 5 seconds when online
+    batchSize: 1000    # Max items per sync batch
+    compression: true  # Compress data over WAN
+    
+  # Offline operation
+  offline:
+    enabled: true
+    maxDuration: 24h       # Max offline duration before rejecting writes
+    queueSize: 100000      # Max queued operations during offline
+    
+  # Conflict resolution
+  conflicts:
+    defaultStrategy: "last-writer-wins"
+    perCollection:
+      users: "cloud-master"
+      events: "merge-add"
+      
+  # TLS for federation
+  tls:
+    enabled: true
+    certSecret: "grey-edge-certs"
+    caSecret: "grey-edge-ca"
+
+# -----------------------------------------------------------------------------
+# Storage Configuration (Edge-optimized)
+# -----------------------------------------------------------------------------
+storage:
+  # Use local storage on edge (no cloud storage classes)
+  storageClass: "local-path"
+  
+  # Smaller data footprint on edge
+  dataSize: 20Gi
+  logSize: 5Gi
+  
+  # Aggressive data archiving to cloud
+  archiving:
+    enabled: true
+    threshold: 80    # Archive when 80% full
+    targetCloud: true
+    
+  # Compression for constrained storage
+  compression:
+    enabled: true
+    algorithm: "zstd"
+    level: 3
+
+# -----------------------------------------------------------------------------
+# Network Configuration
+# -----------------------------------------------------------------------------
+network:
+  # NodePort for local access (common on edge)
+  service:
+    type: NodePort
+    httpNodePort: 30080
+    grpcNodePort: 30090
+    
+  # Ingress typically not used on edge
+  ingress:
+    enabled: false
+    
+  # Bandwidth management for limited WAN
+  bandwidth:
+    uploadLimitMbps: 10
+    downloadLimitMbps: 10
+    prioritizeSync: true
+
+# -----------------------------------------------------------------------------
+# Security Configuration
+# -----------------------------------------------------------------------------
+security:
+  # mTLS for all communication
+  mtls:
+    enabled: true
+    
+  # Pod security
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+    
+  containerSecurityContext:
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+  
+  # Network policy
+  networkPolicy:
+    enabled: true
+
+# -----------------------------------------------------------------------------
+# Observability (Lightweight for edge)
+# -----------------------------------------------------------------------------
+observability:
+  # Lightweight metrics
+  metrics:
+    enabled: true
+    port: 8080
+    path: /metrics
+    
+  # Local logging only (no ELK on edge)
+  logging:
+    level: info
+    format: json
+    
+  # No distributed tracing on edge (too heavy)
+  tracing:
+    enabled: false
+    
+  # Health endpoints
+  health:
+    livenessPath: /health
+    readinessPath: /ready
+
+# -----------------------------------------------------------------------------
+# Resource Governance (Edge tenant limits)
+# -----------------------------------------------------------------------------
+governance:
+  # Per-tenant limits (conservative for edge)
+  tenantLimits:
+    default:
+      maxMemory: "128Mi"
+      maxCPU: "100m"
+      maxStorage: "1Gi"
+      maxTasksPerSecond: 10
+      
+  # Priority classes
+  priorities:
+    system: 1000
+    high: 100
+    default: 50
+    low: 10
+
+# -----------------------------------------------------------------------------
+# Additional Edge-specific Settings
+# -----------------------------------------------------------------------------
+edge:
+  # Use DaemonSet for edge (one pod per node)
+  useDaemonSet: true
+  
+  # Host path for persistent local storage
+  hostPath:
+    enabled: true
+    dataPath: /var/lib/grey
+    
+  # Local-only consensus (don't wait for cloud)
+  localConsensus:
+    enabled: true
+    quorumSize: 1  # Single node can commit locally
+    
+  # Graceful degradation
+  degradation:
+    enabled: true
+    offlineReads: true   # Allow reads when offline
+    offlineWrites: true  # Queue writes when offline

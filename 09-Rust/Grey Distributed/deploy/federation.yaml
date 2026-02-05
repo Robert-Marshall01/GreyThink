@@ -1,0 +1,276 @@
+# =============================================================================
+# Grey Distributed - Hybrid Edge + Cloud Federation
+# =============================================================================
+#
+# This configuration enables a federated deployment with:
+#   - Edge nodes at the network edge (low latency, local processing)
+#   - Cloud nodes for coordination and durability
+#   - Seamless data synchronization between tiers
+#
+# Architecture:
+#
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │                         Cloud Region                                │
+#   │  ┌─────────┐   ┌─────────┐   ┌─────────┐                          │
+#   │  │ Cloud-1 │◄─►│ Cloud-2 │◄─►│ Cloud-3 │  (5-node Raft cluster)  │
+#   │  └────▲────┘   └────▲────┘   └────▲────┘                          │
+#   │       │             │             │                                │
+#   └───────┼─────────────┼─────────────┼────────────────────────────────┘
+#           │             │             │
+#           │    WAN Federation Links   │
+#           │             │             │
+#   ┌───────┼─────────────┼─────────────┼────────────────────────────────┐
+#   │       ▼             ▼             ▼                                │
+#   │  ┌─────────┐   ┌─────────┐   ┌─────────┐                          │
+#   │  │ Edge-1  │   │ Edge-2  │   │ Edge-3  │  (Local processing)     │
+#   │  └─────────┘   └─────────┘   └─────────┘                          │
+#   │                    Edge Sites                                      │
+#   └────────────────────────────────────────────────────────────────────┘
+#
+# Key Features:
+#   - Local consensus at each edge site
+#   - Async replication to cloud for durability
+#   - Read/write locally, sync globally
+#   - Conflict resolution via vector clocks
+#
+# =============================================================================
+
+# Federation Configuration
+federation:
+  # Enable multi-site federation
+  enabled: true
+  
+  # This site's identity
+  site:
+    id: "edge-site-1"
+    type: "edge"  # "edge" or "cloud"
+    region: "us-west"
+    
+  # Cloud coordination endpoints
+  cloud:
+    endpoints:
+      - host: "cloud-1.grey.example.com"
+        port: 9191
+      - host: "cloud-2.grey.example.com"
+        port: 9191
+      - host: "cloud-3.grey.example.com"
+        port: 9191
+        
+    # Cloud connection settings
+    connection:
+      timeout: 10s
+      keepAlive: 30s
+      maxRetries: 5
+      backoffMultiplier: 1.5
+      
+  # Sync policy
+  sync:
+    # How often to sync with cloud
+    interval: 5s
+    
+    # What to sync
+    policies:
+      # Real-time critical data
+      - pattern: "tasks/*"
+        mode: "realtime"
+        priority: high
+        
+      # Batch non-critical data
+      - pattern: "metrics/*"
+        mode: "batch"
+        interval: 60s
+        priority: low
+        
+      # Selective sync based on tenant
+      - pattern: "tenant/*/data/*"
+        mode: "tenant-defined"
+        priority: medium
+        
+  # Conflict resolution
+  conflicts:
+    # Default strategy
+    defaultStrategy: "last-writer-wins"
+    
+    # Custom strategies per path
+    strategies:
+      - pattern: "counters/*"
+        strategy: "merge-add"  # CRDT-style merge
+        
+      - pattern: "sets/*"
+        strategy: "merge-union"  # Set union
+        
+      - pattern: "critical/*"
+        strategy: "cloud-master"  # Cloud always wins
+
+# Edge Node Configuration
+edge:
+  # Local cluster size at this edge site
+  nodes: 3
+  
+  # Resource limits (edge nodes are typically constrained)
+  resources:
+    memory: "2Gi"
+    cpu: "2"
+    disk: "50Gi"
+    
+  # Local data retention
+  retention:
+    # Keep data locally for quick access
+    hot: 7d
+    # Archive older data to cloud
+    archive: 30d
+    # Delete after archival confirmation
+    purge: 90d
+    
+  # Offline operation
+  offline:
+    # Enable offline operation
+    enabled: true
+    
+    # Max time to operate without cloud connectivity
+    maxOfflineDuration: 24h
+    
+    # Sync queue size during offline
+    queueSize: 100000
+    
+    # Alert after this duration offline
+    alertThreshold: 1h
+
+# Local Consensus (edge site internal)
+localConsensus:
+  # Faster timeouts for edge (low latency local network)
+  electionTimeout: 200ms
+  heartbeatInterval: 20ms
+  
+  # Smaller snapshots more frequently
+  snapshotThreshold: 1000
+  
+# Federation Consensus (cross-site)
+federationConsensus:
+  # Longer timeouts for WAN
+  syncTimeout: 30s
+  
+  # Quorum for cross-site operations
+  # Requires majority of cloud nodes
+  cloudQuorum: 2
+  
+  # Edge nodes do not vote in global consensus
+  # They replicate from cloud
+  edgeVotingRights: false
+
+# Routing Configuration
+routing:
+  # Where to send requests
+  rules:
+    # Local reads by default
+    - match:
+        operation: "read"
+        staleness: "<5s"
+      route: "local"
+      
+    # Strong reads go to cloud
+    - match:
+        operation: "read"
+        consistency: "strong"
+      route: "cloud"
+      
+    # Writes go local, async to cloud
+    - match:
+        operation: "write"
+        durability: "local"
+      route: "local"
+      
+    # Durable writes confirmed by cloud
+    - match:
+        operation: "write"
+        durability: "global"
+      route: "cloud"
+      fallback: "queue"  # Queue if cloud unreachable
+
+# Network Configuration
+network:
+  # Local site networking
+  local:
+    bindAddress: "0.0.0.0"
+    httpPort: 8080
+    grpcPort: 9090
+    raftPort: 7070
+    
+  # WAN / federation networking
+  federation:
+    # Grey Protocol for efficient WAN communication
+    greyProtocolPort: 9191
+    
+    # Compression for WAN traffic
+    compression: "zstd"
+    compressionLevel: 3
+    
+    # Encryption
+    tls:
+      enabled: true
+      certFile: "/etc/grey/certs/federation.crt"
+      keyFile: "/etc/grey/certs/federation.key"
+      caFile: "/etc/grey/certs/ca.crt"
+      
+    # Bandwidth limits
+    bandwidth:
+      # Max bandwidth to cloud (per node)
+      maxUpload: "100Mbps"
+      maxDownload: "100Mbps"
+      
+      # Priority during congestion
+      priorities:
+        sync: 80
+        queries: 15
+        metrics: 5
+
+# Monitoring for Federation
+monitoring:
+  # Track federation health
+  federation:
+    # Round-trip time to cloud
+    rttThreshold: 200ms
+    
+    # Sync lag alert
+    lagThreshold: 30s
+    
+    # Offline alert
+    offlineThreshold: 5m
+    
+  # Metrics to export
+  metrics:
+    - name: "federation_sync_lag_seconds"
+      type: "gauge"
+      
+    - name: "federation_rtt_seconds"
+      type: "histogram"
+      buckets: [0.01, 0.05, 0.1, 0.2, 0.5, 1.0]
+      
+    - name: "federation_conflict_total"
+      type: "counter"
+      labels: ["strategy", "result"]
+      
+    - name: "edge_queue_depth"
+      type: "gauge"
+
+# Security for Federation
+security:
+  # Mutual TLS for federation
+  mtls:
+    enabled: true
+    
+  # Site authentication
+  sites:
+    # Allowed peer sites
+    allowed:
+      - id: "cloud-1"
+        publicKey: "/etc/grey/keys/cloud-1.pub"
+        
+      - id: "edge-site-2"
+        publicKey: "/etc/grey/keys/edge-2.pub"
+        
+  # Data encryption at rest
+  encryption:
+    enabled: true
+    keySource: "cloud-kms"
+    keyRotation: 30d

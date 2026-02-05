@@ -1,0 +1,267 @@
+# =============================================================================
+# Grey Distributed - Docker Compose for Local Development
+# =============================================================================
+#
+# This docker-compose file sets up a local Grey cluster with:
+#   - 3 Coordinator nodes (Raft consensus)
+#   - 3 Worker nodes
+#   - 1 Gateway node
+#   - Prometheus for metrics
+#   - Grafana for dashboards
+#
+# Usage:
+#   docker-compose up -d              # Start all services
+#   docker-compose up -d --scale grey-worker=5  # Scale workers
+#   docker-compose logs -f grey-coordinator-1   # View logs
+#   docker-compose down -v            # Stop and remove volumes
+#
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Coordinator Nodes (Raft Consensus Cluster)
+  # ---------------------------------------------------------------------------
+  grey-coordinator-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: dev
+    image: grey-distributed:dev
+    container_name: grey-coordinator-1
+    hostname: grey-coordinator-1
+    command:
+      - --mode=coordinator
+      - --config=/etc/grey/config.yaml
+      - --data-dir=/var/lib/grey/data
+      - --node-id=grey-coordinator-1
+      - --raft-peers=grey-coordinator-1:7070,grey-coordinator-2:7070,grey-coordinator-3:7070
+    environment:
+      - GREY_NODE_ID=grey-coordinator-1
+      - GREY_CLUSTER_SEEDS=grey-coordinator-1:7070,grey-coordinator-2:7070,grey-coordinator-3:7070
+      - GREY_LOG_LEVEL=info
+    ports:
+      - "8081:8080"
+      - "9091:9090"
+      - "7071:7070"
+    volumes:
+      - ./deploy/config/config.yaml:/etc/grey/config.yaml:ro
+      - coordinator-1-data:/var/lib/grey/data
+    networks:
+      - grey-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  grey-coordinator-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: grey-distributed:dev
+    container_name: grey-coordinator-2
+    hostname: grey-coordinator-2
+    command:
+      - --mode=coordinator
+      - --config=/etc/grey/config.yaml
+      - --data-dir=/var/lib/grey/data
+      - --node-id=grey-coordinator-2
+      - --raft-peers=grey-coordinator-1:7070,grey-coordinator-2:7070,grey-coordinator-3:7070
+    environment:
+      - GREY_NODE_ID=grey-coordinator-2
+      - GREY_CLUSTER_SEEDS=grey-coordinator-1:7070,grey-coordinator-2:7070,grey-coordinator-3:7070
+      - GREY_LOG_LEVEL=info
+    ports:
+      - "8082:8080"
+      - "9092:9090"
+      - "7072:7070"
+    volumes:
+      - ./deploy/config/config.yaml:/etc/grey/config.yaml:ro
+      - coordinator-2-data:/var/lib/grey/data
+    networks:
+      - grey-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      - grey-coordinator-1
+    restart: unless-stopped
+
+  grey-coordinator-3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: grey-distributed:dev
+    container_name: grey-coordinator-3
+    hostname: grey-coordinator-3
+    command:
+      - --mode=coordinator
+      - --config=/etc/grey/config.yaml
+      - --data-dir=/var/lib/grey/data
+      - --node-id=grey-coordinator-3
+      - --raft-peers=grey-coordinator-1:7070,grey-coordinator-2:7070,grey-coordinator-3:7070
+    environment:
+      - GREY_NODE_ID=grey-coordinator-3
+      - GREY_CLUSTER_SEEDS=grey-coordinator-1:7070,grey-coordinator-2:7070,grey-coordinator-3:7070
+      - GREY_LOG_LEVEL=info
+    ports:
+      - "8083:8080"
+      - "9093:9090"
+      - "7073:7070"
+    volumes:
+      - ./deploy/config/config.yaml:/etc/grey/config.yaml:ro
+      - coordinator-3-data:/var/lib/grey/data
+    networks:
+      - grey-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      - grey-coordinator-1
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Worker Nodes (Task Executors)
+  # ---------------------------------------------------------------------------
+  grey-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: grey-distributed:dev
+    command:
+      - --mode=worker
+      - --config=/etc/grey/config.yaml
+      - --coordinator-endpoints=grey-coordinator-1:7070,grey-coordinator-2:7070,grey-coordinator-3:7070
+    environment:
+      - GREY_LOG_LEVEL=info
+      - GREY_COORDINATOR_ENDPOINTS=grey-coordinator-1:7070,grey-coordinator-2:7070,grey-coordinator-3:7070
+    volumes:
+      - ./deploy/config/config.yaml:/etc/grey/config.yaml:ro
+    networks:
+      - grey-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      - grey-coordinator-1
+      - grey-coordinator-2
+      - grey-coordinator-3
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Gateway (External API)
+  # ---------------------------------------------------------------------------
+  grey-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: grey-distributed:dev
+    container_name: grey-gateway
+    hostname: grey-gateway
+    command:
+      - --mode=gateway
+      - --config=/etc/grey/config.yaml
+      - --coordinator-endpoints=grey-coordinator-1:7070,grey-coordinator-2:7070,grey-coordinator-3:7070
+    environment:
+      - GREY_LOG_LEVEL=info
+      - GREY_COORDINATOR_ENDPOINTS=grey-coordinator-1:7070,grey-coordinator-2:7070,grey-coordinator-3:7070
+    ports:
+      - "8080:8080"   # HTTP API (main entrypoint)
+      - "9090:9090"   # gRPC API
+    volumes:
+      - ./deploy/config/config.yaml:/etc/grey/config.yaml:ro
+    networks:
+      - grey-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      - grey-coordinator-1
+      - grey-coordinator-2
+      - grey-coordinator-3
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Observability Stack
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: grey-prometheus
+    hostname: prometheus
+    ports:
+      - "9100:9090"
+    volumes:
+      - ./deploy/config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+    networks:
+      - grey-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: grey-grafana
+    hostname: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=grey-admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./dashboards:/var/lib/grafana/dashboards:ro
+      - ./deploy/config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - grey-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+# -----------------------------------------------------------------------------
+# Networks
+# -----------------------------------------------------------------------------
+networks:
+  grey-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# -----------------------------------------------------------------------------
+# Volumes
+# -----------------------------------------------------------------------------
+volumes:
+  coordinator-1-data:
+  coordinator-2-data:
+  coordinator-3-data:
+  prometheus-data:
+  grafana-data:

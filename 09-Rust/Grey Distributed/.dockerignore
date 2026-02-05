@@ -1,0 +1,119 @@
+# =============================================================================
+# Grey Distributed - Docker Ignore File
+# =============================================================================
+# Files and directories to exclude from Docker build context
+# for faster builds and smaller images.
+# =============================================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Build outputs
+/target/
+/bin/
+/dist/
+
+# Rust
+Cargo.lock
+*.rs.bk
+**/*.rs.bk
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+go.work.sum
+vendor/
+
+# Dependencies
+node_modules/
+
+# IDE and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+secrets/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Coverage and test artifacts
+coverage/
+*.cover
+*.coverage
+htmlcov/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# Kubernetes local configs
+*.kubeconfig
+
+# Documentation (not needed in runtime image)
+docs/
+*.md
+!README.md
+
+# Test files
+tests/
+*_test.go
+**/*_test.go
+
+# Benchmarks
+benchmarks/
+
+# Development configs
+repro/
+stress/
+
+# Case studies and adoption docs
+case_studies/
+adoption/
+civilization/
+cosmic/
+myth/
+posthuman/
+succession/
+temporal/
+legacy/
+economics/
+resilience/
+
+# Dashboards (mounted separately)
+dashboards/
+
+# Specs and policies (documentation)
+specs/
+policies/

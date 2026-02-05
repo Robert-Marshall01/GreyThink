@@ -1,0 +1,230 @@
+{{/*
+=============================================================================
+Grey Distributed — Services
+=============================================================================
+
+Services expose Grey components within and outside the cluster:
+- Headless service for StatefulSet coordinator discovery
+- ClusterIP services for internal communication  
+- LoadBalancer/Ingress for external access
+
+=============================================================================
+*/}}
+
+# Headless service for coordinator StatefulSet — enables stable DNS names for Raft
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "grey.coordinator.headlessServiceName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grey.coordinator.labels" . | nindent 4 }}
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: raft
+      port: {{ .Values.consensus.raftPort }}
+      targetPort: raft
+      protocol: TCP
+    - name: grpc
+      port: {{ .Values.coordinator.service.grpcPort }}
+      targetPort: grpc
+      protocol: TCP
+  selector:
+    {{- include "grey.coordinator.selectorLabels" . | nindent 4 }}
+
+---
+# ClusterIP service for coordinator — internal access for workers/gateways
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "grey.fullname" . }}-coordinator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grey.coordinator.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: grpc
+      port: {{ .Values.coordinator.service.grpcPort }}
+      targetPort: grpc
+      protocol: TCP
+    - name: metrics
+      port: {{ .Values.monitoring.prometheus.port | default 9090 }}
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    {{- include "grey.coordinator.selectorLabels" . | nindent 4 }}
+
+---
+# ClusterIP service for workers — internal task execution
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "grey.fullname" . }}-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grey.worker.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: grpc
+      port: {{ .Values.worker.service.grpcPort }}
+      targetPort: grpc
+      protocol: TCP
+    - name: metrics
+      port: {{ .Values.monitoring.prometheus.port | default 9090 }}
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    {{- include "grey.worker.selectorLabels" . | nindent 4 }}
+
+---
+# Gateway service — external access point
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "grey.fullname" . }}-gateway
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grey.gateway.labels" . | nindent 4 }}
+  {{- with .Values.gateway.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.gateway.service.type }}
+  {{- if and (eq .Values.gateway.service.type "LoadBalancer") .Values.gateway.service.loadBalancerIP }}
+  loadBalancerIP: {{ .Values.gateway.service.loadBalancerIP }}
+  {{- end }}
+  {{- if and (eq .Values.gateway.service.type "LoadBalancer") .Values.gateway.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- toYaml .Values.gateway.service.loadBalancerSourceRanges | nindent 4 }}
+  {{- end }}
+  {{- if .Values.gateway.service.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ .Values.gateway.service.externalTrafficPolicy }}
+  {{- end }}
+  ports:
+    - name: http
+      port: {{ .Values.gateway.service.httpPort }}
+      targetPort: http
+      protocol: TCP
+      {{- if and (eq .Values.gateway.service.type "NodePort") .Values.gateway.service.nodePort }}
+      nodePort: {{ .Values.gateway.service.nodePort }}
+      {{- end }}
+    - name: grpc
+      port: {{ .Values.gateway.service.grpcPort }}
+      targetPort: grpc
+      protocol: TCP
+    - name: metrics
+      port: {{ .Values.monitoring.prometheus.port | default 9090 }}
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    {{- include "grey.gateway.selectorLabels" . | nindent 4 }}
+
+---
+# Ingress for HTTP/gRPC traffic (optional)
+{{- if .Values.gateway.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "grey.fullname" . }}-gateway
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grey.gateway.labels" . | nindent 4 }}
+  {{- with .Values.gateway.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.gateway.ingress.ingressClassName }}
+  ingressClassName: {{ .Values.gateway.ingress.ingressClassName }}
+  {{- end }}
+  {{- if .Values.gateway.ingress.tls }}
+  tls:
+    {{- range .Values.gateway.ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.gateway.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType | default "Prefix" }}
+            backend:
+              service:
+                name: {{ include "grey.fullname" $ }}-gateway
+                port:
+                  number: {{ $.Values.gateway.service.httpPort }}
+          {{- end }}
+    {{- end }}
+{{- end }}
+
+---
+# Metrics service for Prometheus ServiceMonitor
+{{- if .Values.monitoring.prometheus.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "grey.fullname" . }}-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grey.labels" . | nindent 4 }}
+    app.kubernetes.io/component: metrics
+spec:
+  type: ClusterIP
+  ports:
+    - name: metrics
+      port: {{ .Values.monitoring.prometheus.port | default 9090 }}
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    {{- include "grey.selectorLabels" . | nindent 4 }}
+{{- end }}
+
+---
+# ServiceMonitor for Prometheus Operator (if enabled)
+{{- if and .Values.monitoring.prometheus.enabled .Values.monitoring.prometheus.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "grey.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "grey.labels" . | nindent 4 }}
+    {{- with .Values.monitoring.prometheus.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "grey.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: metrics
+      interval: {{ .Values.monitoring.prometheus.serviceMonitor.interval | default "30s" }}
+      scrapeTimeout: {{ .Values.monitoring.prometheus.serviceMonitor.scrapeTimeout | default "10s" }}
+      path: /metrics
+      {{- if .Values.monitoring.prometheus.serviceMonitor.relabelings }}
+      relabelings:
+        {{- toYaml .Values.monitoring.prometheus.serviceMonitor.relabelings | nindent 8 }}
+      {{- end }}
+      {{- if .Values.monitoring.prometheus.serviceMonitor.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml .Values.monitoring.prometheus.serviceMonitor.metricRelabelings | nindent 8 }}
+      {{- end }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+{{- end }}

@@ -1,0 +1,342 @@
+# =============================================================================
+# Grey Distributed — Horizontal Scaling Policy
+# =============================================================================
+#
+# Worker node horizontal scaling rules for Grey clusters.
+#
+# Scaling Triggers:
+#   - CPU utilization thresholds
+#   - Queue depth thresholds
+#   - Task completion rate degradation
+#   - Memory pressure
+#
+# Tradeoffs:
+#   - Aggressive scale-out: Lower latency, higher cost
+#   - Conservative scale-out: Higher latency, lower cost
+#   - Warm pools: Fast scale-out, slight overhead
+#
+# This policy targets balanced cost/performance for production workloads.
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grey-horizontal-scaling-policy
+  namespace: grey-production
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: scaling
+data:
+  policy.yaml: |
+    # ==========================================================================
+    # Global Settings
+    # ==========================================================================
+    version: "1.0"
+    policyName: "grey-horizontal-scaling"
+    
+    # Target component (only workers should horizontally scale)
+    target:
+      kind: StatefulSet
+      name: grey-worker
+      namespace: grey-production
+    
+    # Scaling boundaries
+    limits:
+      minReplicas: 50          # Never scale below this (baseline capacity)
+      maxReplicas: 250         # Hard ceiling (cost protection)
+      desiredBuffer: 10        # Keep N extra workers for headroom
+    
+    # ==========================================================================
+    # Scale-Out Rules (Adding Workers)
+    # ==========================================================================
+    scaleOut:
+      # How quickly to react (higher = more responsive, more API calls)
+      evaluationPeriodSeconds: 60
+      
+      # Stabilization: Wait N seconds before scaling out again
+      stabilizationWindowSeconds: 120
+      
+      # Maximum scale-out per decision
+      policies:
+        - type: Percent
+          value: 25             # Add up to 25% of current capacity
+          periodSeconds: 60
+        - type: Pods
+          value: 20             # Or add up to 20 pods
+          periodSeconds: 60
+      selectPolicy: Max         # Use whichever allows more scale-out
+      
+      # Triggers (any of these can initiate scale-out)
+      triggers:
+        # CPU-based scaling
+        - name: high-cpu
+          type: Resource
+          metric:
+            name: cpu
+            target:
+              type: Utilization
+              averageUtilization: 70
+          # Scale when average CPU > 70%, target 60%
+          scaleUp:
+            threshold: 70
+            targetUtilization: 60
+        
+        # Queue depth scaling (primary for Grey)
+        - name: queue-depth
+          type: Pods
+          metric:
+            name: grey_scheduler_queue_depth
+            target:
+              type: AverageValue
+              averageValue: "5000"
+          # Each worker should handle ~100 queued tasks
+          scaleUp:
+            threshold: 5000       # Scale when queue > 5000
+            targetValue: 2000     # Target queue of 2000
+        
+        # Task completion rate degradation
+        - name: throughput-degradation
+          type: External
+          metric:
+            name: grey_tasks_completion_rate_degradation
+            target:
+              type: Value
+              value: "0.8"
+          # Scale when completion rate drops below 80% of capacity
+          scaleUp:
+            threshold: 0.8
+            note: "Completion rate = actual / expected throughput"
+        
+        # Memory pressure
+        - name: memory-pressure
+          type: Resource
+          metric:
+            name: memory
+            target:
+              type: Utilization
+              averageUtilization: 80
+          scaleUp:
+            threshold: 80
+            targetUtilization: 70
+        
+        # Latency-based (P99 exceeds SLO)
+        - name: latency-slo
+          type: External
+          metric:
+            name: grey_task_p99_latency_seconds
+            target:
+              type: Value
+              value: "2.0"
+          scaleUp:
+            threshold: 2.0        # Scale when P99 > 2s
+            note: "SLO: P99 latency < 2 seconds"
+    
+    # ==========================================================================
+    # Scale-In Rules (Removing Workers)
+    # ==========================================================================
+    scaleIn:
+      # Be conservative with scale-in (avoid thrashing)
+      evaluationPeriodSeconds: 300  # 5 min evaluation window
+      
+      # Long stabilization to prevent aggressive removal
+      stabilizationWindowSeconds: 600  # 10 min window
+      
+      # Gradual scale-in
+      policies:
+        - type: Percent
+          value: 10             # Remove at most 10% at a time
+          periodSeconds: 300
+        - type: Pods
+          value: 5              # Or remove at most 5 pods
+          periodSeconds: 300
+      selectPolicy: Min         # Use whichever removes fewer pods
+      
+      # Conditions (ALL must be met to scale in)
+      triggers:
+        # Low CPU for extended period
+        - name: low-cpu
+          type: Resource
+          metric:
+            name: cpu
+            target:
+              type: Utilization
+              averageUtilization: 40
+          scaleDown:
+            threshold: 40         # Scale in when CPU < 40%
+            sustainedMinutes: 15  # For at least 15 minutes
+        
+        # Queue nearly empty
+        - name: empty-queue
+          type: Pods
+          metric:
+            name: grey_scheduler_queue_depth
+            target:
+              type: AverageValue
+              averageValue: "500"
+          scaleDown:
+            threshold: 500
+            sustainedMinutes: 10
+        
+        # Memory underutilized
+        - name: low-memory
+          type: Resource
+          metric:
+            name: memory
+            target:
+              type: Utilization
+              averageUtilization: 50
+          scaleDown:
+            threshold: 50
+            sustainedMinutes: 10
+    
+    # ==========================================================================
+    # Warm Pool Configuration
+    # ==========================================================================
+    warmPool:
+      enabled: true
+      
+      # Keep N instances pre-warmed for fast scale-out
+      minSize: 10
+      maxPreparedCapacity: 30
+      
+      # Instance state when in warm pool
+      poolState: Stopped        # Stopped = cheaper, Hibernated = faster
+      
+      # Reuse instances on scale-in instead of terminating
+      reuseOnScaleIn: true
+      
+      # Scale-out uses warm pool first
+      priority: 100
+    
+    # ==========================================================================
+    # Time-Based Overrides
+    # ==========================================================================
+    scheduledScaling:
+      - name: business-hours-scale-up
+        description: "Pre-scale for business hours"
+        schedule:
+          cron: "0 7 * * 1-5"   # 7 AM Mon-Fri
+          timezone: "America/New_York"
+        action:
+          minReplicas: 120
+          desiredReplicas: 150
+      
+      - name: night-scale-down
+        description: "Scale down for night"
+        schedule:
+          cron: "0 22 * * *"    # 10 PM daily
+          timezone: "America/New_York"
+        action:
+          minReplicas: 50
+          desiredReplicas: 60
+      
+      - name: weekend-minimal
+        description: "Minimal weekend capacity"
+        schedule:
+          cron: "0 0 * * 6,0"   # Saturday and Sunday midnight
+          timezone: "America/New_York"
+        action:
+          minReplicas: 30
+          desiredReplicas: 40
+    
+    # ==========================================================================
+    # Emergency Scaling
+    # ==========================================================================
+    emergency:
+      # Rapid scale-out for emergency situations
+      triggers:
+        - name: critical-queue-depth
+          metric: grey_scheduler_queue_depth
+          threshold: 50000
+          action:
+            type: ScaleToPercent
+            value: 100        # Scale to 100% of maxReplicas immediately
+        
+        - name: critical-latency
+          metric: grey_task_p99_latency_seconds
+          threshold: 10.0
+          action:
+            type: ScaleByPercent
+            value: 50         # Add 50% more capacity
+      
+      # Bypass stabilization windows during emergency
+      bypassStabilization: true
+      
+      # Notify on emergency scaling
+      notifications:
+        slack:
+          channel: "#grey-alerts"
+          enabled: true
+        pagerduty:
+          enabled: true
+
+---
+# =============================================================================
+# Kubernetes HPA Manifest
+# =============================================================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: grey-worker-hpa
+  namespace: grey-production
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: worker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: grey-worker
+  minReplicas: 50
+  maxReplicas: 250
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+    - type: Pods
+      pods:
+        metric:
+          name: grey_scheduler_queue_depth
+        target:
+          type: AverageValue
+          averageValue: "5000"
+    - type: External
+      external:
+        metric:
+          name: grey_task_p99_latency_seconds
+          selector:
+            matchLabels:
+              component: worker
+        target:
+          type: Value
+          value: "2"
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 120
+      policies:
+        - type: Percent
+          value: 25
+          periodSeconds: 60
+        - type: Pods
+          value: 20
+          periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 300
+        - type: Pods
+          value: 5
+          periodSeconds: 300
+      selectPolicy: Min

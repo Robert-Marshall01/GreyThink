@@ -1,0 +1,424 @@
+{
+  "title": "Grey Distributed — Crisis Dashboard",
+  "description": "Real-time monitoring of active crises and response effectiveness",
+  "version": "1.0.0",
+  "refreshInterval": "10s",
+  "timeRange": {
+    "default": "6h",
+    "options": ["1h", "6h", "24h", "7d"]
+  },
+  "variables": [
+    {
+      "name": "crisis_type",
+      "label": "Crisis Type",
+      "type": "select",
+      "options": ["all", "pandemic", "financial", "climate", "cyber", "infrastructure", "governance"],
+      "default": "all"
+    },
+    {
+      "name": "severity",
+      "label": "Severity",
+      "type": "select",
+      "options": ["all", "low", "medium", "high", "critical", "existential"],
+      "default": "all"
+    }
+  ],
+  "sections": [
+    {
+      "title": "Active Crisis Overview",
+      "collapsed": false,
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Crisis Status",
+              "type": "stat",
+              "gridPos": { "x": 0, "y": 0, "w": 4, "h": 6 },
+              "query": "grey_active_crisis_count",
+              "colorMode": "background",
+              "thresholds": {
+                "0": "#22c55e",
+                "1": "#eab308",
+                "3": "#f97316",
+                "5": "#ef4444"
+              }
+            },
+            {
+              "title": "Current Crises",
+              "type": "table",
+              "gridPos": { "x": 4, "y": 0, "w": 14, "h": 6 },
+              "query": "grey_active_crises",
+              "columns": [
+                { "field": "name", "label": "Crisis", "width": "25%" },
+                { "field": "type", "label": "Type", "width": "15%" },
+                { "field": "severity", "label": "Severity", "width": "12%" },
+                { "field": "started", "label": "Started", "width": "15%", "format": "relative" },
+                { "field": "affected_regions", "label": "Regions", "width": "18%" },
+                { "field": "response_phase", "label": "Phase", "width": "15%" }
+              ],
+              "rowStyles": {
+                "severity": {
+                  "existential": "bg-black text-white",
+                  "critical": "bg-red-200",
+                  "high": "bg-orange-200",
+                  "medium": "bg-yellow-200"
+                }
+              }
+            },
+            {
+              "title": "Time in Crisis",
+              "type": "stat",
+              "gridPos": { "x": 18, "y": 0, "w": 6, "h": 6 },
+              "query": "max(grey_crisis_duration_hours)",
+              "format": "duration",
+              "subtitle": "Longest active crisis"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Response Status",
+      "collapsed": false,
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Response Teams Active",
+              "type": "stat",
+              "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+              "query": "count(grey_response_team_status{status='active'})",
+              "color": "#3b82f6"
+            },
+            {
+              "title": "Automated Mitigations",
+              "type": "stat",
+              "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+              "query": "count(grey_mitigation_status{type='automated', status='active'})",
+              "color": "#22c55e"
+            },
+            {
+              "title": "Manual Interventions",
+              "type": "stat",
+              "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+              "query": "count(grey_mitigation_status{type='manual', status='active'})",
+              "color": "#f59e0b"
+            },
+            {
+              "title": "Pending Escalations",
+              "type": "stat",
+              "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+              "query": "count(grey_escalation_status{status='pending'})",
+              "thresholds": { "ok": [0, 0], "warning": [1, 5], "critical": [6, null] }
+            },
+            {
+              "title": "Response Effectiveness",
+              "type": "gauge",
+              "gridPos": { "x": 16, "y": 0, "w": 8, "h": 8 },
+              "query": "grey_response_effectiveness_score",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "critical": [0, 50],
+                "warning": [50, 75],
+                "ok": [75, 100]
+              }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Response Timeline",
+              "type": "timeline",
+              "gridPos": { "x": 0, "y": 8, "w": 16, "h": 8 },
+              "query": "grey_response_events",
+              "fields": {
+                "time": "timestamp",
+                "title": "event_description",
+                "type": "event_type"
+              },
+              "colors": {
+                "detection": "#3b82f6",
+                "escalation": "#f97316",
+                "mitigation_started": "#eab308",
+                "mitigation_effective": "#22c55e",
+                "resolution": "#8b5cf6"
+              }
+            },
+            {
+              "title": "Response Metrics",
+              "type": "table",
+              "gridPos": { "x": 16, "y": 8, "w": 8, "h": 8 },
+              "query": "grey_response_metrics",
+              "columns": [
+                { "field": "metric", "label": "Metric", "width": "50%" },
+                { "field": "value", "label": "Value", "width": "25%" },
+                { "field": "target", "label": "Target", "width": "25%" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Impact Assessment",
+      "collapsed": false,
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Affected Systems",
+              "type": "treemap",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 10 },
+              "query": "grey_crisis_impact_by_system",
+              "levels": ["sector", "subsystem", "component"],
+              "sizeField": "impact_score",
+              "colorField": "severity",
+              "colors": {
+                "nominal": "#22c55e",
+                "degraded": "#eab308",
+                "impaired": "#f97316",
+                "failed": "#ef4444"
+              }
+            },
+            {
+              "title": "Impact Map",
+              "type": "geomap",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 10 },
+              "query": "grey_crisis_geographic_impact",
+              "layers": [
+                {
+                  "name": "Severe Impact",
+                  "color": "#ef4444",
+                  "query": "grey_crisis_geographic_impact{severity='severe'}"
+                },
+                {
+                  "name": "Moderate Impact",
+                  "color": "#f97316",
+                  "query": "grey_crisis_geographic_impact{severity='moderate'}"
+                },
+                {
+                  "name": "Minor Impact",
+                  "color": "#eab308",
+                  "query": "grey_crisis_geographic_impact{severity='minor'}"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Service Degradation",
+              "type": "heatmap",
+              "gridPos": { "x": 0, "y": 10, "w": 12, "h": 8 },
+              "query": "grey_service_degradation_matrix",
+              "xAxis": "service",
+              "yAxis": "region",
+              "colorScale": {
+                "min": 0,
+                "max": 100,
+                "colors": ["#22c55e", "#eab308", "#f97316", "#ef4444"]
+              },
+              "description": "Service availability by region (100 = full, 0 = down)"
+            },
+            {
+              "title": "Cascade Risk",
+              "type": "sankey",
+              "gridPos": { "x": 12, "y": 10, "w": 12, "h": 8 },
+              "query": "grey_cascade_risk_paths",
+              "description": "Potential cascade paths from current crisis"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Resource Allocation",
+      "collapsed": false,
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Emergency Resources Deployed",
+              "type": "piechart",
+              "gridPos": { "x": 0, "y": 0, "w": 8, "h": 8 },
+              "query": "grey_emergency_resource_allocation",
+              "colors": {
+                "personnel": "#3b82f6",
+                "compute": "#22c55e",
+                "bandwidth": "#f59e0b",
+                "financial": "#8b5cf6",
+                "physical": "#6b7280"
+              }
+            },
+            {
+              "title": "Resource Utilization",
+              "type": "barchart",
+              "gridPos": { "x": 8, "y": 0, "w": 8, "h": 8 },
+              "query": "grey_emergency_resource_utilization",
+              "thresholds": [
+                { "value": 80, "color": "#eab308" },
+                { "value": 95, "color": "#ef4444" }
+              ]
+            },
+            {
+              "title": "Resource Requests Pending",
+              "type": "table",
+              "gridPos": { "x": 16, "y": 0, "w": 8, "h": 8 },
+              "query": "grey_resource_requests{status='pending'}",
+              "columns": [
+                { "field": "resource_type", "label": "Resource", "width": "30%" },
+                { "field": "quantity", "label": "Qty", "width": "20%" },
+                { "field": "requestor", "label": "Requestor", "width": "25%" },
+                { "field": "priority", "label": "Priority", "width": "25%" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Communication Status",
+      "collapsed": false,
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Stakeholder Notifications",
+              "type": "stat",
+              "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+              "query": "count(grey_stakeholder_notified{status='confirmed'})",
+              "subtitle": "Confirmed"
+            },
+            {
+              "title": "Pending Acknowledgments",
+              "type": "stat",
+              "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+              "query": "count(grey_stakeholder_notified{status='pending'})",
+              "thresholds": { "ok": [0, 5], "warning": [5, 20], "critical": [20, null] }
+            },
+            {
+              "title": "Communication Channels",
+              "type": "table",
+              "gridPos": { "x": 8, "y": 0, "w": 8, "h": 8 },
+              "query": "grey_communication_channel_status",
+              "columns": [
+                { "field": "channel", "label": "Channel", "width": "40%" },
+                { "field": "status", "label": "Status", "width": "30%" },
+                { "field": "latency", "label": "Latency", "width": "30%" }
+              ]
+            },
+            {
+              "title": "Recent Communications",
+              "type": "log",
+              "gridPos": { "x": 16, "y": 0, "w": 8, "h": 8 },
+              "query": "grey_crisis_communications",
+              "fields": ["timestamp", "from", "to", "summary"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Historical Comparison",
+      "collapsed": true,
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Similar Past Crises",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+              "query": "grey_similar_historical_crises",
+              "columns": [
+                { "field": "date", "label": "Date", "width": "15%", "format": "date" },
+                { "field": "name", "label": "Crisis", "width": "25%" },
+                { "field": "duration", "label": "Duration", "width": "15%" },
+                { "field": "resolution", "label": "Resolution", "width": "25%" },
+                { "field": "lessons", "label": "Key Lesson", "width": "20%" }
+              ]
+            },
+            {
+              "title": "Response Time Comparison",
+              "type": "barchart",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+              "queries": [
+                { "expr": "grey_current_response_time", "legendFormat": "Current" },
+                { "expr": "grey_historical_avg_response_time", "legendFormat": "Historical Avg" },
+                { "expr": "grey_best_response_time", "legendFormat": "Best Case" }
+              ],
+              "groupBy": "phase"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "alerts": [
+    {
+      "name": "new_crisis_detected",
+      "description": "New crisis has been detected",
+      "query": "increase(grey_crisis_count[5m]) > 0",
+      "severity": "critical",
+      "annotations": {
+        "summary": "New crisis detected: {{$labels.crisis_name}}"
+      }
+    },
+    {
+      "name": "crisis_severity_increased",
+      "description": "Crisis severity has escalated",
+      "query": "delta(grey_crisis_severity[5m]) > 0",
+      "severity": "critical",
+      "annotations": {
+        "summary": "{{$labels.crisis_name}} severity increased to {{$value}}"
+      }
+    },
+    {
+      "name": "response_delayed",
+      "description": "Crisis response is behind schedule",
+      "query": "grey_response_delay_minutes > 15",
+      "severity": "warning",
+      "annotations": {
+        "summary": "Response to {{$labels.crisis_name}} is {{$value}} minutes behind"
+      }
+    },
+    {
+      "name": "cascade_risk_high",
+      "description": "High risk of crisis cascading",
+      "query": "grey_cascade_risk_score > 0.7",
+      "severity": "critical",
+      "annotations": {
+        "summary": "Crisis cascade risk is {{$value | percent}} for {{$labels.path}}"
+      }
+    },
+    {
+      "name": "communication_failure",
+      "description": "Primary communication channel failed",
+      "query": "grey_communication_channel_status{channel='primary'} == 0",
+      "severity": "critical",
+      "annotations": {
+        "summary": "Primary communication channel is down"
+      }
+    },
+    {
+      "name": "resource_exhaustion_imminent",
+      "description": "Emergency resources nearly exhausted",
+      "query": "grey_emergency_resource_remaining_percent < 10",
+      "severity": "critical",
+      "annotations": {
+        "summary": "{{$labels.resource_type}} is at {{$value}}% remaining"
+      }
+    },
+    {
+      "name": "stakeholder_unresponsive",
+      "description": "Critical stakeholder not responding",
+      "query": "grey_stakeholder_response_time_minutes > 30 and grey_stakeholder_priority == 'critical'",
+      "severity": "warning",
+      "annotations": {
+        "summary": "{{$labels.stakeholder}} has not responded in {{$value}} minutes"
+      }
+    }
+  ]
+}

@@ -1,0 +1,834 @@
+# Grey Distributed — Open Source Deployment Manifest
+#
+# Example deployment configuration for community operators.
+# This manifest deploys a complete Grey cluster suitable for:
+# - Community-run infrastructure
+# - Development and testing
+# - Small-to-medium production workloads
+# - Federation with other community clusters
+#
+# Prerequisites:
+# - Kubernetes 1.28+
+# - 3+ nodes with 8 CPU, 32GB RAM each
+# - PersistentVolume provisioner (local-path, longhorn, etc.)
+# - Ingress controller (nginx, traefik, etc.)
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: system
+    community.grey.io/managed: "true"
+
+---
+# =============================================================================
+# Configuration
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grey-config
+  namespace: grey-system
+data:
+  grey.toml: |
+    # Grey Distributed Community Configuration
+    [cluster]
+    name = "community-cluster"
+    id = "${GREY_CLUSTER_ID}"
+    region = "community"
+    
+    [consensus]
+    algorithm = "raft"
+    election_timeout_ms = 1000
+    heartbeat_interval_ms = 150
+    snapshot_interval = 10000
+    
+    [scheduler]
+    algorithm = "fair_share"
+    fairness_weight = 0.4
+    locality_weight = 0.3
+    efficiency_weight = 0.3
+    rebalance_interval_secs = 60
+    
+    [storage]
+    backend = "distributed"
+    replication_factor = 3
+    erasure_coding = "10+4"
+    compression = "zstd"
+    encryption = true
+    
+    [network]
+    bind_address = "0.0.0.0"
+    control_port = 9400
+    data_port = 9401
+    gossip_port = 9402
+    tls_enabled = true
+    
+    [federation]
+    enabled = true
+    discovery = "dns"
+    attestation_interval_secs = 3600
+    
+    [observability]
+    metrics_enabled = true
+    metrics_port = 9090
+    tracing_enabled = true
+    tracing_endpoint = "http://tempo:4317"
+    log_level = "info"
+    log_format = "json"
+    
+    [security]
+    auth_required = true
+    auth_provider = "jwt"
+    rbac_enabled = true
+    audit_logging = true
+    
+    [economics]
+    # Disable token economics for community edition
+    token_enabled = false
+    billing_enabled = false
+
+---
+# =============================================================================
+# Secrets (Generate these for your deployment!)
+# =============================================================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grey-secrets
+  namespace: grey-system
+type: Opaque
+stringData:
+  # Generate with: openssl rand -base64 32
+  jwt-secret: "REPLACE_WITH_GENERATED_SECRET"
+  
+  # Generate with: openssl rand -hex 32
+  encryption-key: "REPLACE_WITH_GENERATED_KEY"
+  
+  # Initial admin token (change after first login)
+  admin-token: "REPLACE_WITH_INITIAL_ADMIN_TOKEN"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grey-tls
+  namespace: grey-system
+type: kubernetes.io/tls
+data:
+  # Replace with your actual TLS certificates
+  # Generate for development: 
+  #   openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  #     -keyout tls.key -out tls.crt -subj "/CN=grey.local"
+  tls.crt: "BASE64_ENCODED_CERTIFICATE"
+  tls.key: "BASE64_ENCODED_PRIVATE_KEY"
+
+---
+# =============================================================================
+# Control Plane
+# =============================================================================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: grey-control-plane
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: control-plane
+spec:
+  serviceName: grey-control-plane
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grey
+      app.kubernetes.io/component: control-plane
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grey
+        app.kubernetes.io/component: control-plane
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      serviceAccountName: grey-control-plane
+      terminationGracePeriodSeconds: 60
+      
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: grey
+                  app.kubernetes.io/component: control-plane
+              topologyKey: kubernetes.io/hostname
+      
+      containers:
+        - name: grey
+          image: ghcr.io/grey-distributed/grey:latest
+          imagePullPolicy: Always
+          command:
+            - /usr/bin/greyd
+            - --config=/etc/grey/grey.toml
+            - --role=control-plane
+          ports:
+            - name: control
+              containerPort: 9400
+            - name: data
+              containerPort: 9401
+            - name: gossip
+              containerPort: 9402
+            - name: metrics
+              containerPort: 9090
+          env:
+            - name: GREY_CLUSTER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: GREY_NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: GREY_NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: GREY_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: grey-secrets
+                  key: jwt-secret
+            - name: GREY_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: grey-secrets
+                  key: encryption-key
+          resources:
+            requests:
+              cpu: "2"
+              memory: "4Gi"
+            limits:
+              cpu: "4"
+              memory: "8Gi"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/grey
+            - name: data
+              mountPath: /var/lib/grey
+            - name: tls
+              mountPath: /etc/grey/tls
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 9400
+              scheme: HTTPS
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 9400
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      
+      volumes:
+        - name: config
+          configMap:
+            name: grey-config
+        - name: tls
+          secret:
+            secretName: grey-tls
+  
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 50Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grey-control-plane
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: control-plane
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless for StatefulSet
+  ports:
+    - name: control
+      port: 9400
+      targetPort: 9400
+    - name: data
+      port: 9401
+      targetPort: 9401
+    - name: gossip
+      port: 9402
+      targetPort: 9402
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+  selector:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: control-plane
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grey-api
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: api
+spec:
+  type: ClusterIP
+  ports:
+    - name: https
+      port: 443
+      targetPort: 9400
+  selector:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: control-plane
+
+---
+# =============================================================================
+# Worker Nodes
+# =============================================================================
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: grey-worker
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: worker
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grey
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grey
+        app.kubernetes.io/component: worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      securityContext:
+        runAsUser: 0  # Root required for container management
+      serviceAccountName: grey-worker
+      hostNetwork: false
+      hostPID: false
+      
+      tolerations:
+        - key: "grey.io/worker"
+          operator: "Exists"
+          effect: "NoSchedule"
+      
+      nodeSelector:
+        grey.io/role: worker
+      
+      containers:
+        - name: grey-worker
+          image: ghcr.io/grey-distributed/grey:latest
+          imagePullPolicy: Always
+          command:
+            - /usr/bin/greyd
+            - --config=/etc/grey/grey.toml
+            - --role=worker
+            - --join=grey-control-plane.grey-system.svc.cluster.local:9400
+          ports:
+            - name: data
+              containerPort: 9401
+            - name: gossip
+              containerPort: 9402
+            - name: metrics
+              containerPort: 9090
+          env:
+            - name: GREY_NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: GREY_NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: GREY_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: grey-secrets
+                  key: encryption-key
+          resources:
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+            limits:
+              cpu: "8"
+              memory: "16Gi"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/grey
+            - name: data
+              mountPath: /var/lib/grey
+            - name: tls
+              mountPath: /etc/grey/tls
+              readOnly: true
+            - name: container-runtime
+              mountPath: /var/run/docker.sock
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 9401
+              scheme: HTTPS
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 9401
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      
+      volumes:
+        - name: config
+          configMap:
+            name: grey-config
+        - name: data
+          hostPath:
+            path: /var/lib/grey
+            type: DirectoryOrCreate
+        - name: tls
+          secret:
+            secretName: grey-tls
+        - name: container-runtime
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grey-worker
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: worker
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: data
+      port: 9401
+      targetPort: 9401
+    - name: gossip
+      port: 9402
+      targetPort: 9402
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+  selector:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: worker
+
+---
+# =============================================================================
+# RBAC
+# =============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grey-control-plane
+  namespace: grey-system
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grey-worker
+  namespace: grey-system
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: grey-control-plane
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grey-control-plane
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: grey-control-plane
+subjects:
+  - kind: ServiceAccount
+    name: grey-control-plane
+    namespace: grey-system
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: grey-worker
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grey-worker
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: grey-worker
+subjects:
+  - kind: ServiceAccount
+    name: grey-worker
+    namespace: grey-system
+
+---
+# =============================================================================
+# Ingress (External Access)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grey-api
+  namespace: grey-system
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - grey.example.com  # Replace with your domain
+      secretName: grey-api-tls
+  rules:
+    - host: grey.example.com  # Replace with your domain
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grey-api
+                port:
+                  number: 443
+
+---
+# =============================================================================
+# Observability (Optional but Recommended)
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: grey
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grey
+  endpoints:
+    - port: metrics
+      interval: 15s
+      scheme: http
+      path: /metrics
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: grey-alerts
+  namespace: grey-system
+spec:
+  groups:
+    - name: grey.rules
+      rules:
+        - alert: GreyControlPlaneDown
+          expr: up{job="grey-control-plane"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Grey control plane is down"
+            description: "Grey control plane {{ $labels.pod }} has been down for more than 1 minute."
+        
+        - alert: GreyHighMemoryUsage
+          expr: (container_memory_usage_bytes{container="grey"} / container_spec_memory_limit_bytes{container="grey"}) > 0.9
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Grey memory usage high"
+            description: "Grey container {{ $labels.pod }} memory usage is above 90%."
+        
+        - alert: GreyConsensusLeaderMissing
+          expr: grey_consensus_leader_node == ""
+          for: 30s
+          labels:
+            severity: critical
+          annotations:
+            summary: "Grey consensus leader missing"
+            description: "Grey cluster has no consensus leader for 30 seconds."
+
+---
+# =============================================================================
+# Pod Disruption Budget
+# =============================================================================
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: grey-control-plane
+  namespace: grey-system
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grey
+      app.kubernetes.io/component: control-plane
+
+---
+# =============================================================================
+# Horizontal Pod Autoscaler (for API gateway, if deployed separately)
+# =============================================================================
+# Note: Control plane uses StatefulSet with fixed replicas for consensus
+# Workers use DaemonSet - one per node
+# Only add HPA for stateless components
+
+---
+# =============================================================================
+# Network Policies (Security Hardening)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grey-control-plane
+  namespace: grey-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: control-plane
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from workers
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: worker
+      ports:
+        - port: 9400
+        - port: 9401
+        - port: 9402
+    # Allow from other control plane pods (consensus)
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: control-plane
+      ports:
+        - port: 9400
+        - port: 9401
+        - port: 9402
+    # Allow from ingress
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 9400
+    # Allow metrics scraping
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 9090
+  egress:
+    # Allow to workers
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: worker
+    # Allow to other control plane pods
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: control-plane
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+    # Allow external for federation
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - port: 443
+        - port: 9400
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grey-worker
+  namespace: grey-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: worker
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from control plane
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: control-plane
+      ports:
+        - port: 9401
+        - port: 9402
+    # Allow from other workers
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: worker
+      ports:
+        - port: 9401
+        - port: 9402
+    # Allow metrics scraping
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 9090
+  egress:
+    # Allow to control plane
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: control-plane
+    # Allow to other workers
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: worker
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+
+---
+# =============================================================================
+# Quick Start Instructions
+# =============================================================================
+# 1. Prerequisites:
+#    - Kubernetes cluster with 3+ nodes
+#    - kubectl configured
+#    - Ingress controller installed
+#    
+# 2. Label worker nodes:
+#    kubectl label nodes <node1> <node2> <node3> grey.io/role=worker
+#    
+# 3. Generate secrets:
+#    kubectl create secret generic grey-secrets \
+#      --namespace=grey-system \
+#      --from-literal=jwt-secret=$(openssl rand -base64 32) \
+#      --from-literal=encryption-key=$(openssl rand -hex 32) \
+#      --from-literal=admin-token=$(openssl rand -hex 16)
+#    
+# 4. Generate TLS certificates (or use cert-manager):
+#    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+#      -keyout tls.key -out tls.crt -subj "/CN=grey.example.com"
+#    kubectl create secret tls grey-tls \
+#      --namespace=grey-system \
+#      --cert=tls.crt --key=tls.key
+#    
+# 5. Apply this manifest (after editing the placeholder values):
+#    kubectl apply -f example_deployment.yaml
+#    
+# 6. Wait for pods to be ready:
+#    kubectl -n grey-system wait --for=condition=ready pod -l app.kubernetes.io/name=grey --timeout=300s
+#    
+# 7. Get admin token:
+#    kubectl -n grey-system get secret grey-secrets -o jsonpath='{.data.admin-token}' | base64 -d
+#    
+# 8. Access the API:
+#    curl -H "Authorization: Bearer <admin-token>" https://grey.example.com/api/v1/status
+#    
+# For more information, visit: https://grey-distributed.io/docs/deployment

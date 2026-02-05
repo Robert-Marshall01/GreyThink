@@ -1,0 +1,458 @@
+# =============================================================================
+# Grey Distributed — Configuration
+# =============================================================================
+#
+# This ConfigMap contains all runtime configuration for Grey Distributed.
+# Changes here trigger a rolling update (via checksum annotation).
+#
+# Configuration categories:
+#   1. Cluster settings — node discovery, consensus parameters
+#   2. Governance — quotas, rate limits, resource ceilings
+#   3. Scheduler — queue settings, fairness policies
+#   4. Storage — replication, compaction
+#   5. Observability — logging, metrics, tracing
+#
+# Integration points:
+#   - Grey Optimizer: Resource governance settings
+#   - GreyAV: Anomaly detection thresholds
+#   - Grey Multi-Tenant: Isolation policies
+#
+# =============================================================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grey-config
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: config
+data:
+  # Main configuration file
+  config.yaml: |
+    # ==========================================================================
+    # Grey Distributed Configuration
+    # ==========================================================================
+    #
+    # This file is mounted at /etc/grey/config.yaml in all Grey pods.
+    # Environment variables can override settings using GREY_<SECTION>_<KEY>.
+    #
+    # ==========================================================================
+    
+    # --------------------------------------------------------------------------
+    # Cluster Configuration
+    # --------------------------------------------------------------------------
+    cluster:
+      name: grey-production
+      
+      # Node discovery method
+      # Options: kubernetes, dns, static
+      discovery:
+        method: kubernetes
+        kubernetes:
+          namespace: grey-system
+          selector: "app.kubernetes.io/name=grey,app.kubernetes.io/component=coordinator"
+          port: 7070
+      
+      # Coordinator bootstrap
+      # Initial cluster size for first-time setup
+      bootstrap:
+        expect_nodes: 3
+        timeout: 5m
+    
+    # --------------------------------------------------------------------------
+    # Consensus Configuration (Raft)
+    # --------------------------------------------------------------------------
+    # 
+    # These settings control leader election and log replication.
+    # Tuning tradeoffs:
+    #   - Lower election timeout → faster failover, more elections
+    #   - Higher heartbeat → less CPU, slower failure detection
+    #   - Larger snapshot threshold → less I/O, more recovery time
+    #
+    # --------------------------------------------------------------------------
+    consensus:
+      # Election timeout range (randomized to prevent split votes)
+      election_timeout:
+        min: 1000ms
+        max: 2000ms
+      
+      # Heartbeat interval (must be << election timeout)
+      heartbeat_interval: 150ms
+      
+      # Pre-vote phase prevents disruptions from partitioned nodes
+      pre_vote: true
+      
+      # Snapshot settings
+      snapshot:
+        # Create snapshot after this many log entries
+        threshold: 10000
+        # Maximum number of snapshots to retain
+        retain: 3
+      
+      # Log compaction
+      compaction:
+        # Compact log entries older than this
+        max_age: 168h  # 7 days
+        # Minimum entries to keep after compaction
+        min_entries: 1000
+    
+    # --------------------------------------------------------------------------
+    # Resource Governance (Grey Optimizer Integration)
+    # --------------------------------------------------------------------------
+    #
+    # These settings enforce resource limits and quotas across tenants.
+    # Values here are defaults; per-tenant overrides via tenant configs.
+    #
+    # --------------------------------------------------------------------------
+    governance:
+      # Enable resource governance
+      enabled: true
+      
+      # Global resource limits (cluster-wide ceiling)
+      global_limits:
+        max_cpu_cores: 1000
+        max_memory_gb: 2000
+        max_storage_tb: 100
+        max_tasks_per_second: 100000
+      
+      # Default tenant quotas (overridden by tenant configs)
+      default_tenant_quota:
+        cpu_cores: 10
+        memory_gb: 20
+        storage_gb: 100
+        tasks_per_second: 1000
+        max_concurrent_tasks: 100
+      
+      # Throttling settings
+      throttling:
+        enabled: true
+        # Algorithm: token_bucket, leaky_bucket, sliding_window
+        algorithm: token_bucket
+        # Default rate limit (requests per second)
+        default_rps: 1000
+        # Burst allowance (% of quota)
+        burst_percent: 20
+      
+      # Hotspot detection settings
+      hotspot:
+        enabled: true
+        # Detection window
+        window: 5m
+        # Threshold for hotspot declaration
+        threshold: 0.8  # 80% of quota
+        # Cooldown after mitigation
+        cooldown: 1m
+    
+    # --------------------------------------------------------------------------
+    # Scheduler Configuration
+    # --------------------------------------------------------------------------
+    #
+    # Controls task scheduling, queue management, and fairness.
+    #
+    # --------------------------------------------------------------------------
+    scheduler:
+      # Number of scheduler workers
+      workers: 8
+      
+      # Queue settings
+      queue:
+        # Maximum queue depth before backpressure
+        max_depth: 50000
+        # Queue admission policy: fifo, priority, fair
+        policy: fair
+      
+      # Fairness settings (DRF - Dominant Resource Fairness)
+      fairness:
+        enabled: true
+        # Algorithm: drf, max_min, weighted
+        algorithm: drf
+        # Rebalance interval
+        rebalance_interval: 30s
+        # Starvation prevention
+        starvation:
+          detection_window: 5m
+          min_share_percent: 5
+      
+      # Task retry settings
+      retries:
+        max_attempts: 3
+        initial_delay: 1s
+        max_delay: 5m
+        backoff_multiplier: 2.0
+    
+    # --------------------------------------------------------------------------
+    # Storage Configuration
+    # --------------------------------------------------------------------------
+    storage:
+      # Data directory (mounted PVC)
+      data_dir: /var/lib/grey/data
+      
+      # Replication settings
+      replication:
+        # Number of replicas for each data shard
+        factor: 3
+        # Read quorum (factor/2 + 1 for strong consistency)
+        read_quorum: 2
+        # Write quorum
+        write_quorum: 2
+        # Sync mode: sync (durable), async (faster)
+        sync_mode: sync
+      
+      # Sharding settings
+      sharding:
+        # Number of shards (should be >> number of nodes)
+        num_shards: 64
+        # Rebalance when imbalance exceeds this %
+        rebalance_threshold: 10
+      
+      # Compaction settings
+      compaction:
+        interval: 1h
+        min_file_size: 64MB
+        max_file_size: 256MB
+    
+    # --------------------------------------------------------------------------
+    # Network Configuration
+    # --------------------------------------------------------------------------
+    network:
+      # Listen addresses
+      http_addr: ":8080"
+      grpc_addr: ":9090"
+      raft_addr: ":7070"
+      gossip_addr: ":7071"
+      
+      # TLS settings
+      tls:
+        enabled: true
+        cert_file: /etc/grey/certs/tls.crt
+        key_file: /etc/grey/certs/tls.key
+        ca_file: /etc/grey/certs/ca.crt
+        # Mutual TLS for inter-node communication
+        mtls: true
+      
+      # Connection settings
+      max_connections: 10000
+      connection_timeout: 30s
+      request_timeout: 60s
+      
+      # Rate limiting at network level
+      rate_limit:
+        enabled: true
+        # Per-IP rate limit
+        per_ip_rps: 1000
+    
+    # --------------------------------------------------------------------------
+    # Fault Tolerance Configuration
+    # --------------------------------------------------------------------------
+    fault_tolerance:
+      # Phi Accrual Failure Detector settings
+      # Higher phi = more conservative (fewer false positives)
+      # Lower phi = faster detection (more false positives)
+      phi_threshold: 8.0
+      
+      # Minimum samples before failure detection is active
+      min_samples: 50
+      
+      # Self-healing settings
+      self_healing:
+        enabled: true
+        # Auto-replace failed nodes after this duration
+        replace_after: 10m
+        # Maximum concurrent replacements
+        max_concurrent: 1
+      
+      # Circuit breaker settings
+      circuit_breaker:
+        enabled: true
+        # Failure threshold to open circuit
+        failure_threshold: 5
+        # Reset timeout
+        reset_timeout: 30s
+        # Half-open request limit
+        half_open_limit: 3
+    
+    # --------------------------------------------------------------------------
+    # Observability Configuration
+    # --------------------------------------------------------------------------
+    observability:
+      # Logging
+      logging:
+        level: info  # debug, info, warn, error
+        format: json  # json, text
+        # Output: stdout, file, both
+        output: stdout
+        # File settings (if output includes file)
+        file:
+          path: /var/log/grey/grey.log
+          max_size: 100MB
+          max_backups: 5
+          max_age: 7d
+      
+      # Metrics (Prometheus)
+      metrics:
+        enabled: true
+        path: /metrics
+        # Additional labels for all metrics
+        labels:
+          cluster: grey-production
+          environment: production
+      
+      # Tracing (OpenTelemetry)
+      tracing:
+        enabled: true
+        # Exporter: otlp, jaeger, zipkin
+        exporter: otlp
+        endpoint: "otel-collector.observability.svc:4317"
+        # Sampling rate (1.0 = 100%)
+        sample_rate: 0.1
+        # Service name in traces
+        service_name: grey-distributed
+      
+      # Audit logging for security events
+      audit:
+        enabled: true
+        # Events to audit: all, auth, admin, mutation
+        events:
+          - auth
+          - admin
+          - mutation
+        # Output: stdout, file, syslog
+        output: stdout
+    
+    # --------------------------------------------------------------------------
+    # Security Configuration
+    # --------------------------------------------------------------------------
+    # 
+    # Integrates with Grey Multi-Tenant for isolation.
+    #
+    # --------------------------------------------------------------------------
+    security:
+      # Authentication
+      auth:
+        enabled: true
+        # Methods: jwt, mtls, api_key
+        methods:
+          - jwt
+          - mtls
+        # JWT settings
+        jwt:
+          issuer: "https://auth.grey.example.com"
+          audience: "grey-distributed"
+          # JWKS endpoint for key rotation
+          jwks_url: "https://auth.grey.example.com/.well-known/jwks.json"
+      
+      # Authorization (RBAC)
+      authorization:
+        enabled: true
+        # Default policy: allow, deny
+        default_policy: deny
+      
+      # Node attestation
+      attestation:
+        enabled: true
+        # Attestation types: tpm, sgx, sev
+        types:
+          - tpm
+        # Minimum attestation freshness
+        max_age: 24h
+      
+      # Tenant isolation (Grey Multi-Tenant integration)
+      isolation:
+        # Network isolation: namespace, network_policy, service_mesh
+        network: network_policy
+        # Resource isolation: cgroups, kata, firecracker
+        compute: cgroups
+        # Storage isolation: namespace, encryption
+        storage: encryption
+
+---
+# =============================================================================
+# Tenant Configuration Example
+# =============================================================================
+#
+# This ConfigMap shows tenant-specific configuration overrides.
+# Create one per tenant with naming convention: grey-tenant-<tenant-id>
+#
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grey-tenant-acme-corp
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: tenant-config
+    grey.io/tenant: acme-corp
+data:
+  tenant.yaml: |
+    tenant:
+      id: acme-corp
+      name: "ACME Corporation"
+      
+      # Resource quotas (overrides defaults)
+      quotas:
+        cpu_cores: 50
+        memory_gb: 100
+        storage_gb: 500
+        tasks_per_second: 5000
+        max_concurrent_tasks: 500
+      
+      # Rate limits
+      rate_limits:
+        api_rps: 2000
+        burst_percent: 30
+      
+      # Priority class: low, normal, high, critical
+      priority: high
+      
+      # Isolation settings
+      isolation:
+        # Dedicated worker pool (optional)
+        dedicated_workers: false
+        # Encryption key (reference, not actual key)
+        encryption_key_ref: "acme-corp-key"
+
+---
+# =============================================================================
+# Feature Flags Configuration
+# =============================================================================
+#
+# Enables/disables features at runtime without redeployment.
+#
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grey-feature-flags
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: feature-flags
+data:
+  features.yaml: |
+    features:
+      # New scheduler algorithm (canary)
+      new_scheduler:
+        enabled: false
+        rollout_percent: 0
+      
+      # GreyAV anomaly detection
+      anomaly_detection:
+        enabled: true
+        rollout_percent: 100
+      
+      # Automatic sharding rebalance
+      auto_rebalance:
+        enabled: true
+        rollout_percent: 100
+      
+      # Edge federation
+      edge_federation:
+        enabled: false
+        rollout_percent: 0
+      
+      # Advanced fairness (DRF v2)
+      advanced_fairness:
+        enabled: false
+        rollout_percent: 10

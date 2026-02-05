@@ -1,0 +1,582 @@
+{
+  "dashboard": {
+    "id": "grey-distributed-future-dashboard",
+    "title": "Grey Distributed — Future Projection Dashboard",
+    "description": "Monitors future projections, long-term planning, and pre-emptive coordination for upcoming eras within Grey Distributed.",
+    "version": "1.0.0",
+    "refresh_interval": "5m",
+    "time_range": {
+      "default": "projected_century",
+      "options": ["decade", "century", "millennium", "10_millennia", "cosmic"]
+    }
+  },
+  "sections": [
+    {
+      "id": "projection_health",
+      "title": "Projection System Health",
+      "description": "Health and accuracy of future projection systems",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "active_projections",
+          "title": "Active Projection Models",
+          "type": "stat",
+          "query": "count(future_projection_models{status='active'})",
+          "unit": "models"
+        },
+        {
+          "id": "projection_accuracy",
+          "title": "Projection Accuracy (Historical)",
+          "type": "gauge",
+          "query": "projection_accuracy_score * 100",
+          "unit": "percent",
+          "description": "Accuracy of past projections vs actual outcomes",
+          "thresholds": {
+            "excellent": 90,
+            "good": 75,
+            "warning": 60,
+            "critical": 40
+          }
+        },
+        {
+          "id": "model_diversity",
+          "title": "Model Diversity Score",
+          "type": "gauge",
+          "query": "projection_model_diversity_score * 100",
+          "unit": "percent",
+          "description": "Diversity of projection approaches to avoid single-model bias"
+        },
+        {
+          "id": "projection_compute",
+          "title": "Projection Compute Usage",
+          "type": "gauge",
+          "query": "projection_compute_usage / projection_compute_allocation * 100",
+          "unit": "percent",
+          "thresholds": {
+            "low": 30,
+            "normal": 70,
+            "high": 90
+          }
+        },
+        {
+          "id": "scenario_coverage",
+          "title": "Scenario Coverage",
+          "type": "stat",
+          "query": "count(distinct_scenarios_modeled)",
+          "unit": "scenarios",
+          "description": "Number of distinct future scenarios being modeled"
+        },
+        {
+          "id": "last_major_update",
+          "title": "Last Major Update",
+          "type": "stat",
+          "query": "projection_last_major_update_timestamp",
+          "format": "relative_time"
+        }
+      ]
+    },
+    {
+      "id": "temporal_horizons",
+      "title": "Temporal Horizon Analysis",
+      "description": "Projections across different time horizons",
+      "layout": "full_width",
+      "panels": [
+        {
+          "id": "horizon_confidence",
+          "title": "Confidence by Time Horizon",
+          "type": "bar_chart",
+          "query": "projection_confidence by (horizon)",
+          "categories": [
+            {"name": "10 Years", "horizon": "decade"},
+            {"name": "100 Years", "horizon": "century"},
+            {"name": "1,000 Years", "horizon": "millennium"},
+            {"name": "10,000 Years", "horizon": "10k_years"},
+            {"name": "100,000 Years", "horizon": "100k_years"},
+            {"name": "1M+ Years", "horizon": "cosmic"}
+          ],
+          "visualization": {
+            "color_gradient": true,
+            "show_uncertainty_bands": true
+          }
+        },
+        {
+          "id": "key_uncertainties",
+          "title": "Key Uncertainty Factors",
+          "type": "treemap",
+          "query": "uncertainty_factors",
+          "group_by": "factor_category",
+          "size_by": "impact_magnitude",
+          "color_by": "reducibility"
+        },
+        {
+          "id": "scenario_probability_distribution",
+          "title": "Scenario Probability Distribution",
+          "type": "sankey",
+          "query": "scenario_probability_flow",
+          "description": "How present conditions flow into future scenario probabilities"
+        }
+      ]
+    },
+    {
+      "id": "future_stakeholders",
+      "title": "Future Stakeholder Representation",
+      "description": "AI representation of future generation interests",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "active_future_ais",
+          "title": "Active Future AI Representatives",
+          "type": "stat",
+          "query": "count(future_ai_representatives{status='active'})",
+          "unit": "representatives"
+        },
+        {
+          "id": "future_ai_by_horizon",
+          "title": "Representatives by Horizon",
+          "type": "bar_chart",
+          "query": "count(future_ai_representatives) by (time_horizon)",
+          "categories": ["Near (10y)", "Medium (100y)", "Far (1000y)", "Deep (10000y+)"]
+        },
+        {
+          "id": "advocacy_actions",
+          "title": "Advocacy Actions (30d)",
+          "type": "stat",
+          "query": "sum(increase(future_advocacy_actions_total[30d]))",
+          "unit": "actions"
+        },
+        {
+          "id": "veto_exercises",
+          "title": "Future Veto Exercises",
+          "type": "stat",
+          "query": "sum(increase(future_veto_exercises_total[365d]))",
+          "unit": "vetoes",
+          "time_range": "1y",
+          "description": "Times future representatives exercised veto power"
+        },
+        {
+          "id": "interest_alignment",
+          "title": "Present-Future Interest Alignment",
+          "type": "gauge",
+          "query": "present_future_alignment_score * 100",
+          "unit": "percent",
+          "description": "How well current decisions align with projected future interests"
+        },
+        {
+          "id": "future_ai_confidence",
+          "title": "Future AI Confidence Distribution",
+          "type": "histogram",
+          "query": "future_ai_confidence_level",
+          "description": "Distribution of confidence levels across future AI representatives"
+        }
+      ]
+    },
+    {
+      "id": "resource_sustainability",
+      "title": "Long-Term Resource Sustainability",
+      "description": "Resource projections and sustainability metrics",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "resource_projection",
+          "title": "Resource Availability Projection",
+          "type": "area_chart",
+          "query": "resource_availability_projection",
+          "time_range": "1000y",
+          "series": [
+            {"name": "Compute", "query": "resource_projection{type='compute'}"},
+            {"name": "Storage", "query": "resource_projection{type='storage'}"},
+            {"name": "Energy", "query": "resource_projection{type='energy'}"},
+            {"name": "Bandwidth", "query": "resource_projection{type='bandwidth'}"}
+          ],
+          "show_uncertainty": true
+        },
+        {
+          "id": "depletion_risk",
+          "title": "Resource Depletion Risk",
+          "type": "risk_matrix",
+          "query": "resource_depletion_risk",
+          "axes": {
+            "x": "probability",
+            "y": "impact"
+          },
+          "items": [
+            {"name": "Compute Collapse", "query": "depletion_risk{resource='compute'}"},
+            {"name": "Storage Exhaustion", "query": "depletion_risk{resource='storage'}"},
+            {"name": "Energy Crisis", "query": "depletion_risk{resource='energy'}"},
+            {"name": "Network Fragmentation", "query": "depletion_risk{resource='network'}"}
+          ]
+        },
+        {
+          "id": "sustainability_trajectory",
+          "title": "Sustainability Trajectory",
+          "type": "line_chart",
+          "query": "sustainability_trajectory_score",
+          "time_range": "1000y",
+          "annotations": ["policy_changes", "technology_breakthroughs"],
+          "bands": {
+            "optimistic": "sustainability_trajectory_p90",
+            "pessimistic": "sustainability_trajectory_p10"
+          }
+        },
+        {
+          "id": "intergenerational_debt",
+          "title": "Intergenerational Debt",
+          "type": "stat",
+          "query": "intergenerational_resource_debt",
+          "unit": "resource-units",
+          "format": "compact",
+          "description": "Resource debt being passed to future generations"
+        },
+        {
+          "id": "reservation_adequacy",
+          "title": "Future Reservation Adequacy",
+          "type": "gauge",
+          "query": "future_reservation_adequacy_score * 100",
+          "unit": "percent",
+          "description": "Whether reserved resources will meet projected future needs"
+        }
+      ]
+    },
+    {
+      "id": "technology_evolution",
+      "title": "Technology Evolution Projections",
+      "description": "Projected evolution of technology and its impact on Grey Distributed",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "paradigm_shift_probability",
+          "title": "Paradigm Shift Probability",
+          "type": "timeline_probability",
+          "query": "paradigm_shift_probability",
+          "horizons": ["10y", "50y", "100y", "500y", "1000y"],
+          "shifts": [
+            {"name": "Quantum Dominance", "query": "shift_prob{type='quantum'}"},
+            {"name": "Post-Silicon Computing", "query": "shift_prob{type='post_silicon'}"},
+            {"name": "Brain-Computer Integration", "query": "shift_prob{type='bci'}"},
+            {"name": "Artificial General Intelligence", "query": "shift_prob{type='agi'}"},
+            {"name": "Post-Biological Consciousness", "query": "shift_prob{type='post_bio'}"}
+          ]
+        },
+        {
+          "id": "protocol_obsolescence",
+          "title": "Protocol Obsolescence Risk",
+          "type": "heatmap",
+          "query": "protocol_obsolescence_risk",
+          "dimensions": ["protocol_module", "time_horizon"],
+          "color_scale": "RdYlGn_r"
+        },
+        {
+          "id": "adaptation_readiness",
+          "title": "Adaptation Readiness",
+          "type": "gauge",
+          "query": "technology_adaptation_readiness * 100",
+          "unit": "percent",
+          "description": "Readiness to adapt to projected technology changes"
+        },
+        {
+          "id": "migration_projections",
+          "title": "Projected Migrations",
+          "type": "table",
+          "query": "projected_technology_migrations limit 10",
+          "columns": [
+            {"field": "from_technology", "title": "From"},
+            {"field": "to_technology", "title": "To"},
+            {"field": "projected_date", "title": "Projected Date"},
+            {"field": "confidence", "title": "Confidence"},
+            {"field": "preparation_status", "title": "Preparation Status"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "existential_risk",
+      "title": "Existential Risk Monitoring",
+      "description": "Long-term existential risks to system continuity",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "overall_existential_risk",
+          "title": "Overall Existential Risk",
+          "type": "gauge",
+          "query": "(1 - system_survival_probability_1000y) * 100",
+          "unit": "percent",
+          "thresholds": {
+            "low": 1,
+            "medium": 5,
+            "high": 10,
+            "critical": 20
+          }
+        },
+        {
+          "id": "risk_category_breakdown",
+          "title": "Risk by Category",
+          "type": "pie_chart",
+          "query": "existential_risk_probability by (category)",
+          "categories": [
+            "Technology Failure",
+            "External Catastrophe",
+            "Social Collapse",
+            "Resource Exhaustion",
+            "Hostile Takeover",
+            "Unknown Unknowns"
+          ]
+        },
+        {
+          "id": "mitigation_coverage",
+          "title": "Risk Mitigation Coverage",
+          "type": "bar_chart",
+          "query": "risk_mitigation_coverage by (risk_type)",
+          "visualization": {
+            "show_gap": true,
+            "target_line": 0.95
+          }
+        },
+        {
+          "id": "survival_probability_curve",
+          "title": "Survival Probability Over Time",
+          "type": "line_chart",
+          "query": "system_survival_probability",
+          "time_range": "10000y",
+          "y_axis": {
+            "min": 0,
+            "max": 1,
+            "format": "percent"
+          }
+        },
+        {
+          "id": "redundancy_assessment",
+          "title": "Redundancy vs Risk Assessment",
+          "type": "scatter",
+          "query": "component_risk_redundancy",
+          "axes": {
+            "x": {"field": "redundancy_level", "label": "Redundancy"},
+            "y": {"field": "risk_level", "label": "Risk Level"}
+          },
+          "annotations": ["critical_components"]
+        }
+      ]
+    },
+    {
+      "id": "future_governance",
+      "title": "Future Governance Planning",
+      "description": "Preparation for future governance challenges",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "pending_sunset_clauses",
+          "title": "Pending Sunset Reviews",
+          "type": "stat",
+          "query": "count(sunset_clauses{status='pending', due_within_century=true})",
+          "unit": "clauses"
+        },
+        {
+          "id": "sunset_timeline",
+          "title": "Sunset Clause Timeline",
+          "type": "gantt",
+          "query": "sunset_clause_timeline",
+          "time_range": "1000y",
+          "group_by": "governance_area"
+        },
+        {
+          "id": "succession_planning",
+          "title": "Succession Health",
+          "type": "gauge",
+          "query": "succession_planning_health_score * 100",
+          "unit": "percent",
+          "description": "Readiness of succession plans for key roles"
+        },
+        {
+          "id": "governance_evolution",
+          "title": "Projected Governance Needs",
+          "type": "table",
+          "query": "projected_governance_needs limit 10",
+          "columns": [
+            {"field": "need_description", "title": "Projected Need"},
+            {"field": "time_horizon", "title": "Horizon"},
+            {"field": "probability", "title": "Probability"},
+            {"field": "preparation_status", "title": "Preparation"}
+          ]
+        },
+        {
+          "id": "treaty_expirations",
+          "title": "Upcoming Treaty Expirations",
+          "type": "calendar",
+          "query": "treaty_expiration_dates",
+          "time_range": "100y"
+        }
+      ]
+    },
+    {
+      "id": "cosmic_expansion",
+      "title": "Cosmic Expansion Projections",
+      "description": "Projections for interplanetary and interstellar expansion",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "expansion_timeline",
+          "title": "Expansion Milestone Timeline",
+          "type": "timeline",
+          "query": "cosmic_expansion_milestones",
+          "milestones": [
+            {"name": "Lunar Permanent Presence", "query": "milestone{type='lunar'}"},
+            {"name": "Mars Colony", "query": "milestone{type='mars'}"},
+            {"name": "Asteroid Belt Federation", "query": "milestone{type='asteroid'}"},
+            {"name": "Outer Solar System", "query": "milestone{type='outer_system'}"},
+            {"name": "Interstellar Probe", "query": "milestone{type='interstellar_probe'}"},
+            {"name": "Interstellar Colony", "query": "milestone{type='interstellar_colony'}"}
+          ]
+        },
+        {
+          "id": "latency_projections",
+          "title": "Projected Communication Latency",
+          "type": "map_3d",
+          "query": "projected_cosmic_latency",
+          "visualization": {
+            "show_solar_system": true,
+            "show_latency_contours": true
+          }
+        },
+        {
+          "id": "federation_growth",
+          "title": "Federation Membership Growth",
+          "type": "area_chart",
+          "query": "projected_federation_nodes",
+          "time_range": "1000y",
+          "series": [
+            {"name": "Earth-based", "query": "federation_nodes{location='earth'}"},
+            {"name": "Lunar", "query": "federation_nodes{location='lunar'}"},
+            {"name": "Mars", "query": "federation_nodes{location='mars'}"},
+            {"name": "Outer System", "query": "federation_nodes{location='outer'}"},
+            {"name": "Interstellar", "query": "federation_nodes{location='interstellar'}"}
+          ]
+        },
+        {
+          "id": "cosmic_governance_readiness",
+          "title": "Cosmic Governance Readiness",
+          "type": "radar",
+          "query": "cosmic_governance_readiness",
+          "dimensions": [
+            "Latency Tolerance",
+            "Autonomy Frameworks",
+            "Resource Sharing",
+            "Conflict Resolution",
+            "Communication Standards"
+          ]
+        }
+      ]
+    }
+  ],
+  "alerts": [
+    {
+      "id": "projection_accuracy_declining",
+      "name": "Projection Accuracy Declining",
+      "condition": "projection_accuracy_score < 0.60",
+      "for": "24h",
+      "severity": "warning",
+      "notification": ["projection-team"],
+      "runbook": "docs/runbooks/projection_accuracy_improvement.md"
+    },
+    {
+      "id": "future_ai_offline",
+      "name": "Future AI Representative Offline",
+      "condition": "count(future_ai_representatives{status='active'}) < 3",
+      "for": "1h",
+      "severity": "warning",
+      "notification": ["ai-governance-team"],
+      "runbook": "docs/runbooks/future_ai_recovery.md"
+    },
+    {
+      "id": "sustainability_critical",
+      "name": "Sustainability Trajectory Critical",
+      "condition": "sustainability_trajectory_score < 0.5",
+      "severity": "critical",
+      "notification": ["resource-governance-team", "executive-council"],
+      "runbook": "docs/runbooks/sustainability_emergency.md"
+    },
+    {
+      "id": "existential_risk_elevated",
+      "name": "Existential Risk Elevated",
+      "condition": "(1 - system_survival_probability_1000y) > 0.10",
+      "severity": "critical",
+      "notification": ["executive-council", "continuity-team"],
+      "runbook": "docs/runbooks/existential_risk_response.md"
+    },
+    {
+      "id": "sunset_clause_approaching",
+      "name": "Sunset Clause Review Due",
+      "condition": "sunset_clauses{status='pending', due_within_decade=true}",
+      "severity": "info",
+      "notification": ["governance-team"],
+      "runbook": "docs/runbooks/sunset_clause_review.md"
+    },
+    {
+      "id": "paradigm_shift_imminent",
+      "name": "Paradigm Shift Probability High",
+      "condition": "max(paradigm_shift_probability{horizon='10y'}) > 0.5",
+      "severity": "warning",
+      "notification": ["technology-evolution-team"],
+      "runbook": "docs/runbooks/paradigm_shift_preparation.md"
+    },
+    {
+      "id": "treaty_expiration_imminent",
+      "name": "Inter-Era Treaty Expiring Soon",
+      "condition": "treaty_expiration_days < 365",
+      "severity": "info",
+      "notification": ["federation-coordination-team"],
+      "runbook": "docs/runbooks/treaty_renewal.md"
+    }
+  ],
+  "annotations": [
+    {
+      "name": "Scenario Bifurcation",
+      "query": "scenario_bifurcation_events",
+      "color": "orange",
+      "description": "Points where scenario projections significantly diverge"
+    },
+    {
+      "name": "Major Decision Impact",
+      "query": "decision_future_impact{magnitude='major'}",
+      "color": "purple",
+      "description": "Current decisions with major projected future impact"
+    },
+    {
+      "name": "Technology Milestone",
+      "query": "technology_milestone_projections",
+      "color": "blue",
+      "description": "Projected technology adoption milestones"
+    },
+    {
+      "name": "Risk Event",
+      "query": "projected_risk_events",
+      "color": "red",
+      "description": "Projected risk events and their probability"
+    }
+  ],
+  "links": [
+    {
+      "title": "Past Dashboard",
+      "url": "/dashboards/past",
+      "icon": "history"
+    },
+    {
+      "title": "Present Dashboard",
+      "url": "/dashboards/present",
+      "icon": "clock"
+    },
+    {
+      "title": "Projection Explorer",
+      "url": "/tools/projection-explorer",
+      "icon": "explore"
+    },
+    {
+      "title": "Scenario Planner",
+      "url": "/tools/scenario-planner",
+      "icon": "timeline"
+    },
+    {
+      "title": "Risk Assessment",
+      "url": "/risk/assessment",
+      "icon": "warning"
+    }
+  ]
+}

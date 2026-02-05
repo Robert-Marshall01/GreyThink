@@ -1,0 +1,562 @@
+# =============================================================================
+# Grey Distributed — Helm Values
+# =============================================================================
+#
+# This file contains all configurable values for the Grey Distributed chart.
+# Override these values by:
+#   1. helm install grey ./grey -f custom-values.yaml
+#   2. helm install grey ./grey --set coordinator.replicas=5
+#
+# Value categories:
+#   - global: Settings that apply to all components
+#   - coordinator: Consensus and scheduling nodes
+#   - worker: Task execution nodes
+#   - gateway: External API nodes
+#   - governance: Resource limits and quotas (Grey Optimizer integration)
+#   - security: TLS, authentication, isolation
+#   - monitoring: Metrics, tracing, logging
+#
+# =============================================================================
+
+# =============================================================================
+# Global Settings
+# =============================================================================
+global:
+  # Image settings (apply to all components)
+  image:
+    registry: ghcr.io
+    repository: grey-systems/grey-distributed
+    tag: ""  # Defaults to Chart.appVersion
+    pullPolicy: IfNotPresent
+  
+  # Image pull secrets for private registries
+  imagePullSecrets: []
+  #  - name: registry-secret
+  
+  # Resource naming
+  nameOverride: ""
+  fullnameOverride: ""
+  
+  # Namespace to deploy into (if not specified by helm install -n)
+  namespace: grey-system
+
+# =============================================================================
+# Coordinator Configuration
+# =============================================================================
+#
+# Coordinators run the Raft consensus protocol and schedule tasks.
+# Use an odd number (3, 5, 7) for proper quorum.
+#
+# Sizing guidelines:
+#   - Development: 1 replica (no HA, fast startup)
+#   - Production: 3 replicas (tolerates 1 failure)
+#   - Large-scale: 5 replicas (tolerates 2 failures)
+#
+# =============================================================================
+coordinator:
+  # Number of coordinator replicas
+  # MUST be odd for Raft quorum
+  replicas: 3
+  
+  # Image override (uses global if not set)
+  image:
+    repository: ""  # Uses global
+    tag: ""
+  
+  # Resource requests and limits
+  # These integrate with Grey Optimizer governance
+  resources:
+    requests:
+      cpu: "1"
+      memory: "2Gi"
+    limits:
+      cpu: "2"
+      memory: "4Gi"
+  
+  # Persistent storage for Raft log
+  persistence:
+    enabled: true
+    storageClass: ""  # Uses default storage class
+    accessMode: ReadWriteOnce
+    size: 50Gi
+    # Separate WAL volume (recommended for production)
+    wal:
+      enabled: false
+      storageClass: ""
+      size: 10Gi
+  
+  # Pod scheduling
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  # Default anti-affinity is configured in the template
+  antiAffinityPreset: hard  # hard, soft, none
+  
+  # Service account
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+  
+  # Pod configuration
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+  
+  # Container configuration
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: true
+  
+  # Probes
+  livenessProbe:
+    httpGet:
+      path: /health/live
+      port: http
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  
+  readinessProbe:
+    httpGet:
+      path: /health/ready
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  
+  startupProbe:
+    httpGet:
+      path: /health/live
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    failureThreshold: 30
+  
+  # Graceful shutdown timeout (for Raft leadership transfer)
+  terminationGracePeriodSeconds: 60
+  
+  # Pod Disruption Budget
+  pdb:
+    enabled: true
+    minAvailable: ""  # Calculated: replicas / 2 + 1
+    maxUnavailable: 1
+
+# =============================================================================
+# Worker Configuration
+# =============================================================================
+#
+# Workers execute tasks and store data shards.
+# Stateless and horizontally scalable.
+#
+# Sizing guidelines:
+#   - Minimum 3 for data replication factor
+#   - Scale based on workload characteristics
+#   - Use HPA for automatic scaling
+#
+# =============================================================================
+worker:
+  # Number of worker replicas
+  replicas: 5
+  
+  # Image override
+  image:
+    repository: ""
+    tag: ""
+  
+  # Resources (more than coordinators for task execution)
+  resources:
+    requests:
+      cpu: "2"
+      memory: "4Gi"
+    limits:
+      cpu: "4"
+      memory: "8Gi"
+  
+  # Worker ephemeral storage (for task execution)
+  workDir:
+    sizeLimit: 10Gi
+  
+  # Horizontal Pod Autoscaler
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 50
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+    # Custom metrics from Grey Optimizer
+    customMetrics:
+      - type: Pods
+        pods:
+          metric:
+            name: grey_scheduler_queue_depth
+          target:
+            type: AverageValue
+            averageValue: "100"
+  
+  # Pod scheduling
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  antiAffinityPreset: soft
+  
+  # Service account
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+  
+  # Pod configuration
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+  
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: true
+  
+  # Probes
+  livenessProbe:
+    httpGet:
+      path: /health/live
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+  
+  readinessProbe:
+    httpGet:
+      path: /health/ready
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+  
+  terminationGracePeriodSeconds: 30
+  
+  pdb:
+    enabled: true
+    maxUnavailable: "25%"
+
+# =============================================================================
+# Gateway Configuration
+# =============================================================================
+#
+# Gateways handle external API traffic.
+# Stateless, high-availability for external access.
+#
+# =============================================================================
+gateway:
+  replicas: 3
+  
+  image:
+    repository: ""
+    tag: ""
+  
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "1"
+      memory: "2Gi"
+  
+  # Service configuration
+  service:
+    type: LoadBalancer  # LoadBalancer, NodePort, ClusterIP
+    httpPort: 80
+    httpsPort: 443
+    grpcPort: 9090
+    annotations: {}
+    # Cloud-specific LB annotations
+    # aws:
+    #   service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    # gcp:
+    #   cloud.google.com/neg: '{"ingress": true}'
+  
+  # Ingress configuration
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    hosts:
+      - host: grey.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: grey-tls-ingress
+        hosts:
+          - grey.example.com
+  
+  # gRPC ingress (optional, for dedicated gRPC endpoint)
+  grpcIngress:
+    enabled: false
+    host: grpc.grey.example.com
+  
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  antiAffinityPreset: hard
+  
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+  
+  podAnnotations: {}
+  podLabels: {}
+  
+  pdb:
+    enabled: true
+    minAvailable: 2
+
+# =============================================================================
+# Resource Governance (Grey Optimizer Integration)
+# =============================================================================
+#
+# These settings configure resource limits, quotas, and fairness policies.
+# They integrate with Grey Optimizer for dynamic adjustment.
+#
+# =============================================================================
+governance:
+  # Enable resource governance
+  enabled: true
+  
+  # Global resource limits (cluster ceiling)
+  global:
+    maxCpuCores: 1000
+    maxMemoryGB: 2000
+    maxStorageTB: 100
+    maxTasksPerSecond: 100000
+  
+  # Default tenant quotas
+  defaultTenantQuota:
+    cpuCores: 10
+    memoryGB: 20
+    storageGB: 100
+    tasksPerSecond: 1000
+    maxConcurrentTasks: 100
+  
+  # Throttling settings
+  throttling:
+    enabled: true
+    algorithm: token_bucket  # token_bucket, leaky_bucket, sliding_window
+    defaultRPS: 1000
+    burstPercent: 20
+  
+  # Hotspot detection (GreyAV integration)
+  hotspot:
+    enabled: true
+    detectionWindow: 5m
+    threshold: 0.8
+    cooldown: 1m
+  
+  # Scheduler fairness
+  scheduler:
+    algorithm: drf  # drf, max_min, weighted
+    rebalanceInterval: 30s
+    starvationPrevention:
+      enabled: true
+      minSharePercent: 5
+
+# =============================================================================
+# Security Configuration
+# =============================================================================
+#
+# TLS, authentication, authorization, and tenant isolation.
+# Integrates with Grey Multi-Tenant for isolation policies.
+#
+# =============================================================================
+security:
+  # TLS configuration
+  tls:
+    enabled: true
+    # Use cert-manager for automatic certificate management
+    certManager:
+      enabled: true
+      issuer: letsencrypt-prod
+      issuerKind: ClusterIssuer
+    # Or use existing secret
+    existingSecret: ""
+    # Certificate duration and renewal
+    duration: 8760h  # 1 year
+    renewBefore: 720h  # 30 days
+  
+  # Authentication
+  auth:
+    enabled: true
+    methods:
+      - jwt
+      - mtls
+    jwt:
+      issuer: "https://auth.grey.example.com"
+      audience: "grey-distributed"
+      jwksUrl: "https://auth.grey.example.com/.well-known/jwks.json"
+  
+  # Node attestation
+  attestation:
+    enabled: true
+    types:
+      - tpm
+    maxAge: 24h
+  
+  # Tenant isolation (Grey Multi-Tenant)
+  isolation:
+    network: networkpolicy  # networkpolicy, cilium, istio
+    compute: cgroups  # cgroups, kata, firecracker
+    storage: encryption  # namespace, encryption
+  
+  # Network policies
+  networkPolicy:
+    enabled: true
+    # Allow traffic from these namespaces
+    allowedNamespaces:
+      - monitoring
+      - observability
+      - ingress-nginx
+
+# =============================================================================
+# Monitoring Configuration
+# =============================================================================
+#
+# Prometheus metrics, OpenTelemetry tracing, logging.
+#
+# =============================================================================
+monitoring:
+  # Prometheus metrics
+  prometheus:
+    enabled: true
+    # Deploy Prometheus (requires prometheus chart dependency)
+    deploy: false
+    # ServiceMonitor for Prometheus Operator
+    serviceMonitor:
+      enabled: true
+      interval: 15s
+      scrapeTimeout: 10s
+      labels: {}
+    # Prometheus rules for alerting
+    prometheusRule:
+      enabled: true
+      rules:
+        - alert: GreyNodeDown
+          expr: up{job="grey"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Grey node is down"
+        - alert: GreyLeaderChanges
+          expr: increase(grey_consensus_leader_changes_total[5m]) > 3
+          for: 5m
+          labels:
+            severity: warning
+        - alert: GreyHighLatency
+          expr: histogram_quantile(0.99, grey_request_duration_seconds_bucket) > 1
+          for: 5m
+          labels:
+            severity: warning
+  
+  # OpenTelemetry tracing
+  tracing:
+    enabled: true
+    exporter: otlp  # otlp, jaeger, zipkin
+    endpoint: "otel-collector.observability.svc:4317"
+    sampleRate: 0.1
+  
+  # Logging
+  logging:
+    level: info  # debug, info, warn, error
+    format: json  # json, text
+  
+  # Grafana dashboards
+  grafana:
+    enabled: true
+    # Dashboard ConfigMaps
+    dashboardLabels:
+      grafana_dashboard: "1"
+
+# =============================================================================
+# Consensus Configuration
+# =============================================================================
+#
+# Raft protocol tuning. Defaults are suitable for most deployments.
+#
+# =============================================================================
+consensus:
+  electionTimeout:
+    min: 1000ms
+    max: 2000ms
+  heartbeatInterval: 150ms
+  preVote: true
+  snapshot:
+    threshold: 10000
+    retain: 3
+
+# =============================================================================
+# Storage Configuration
+# =============================================================================
+storage:
+  replication:
+    factor: 3
+    readQuorum: 2
+    writeQuorum: 2
+    syncMode: sync  # sync, async
+  sharding:
+    numShards: 64
+    rebalanceThreshold: 10
+  compaction:
+    interval: 1h
+
+# =============================================================================
+# Fault Tolerance
+# =============================================================================
+faultTolerance:
+  phiThreshold: 8.0
+  minSamples: 50
+  selfHealing:
+    enabled: true
+    replaceAfter: 10m
+    maxConcurrent: 1
+  circuitBreaker:
+    enabled: true
+    failureThreshold: 5
+    resetTimeout: 30s
+
+# =============================================================================
+# Additional Components
+# =============================================================================
+
+# Extra environment variables for all pods
+extraEnv: []
+#  - name: MY_VAR
+#    value: "my-value"
+
+# Extra volumes and mounts
+extraVolumes: []
+extraVolumeMounts: []
+
+# Init containers
+initContainers: []
+
+# Sidecar containers
+sidecars: []

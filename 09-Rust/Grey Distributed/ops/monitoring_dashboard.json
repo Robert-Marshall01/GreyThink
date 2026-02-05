@@ -1,0 +1,917 @@
+{
+  "_comment": "Grey Distributed - Unified Monitoring Dashboard for Grafana",
+  "_design_notes": {
+    "purpose": "Comprehensive operational visibility into Grey Distributed clusters",
+    "sections": [
+      "Cluster Health - Node status, consensus state, resource utilization",
+      "Task Execution - Latency percentiles, throughput, queue depth",
+      "Security - Attestation, isolation events, anomaly detection",
+      "Observability - Distributed tracing, causal logs, replay status"
+    ],
+    "alert_philosophy": "Alerts should be actionable. Each alert maps to a runbook."
+  },
+  "annotations": {
+    "list": [
+      {
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(255, 96, 96, 1)",
+        "limit": 100,
+        "name": "Deployments",
+        "showIn": 0,
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": ["grey-distributed"],
+      "targetBlank": true,
+      "title": "Related Dashboards",
+      "type": "dashboards"
+    }
+  ],
+  "panels": [
+    {
+      "_section": "=== CLUSTER HEALTH ===",
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "title": "Cluster Health",
+      "type": "row"
+    },
+    {
+      "id": 2,
+      "title": "Cluster Status",
+      "description": "Overall cluster health status",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 1},
+      "targets": [
+        {
+          "expr": "sum(up{job=\"grey-distributed\"})",
+          "legendFormat": "Nodes Up"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 3},
+              {"color": "green", "value": 5}
+            ]
+          },
+          "mappings": [],
+          "unit": "none"
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 3,
+      "title": "Leader Node",
+      "description": "Current Raft leader. Leader changes indicate elections.",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 1},
+      "targets": [
+        {
+          "expr": "grey_consensus_is_leader * on(instance) group_left(node_id) grey_node_info",
+          "legendFormat": "{{node_id}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
+          "mappings": [{"type": "value", "options": {"1": {"text": "Leader", "color": "green"}}}]
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Consensus Term",
+      "description": "Current Raft term. Rapid increases indicate instability.",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 1},
+      "targets": [
+        {
+          "expr": "max(grey_consensus_current_term)",
+          "legendFormat": "Term"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
+          "unit": "none"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Leader Changes (1h)",
+      "description": "Leader elections in the past hour. > 3 indicates instability.",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 1},
+      "targets": [
+        {
+          "expr": "increase(grey_consensus_leader_changes_total[1h])",
+          "legendFormat": "Elections"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 2},
+              {"color": "red", "value": 5}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Commit Latency (p99)",
+      "description": "99th percentile consensus commit latency",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 1},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(grey_consensus_commit_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.05},
+              {"color": "red", "value": 0.1}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Log Replication Lag",
+      "description": "Max log entries behind leader. High lag = follower falling behind.",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 1},
+      "targets": [
+        {
+          "expr": "max(grey_consensus_leader_last_index - grey_consensus_follower_last_index)",
+          "legendFormat": "Lag"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 100},
+              {"color": "red", "value": 1000}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Node Status Timeline",
+      "description": "Per-node health over time. Gaps indicate node failures.",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 5},
+      "targets": [
+        {
+          "expr": "up{job=\"grey-distributed\"}",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "fillOpacity": 30
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "CPU Usage by Role",
+      "description": "CPU utilization grouped by node role (coordinator/worker/gateway)",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 5},
+      "targets": [
+        {
+          "expr": "avg by (role) (grey_node_cpu_usage_ratio * 100)",
+          "legendFormat": "{{role}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {"fillOpacity": 20, "drawStyle": "line"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 70},
+              {"color": "red", "value": 90}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Memory Usage by Role",
+      "description": "Memory utilization by node role",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 11},
+      "targets": [
+        {
+          "expr": "avg by (role) (grey_node_memory_usage_bytes / grey_node_memory_limit_bytes * 100)",
+          "legendFormat": "{{role}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {"fillOpacity": 20},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 70},
+              {"color": "red", "value": 85}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 11,
+      "title": "Disk I/O by Node",
+      "description": "Disk read/write throughput per node",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 11},
+      "targets": [
+        {
+          "expr": "rate(grey_storage_bytes_written_total[5m])",
+          "legendFormat": "{{instance}} write"
+        },
+        {
+          "expr": "rate(grey_storage_bytes_read_total[5m])",
+          "legendFormat": "{{instance}} read"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "Bps", "custom": {"fillOpacity": 10}}
+      }
+    },
+    {
+      "_section": "=== TASK EXECUTION ===",
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 17},
+      "id": 20,
+      "title": "Task Execution",
+      "type": "row"
+    },
+    {
+      "id": 21,
+      "title": "Tasks/sec",
+      "description": "Task completion rate across the cluster",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 18},
+      "targets": [
+        {
+          "expr": "sum(rate(grey_scheduler_tasks_completed_total[5m]))",
+          "legendFormat": "Completed"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "ops", "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}}
+      }
+    },
+    {
+      "id": 22,
+      "title": "Queue Depth",
+      "description": "Pending tasks in scheduler queue",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 18},
+      "targets": [
+        {
+          "expr": "sum(grey_scheduler_queue_depth)",
+          "legendFormat": "Pending"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5000},
+              {"color": "red", "value": 10000}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 23,
+      "title": "Task Latency (p50/p99/p999)",
+      "description": "Task execution latency percentiles",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 8, "y": 18},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(grey_scheduler_task_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(grey_scheduler_task_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99"
+        },
+        {
+          "expr": "histogram_quantile(0.999, sum(rate(grey_scheduler_task_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p999"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "s"}
+      },
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}}
+    },
+    {
+      "id": 24,
+      "title": "Failed Tasks (1h)",
+      "description": "Tasks that failed in the past hour",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 14, "y": 18},
+      "targets": [
+        {
+          "expr": "sum(increase(grey_scheduler_tasks_failed_total[1h]))",
+          "legendFormat": "Failed"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 10},
+              {"color": "red", "value": 100}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 25,
+      "title": "Retry Rate",
+      "description": "Task retry rate (retries/total)",
+      "type": "gauge",
+      "gridPos": {"h": 4, "w": 3, "x": 18, "y": 18},
+      "targets": [
+        {
+          "expr": "sum(rate(grey_scheduler_task_retries_total[5m])) / sum(rate(grey_scheduler_tasks_completed_total[5m])) * 100",
+          "legendFormat": "Retry %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 20}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 26,
+      "title": "Task Latency Heatmap",
+      "description": "Distribution of task latencies over time",
+      "type": "heatmap",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 22},
+      "targets": [
+        {
+          "expr": "sum(increase(grey_scheduler_task_duration_seconds_bucket[1m])) by (le)",
+          "format": "heatmap",
+          "legendFormat": "{{le}}"
+        }
+      ],
+      "options": {
+        "calculate": false,
+        "color": {"scheme": "Spectral"},
+        "yAxis": {"unit": "s"}
+      }
+    },
+    {
+      "id": 27,
+      "title": "Throughput by Priority",
+      "description": "Task completion rate by priority level",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 22},
+      "targets": [
+        {
+          "expr": "sum by (priority) (rate(grey_scheduler_tasks_completed_total[5m]))",
+          "legendFormat": "Priority {{priority}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "ops", "custom": {"fillOpacity": 30, "stacking": {"mode": "normal"}}}
+      }
+    },
+    {
+      "_section": "=== SECURITY ===",
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 30},
+      "id": 40,
+      "title": "Security & Attestation",
+      "type": "row"
+    },
+    {
+      "id": 41,
+      "title": "Attestation Status",
+      "description": "Nodes with valid attestation",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 31},
+      "targets": [
+        {
+          "expr": "sum(grey_security_attestation_valid)",
+          "legendFormat": "Attested"
+        },
+        {
+          "expr": "sum(grey_security_attestation_valid == 0)",
+          "legendFormat": "Unattested"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"color": "green", "value": null}]
+          }
+        }
+      }
+    },
+    {
+      "id": 42,
+      "title": "Attestation Failures (1h)",
+      "description": "Failed attestation attempts",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 31},
+      "targets": [
+        {
+          "expr": "sum(increase(grey_security_attestation_failures_total[1h]))",
+          "legendFormat": "Failures"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 5}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 43,
+      "title": "Tenant Isolation Events",
+      "description": "Cross-tenant access attempts (should be 0)",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 31},
+      "targets": [
+        {
+          "expr": "sum(increase(grey_security_isolation_violations_total[1h]))",
+          "legendFormat": "Violations"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 1}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 44,
+      "title": "Unauthorized Access Attempts",
+      "description": "Blocked requests due to auth failures",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 31},
+      "targets": [
+        {
+          "expr": "sum(increase(grey_security_unauthorized_requests_total[1h]))",
+          "legendFormat": "Blocked"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 10},
+              {"color": "red", "value": 100}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 45,
+      "title": "Certificate Expiry",
+      "description": "Days until TLS certificate expiration",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 31},
+      "targets": [
+        {
+          "expr": "min((grey_security_cert_expiry_timestamp - time()) / 86400)",
+          "legendFormat": "Days"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "d",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 14},
+              {"color": "green", "value": 30}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 46,
+      "title": "Quarantined Nodes",
+      "description": "Nodes currently in quarantine",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 31},
+      "targets": [
+        {
+          "expr": "sum(grey_fault_quarantined_nodes)",
+          "legendFormat": "Quarantined"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 2}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 47,
+      "title": "Security Events Timeline",
+      "description": "Security-related events over time",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 35},
+      "targets": [
+        {
+          "expr": "rate(grey_security_attestation_failures_total[5m])",
+          "legendFormat": "Attestation Failures"
+        },
+        {
+          "expr": "rate(grey_security_isolation_violations_total[5m])",
+          "legendFormat": "Isolation Violations"
+        },
+        {
+          "expr": "rate(grey_security_unauthorized_requests_total[5m])",
+          "legendFormat": "Auth Failures"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"custom": {"fillOpacity": 20}}
+      }
+    },
+    {
+      "_section": "=== OBSERVABILITY ===",
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 41},
+      "id": 60,
+      "title": "Observability & Tracing",
+      "type": "row"
+    },
+    {
+      "id": 61,
+      "title": "Trace Samples/sec",
+      "description": "Rate of trace samples collected",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 42},
+      "targets": [
+        {
+          "expr": "sum(rate(grey_observability_traces_sampled_total[5m]))",
+          "legendFormat": "Traces"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "ops", "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}}
+      }
+    },
+    {
+      "id": 62,
+      "title": "Log Ingestion Rate",
+      "description": "Structured log entries per second",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 42},
+      "targets": [
+        {
+          "expr": "sum(rate(grey_observability_logs_ingested_total[5m]))",
+          "legendFormat": "Logs/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "ops"}
+      }
+    },
+    {
+      "id": 63,
+      "title": "Replay Engine Status",
+      "description": "Current replay engine state",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 42},
+      "targets": [
+        {
+          "expr": "grey_observability_replay_active",
+          "legendFormat": "Active Replays"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "Idle", "color": "green"}}},
+            {"type": "range", "options": {"from": 1, "to": 100, "result": {"text": "Replaying", "color": "blue"}}}
+          ]
+        }
+      }
+    },
+    {
+      "id": 64,
+      "title": "Causal Log Depth",
+      "description": "Maximum causal chain length in recent logs",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 42},
+      "targets": [
+        {
+          "expr": "max(grey_observability_causal_depth)",
+          "legendFormat": "Max Depth"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "none"}
+      }
+    },
+    {
+      "id": 65,
+      "title": "Span Duration by Service",
+      "description": "Average span duration grouped by service",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 46},
+      "targets": [
+        {
+          "expr": "avg by (service) (grey_observability_span_duration_seconds)",
+          "legendFormat": "{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "s", "custom": {"fillOpacity": 20}}
+      }
+    },
+    {
+      "id": 66,
+      "title": "Error Traces by Type",
+      "description": "Traces containing errors grouped by error type",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 46},
+      "targets": [
+        {
+          "expr": "sum by (error_type) (rate(grey_observability_error_traces_total[5m]))",
+          "legendFormat": "{{error_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"custom": {"fillOpacity": 30, "stacking": {"mode": "normal"}}}
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["grey-distributed", "production", "sre"],
+  "templating": {
+    "list": [
+      {
+        "current": {"selected": false, "text": "All", "value": "$__all"},
+        "datasource": "Prometheus",
+        "definition": "label_values(up{job=\"grey-distributed\"}, instance)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Instance",
+        "multi": true,
+        "name": "instance",
+        "options": [],
+        "query": "label_values(up{job=\"grey-distributed\"}, instance)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {"selected": false, "text": "All", "value": "$__all"},
+        "datasource": "Prometheus",
+        "definition": "label_values(grey_node_info, role)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Role",
+        "multi": true,
+        "name": "role",
+        "query": "label_values(grey_node_info, role)",
+        "refresh": 2,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {
+    "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"]
+  },
+  "timezone": "browser",
+  "title": "Grey Distributed - Operations Dashboard",
+  "uid": "grey-ops-main",
+  "version": 1,
+  "weekStart": "",
+  "_alerts": {
+    "_comment": "Alert definitions for Grafana Alerting or Prometheus Alertmanager",
+    "groups": [
+      {
+        "name": "grey-cluster-health",
+        "rules": [
+          {
+            "alert": "GreyNodeDown",
+            "expr": "up{job=\"grey-distributed\"} == 0",
+            "for": "1m",
+            "labels": {"severity": "critical"},
+            "annotations": {
+              "summary": "Grey node {{ $labels.instance }} is down",
+              "runbook_url": "https://wiki.example.com/grey/runbooks/node-down"
+            }
+          },
+          {
+            "alert": "GreyLeaderUnstable",
+            "expr": "increase(grey_consensus_leader_changes_total[15m]) > 3",
+            "for": "5m",
+            "labels": {"severity": "warning"},
+            "annotations": {
+              "summary": "Frequent leader changes detected",
+              "runbook_url": "https://wiki.example.com/grey/runbooks/leader-unstable"
+            }
+          },
+          {
+            "alert": "GreyCommitLatencyHigh",
+            "expr": "histogram_quantile(0.99, sum(rate(grey_consensus_commit_duration_seconds_bucket[5m])) by (le)) > 0.1",
+            "for": "5m",
+            "labels": {"severity": "warning"},
+            "annotations": {
+              "summary": "Consensus commit latency p99 > 100ms",
+              "runbook_url": "https://wiki.example.com/grey/runbooks/high-latency"
+            }
+          },
+          {
+            "alert": "GreyQuorumLost",
+            "expr": "sum(up{job=\"grey-distributed\", role=\"coordinator\"}) < 2",
+            "for": "30s",
+            "labels": {"severity": "critical"},
+            "annotations": {
+              "summary": "Consensus quorum lost - cluster cannot make progress",
+              "runbook_url": "https://wiki.example.com/grey/runbooks/quorum-lost"
+            }
+          }
+        ]
+      },
+      {
+        "name": "grey-task-execution",
+        "rules": [
+          {
+            "alert": "GreyQueueBacklog",
+            "expr": "sum(grey_scheduler_queue_depth) > 10000",
+            "for": "5m",
+            "labels": {"severity": "warning"},
+            "annotations": {
+              "summary": "Task queue backlog exceeds 10k tasks",
+              "runbook_url": "https://wiki.example.com/grey/runbooks/queue-backlog"
+            }
+          },
+          {
+            "alert": "GreyTaskFailureRateHigh",
+            "expr": "sum(rate(grey_scheduler_tasks_failed_total[5m])) / sum(rate(grey_scheduler_tasks_completed_total[5m])) > 0.05",
+            "for": "5m",
+            "labels": {"severity": "warning"},
+            "annotations": {
+              "summary": "Task failure rate exceeds 5%",
+              "runbook_url": "https://wiki.example.com/grey/runbooks/task-failures"
+            }
+          }
+        ]
+      },
+      {
+        "name": "grey-security",
+        "rules": [
+          {
+            "alert": "GreyIsolationViolation",
+            "expr": "increase(grey_security_isolation_violations_total[5m]) > 0",
+            "for": "0s",
+            "labels": {"severity": "critical"},
+            "annotations": {
+              "summary": "Tenant isolation violation detected",
+              "runbook_url": "https://wiki.example.com/grey/runbooks/isolation-breach"
+            }
+          },
+          {
+            "alert": "GreyCertExpiringSoon",
+            "expr": "(grey_security_cert_expiry_timestamp - time()) / 86400 < 14",
+            "for": "1h",
+            "labels": {"severity": "warning"},
+            "annotations": {
+              "summary": "TLS certificate expires in less than 14 days",
+              "runbook_url": "https://wiki.example.com/grey/runbooks/cert-renewal"
+            }
+          },
+          {
+            "alert": "GreyNodeQuarantined",
+            "expr": "grey_fault_quarantined_nodes > 0",
+            "for": "1m",
+            "labels": {"severity": "warning"},
+            "annotations": {
+              "summary": "Node has been quarantined",
+              "runbook_url": "https://wiki.example.com/grey/runbooks/node-quarantine"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

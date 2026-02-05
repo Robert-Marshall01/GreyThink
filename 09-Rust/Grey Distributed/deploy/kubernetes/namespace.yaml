@@ -1,0 +1,218 @@
+# =============================================================================
+# Grey Distributed — Kubernetes Namespace
+# =============================================================================
+#
+# This manifest creates the namespace and essential RBAC for Grey Distributed.
+# Apply this first before other Grey manifests.
+#
+# Usage:
+#   kubectl apply -f namespace.yaml
+#
+# =============================================================================
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/part-of: grey-distributed
+    # Enable Istio sidecar injection if using service mesh
+    # istio-injection: enabled
+    # Pod security standards
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+
+---
+# =============================================================================
+# Service Accounts
+# =============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grey-coordinator
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: coordinator
+automountServiceAccountToken: true
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grey-worker
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: worker
+automountServiceAccountToken: true
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grey-gateway
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: gateway
+automountServiceAccountToken: true
+
+---
+# =============================================================================
+# RBAC: Coordinator Role
+# =============================================================================
+# Coordinators need access to discover peer pods and manage leases
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: grey-coordinator
+  namespace: grey-system
+rules:
+  # Pod discovery for Raft peer detection
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  # Endpoints for service discovery
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get", "list", "watch"]
+  # Leader election via leases
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # ConfigMaps for configuration
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  # Secrets for TLS certificates
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: grey-coordinator
+  namespace: grey-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: grey-coordinator
+subjects:
+  - kind: ServiceAccount
+    name: grey-coordinator
+    namespace: grey-system
+
+---
+# =============================================================================
+# RBAC: Worker Role
+# =============================================================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: grey-worker
+  namespace: grey-system
+rules:
+  # Read-only access to config
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: grey-worker
+  namespace: grey-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: grey-worker
+subjects:
+  - kind: ServiceAccount
+    name: grey-worker
+    namespace: grey-system
+
+---
+# =============================================================================
+# RBAC: Gateway Role
+# =============================================================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: grey-gateway
+  namespace: grey-system
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: grey-gateway
+  namespace: grey-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: grey-gateway
+subjects:
+  - kind: ServiceAccount
+    name: grey-gateway
+    namespace: grey-system
+
+---
+# =============================================================================
+# Resource Quotas
+# =============================================================================
+# Prevent runaway resource consumption in the namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: grey-system-quota
+  namespace: grey-system
+spec:
+  hard:
+    requests.cpu: "100"
+    requests.memory: 200Gi
+    limits.cpu: "200"
+    limits.memory: 400Gi
+    persistentvolumeclaims: "50"
+    pods: "100"
+
+---
+# =============================================================================
+# Limit Ranges
+# =============================================================================
+# Default resource requests/limits for pods
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: grey-system-limits
+  namespace: grey-system
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "1"
+        memory: 2Gi
+      defaultRequest:
+        cpu: "500m"
+        memory: 1Gi
+      max:
+        cpu: "8"
+        memory: 16Gi
+      min:
+        cpu: "100m"
+        memory: 128Mi

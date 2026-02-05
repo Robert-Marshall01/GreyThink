@@ -1,0 +1,750 @@
+# =============================================================================
+# Grey Distributed — 100-Node Production Cluster
+# =============================================================================
+#
+# This manifest deploys a 100-node Grey cluster optimized for production.
+#
+# Architecture:
+#   - 5 Coordinator nodes (Raft consensus, odd number for majority)
+#   - 95 Worker nodes (task execution, horizontally scalable)
+#   - Anti-affinity rules to spread across failure domains
+#   - PodDisruptionBudgets to maintain quorum during upgrades
+#
+# Resource Estimates (per node):
+#   - Coordinator: 4 CPU, 8Gi RAM, 100Gi SSD
+#   - Worker: 2 CPU, 4Gi RAM, 50Gi SSD
+#   - Total: ~210 CPU, ~420Gi RAM, ~5.25Ti storage
+#
+# Scaling Considerations:
+#   - Coordinators should NOT scale beyond 7 (Raft performance degrades)
+#   - Workers scale linearly with workload
+#   - Use node pools with appropriate instance types
+#
+# =============================================================================
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: grey-production
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/instance: production
+    environment: production
+
+---
+# =============================================================================
+# ConfigMap — Cluster Configuration
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grey-config
+  namespace: grey-production
+data:
+  # Cluster topology
+  GREY_CLUSTER_SIZE: "100"
+  GREY_COORDINATOR_COUNT: "5"
+  GREY_WORKER_COUNT: "95"
+  
+  # Consensus tuning for large clusters
+  GREY_RAFT_ELECTION_TIMEOUT_MS: "300"
+  GREY_RAFT_HEARTBEAT_INTERVAL_MS: "100"
+  GREY_RAFT_MAX_LOG_ENTRIES_PER_APPEND: "1000"
+  GREY_RAFT_SNAPSHOT_THRESHOLD: "100000"
+  
+  # Scheduler tuning
+  GREY_SCHEDULER_QUEUE_SIZE: "100000"
+  GREY_SCHEDULER_BATCH_SIZE: "1000"
+  GREY_SCHEDULER_STEAL_INTERVAL_MS: "50"
+  
+  # Network tuning
+  GREY_NETWORK_MAX_CONNECTIONS: "1000"
+  GREY_NETWORK_CONNECTION_POOL_SIZE: "50"
+  GREY_NETWORK_KEEPALIVE_INTERVAL_SEC: "30"
+  GREY_NETWORK_MAX_MESSAGE_SIZE_MB: "16"
+  
+  # Fault detection tuning
+  GREY_PHI_THRESHOLD: "8.0"
+  GREY_HEARTBEAT_INTERVAL_MS: "500"
+  GREY_SUSPICION_TIMEOUT_SEC: "10"
+  
+  # Storage tuning
+  GREY_STORAGE_SHARD_COUNT: "256"
+  GREY_STORAGE_CACHE_SIZE_MB: "1024"
+  GREY_STORAGE_WAL_SYNC_INTERVAL_MS: "100"
+  
+  # Observability
+  GREY_METRICS_PORT: "9090"
+  GREY_TRACE_SAMPLING_RATE: "0.01"  # 1% sampling at scale
+  GREY_LOG_LEVEL: "info"
+
+---
+# =============================================================================
+# Coordinator StatefulSet — Raft Consensus Nodes (5 nodes)
+# =============================================================================
+# Coordinators handle:
+#   - Leader election and log replication
+#   - Cluster membership management
+#   - Task queue coordination
+#   - Metadata storage
+#
+# Why StatefulSet:
+#   - Stable network identities (grey-coordinator-0, grey-coordinator-1, ...)
+#   - Ordered deployment and scaling
+#   - Persistent storage per pod
+# =============================================================================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: grey-coordinator
+  namespace: grey-production
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: coordinator
+spec:
+  serviceName: grey-coordinator-headless
+  replicas: 5
+  podManagementPolicy: Parallel  # Faster startup for initial deployment
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1  # Maintain quorum during updates
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grey
+      app.kubernetes.io/component: coordinator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grey
+        app.kubernetes.io/component: coordinator
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      # Schedule on dedicated coordinator node pool
+      nodeSelector:
+        grey.io/role: coordinator
+      
+      # Spread coordinators across availability zones
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: coordinator
+      
+      # Never co-locate coordinators on same node
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: coordinator
+              topologyKey: kubernetes.io/hostname
+      
+      # Graceful shutdown for clean leadership transfer
+      terminationGracePeriodSeconds: 120
+      
+      containers:
+        - name: coordinator
+          image: grey-distributed/grey:v1.0.0
+          imagePullPolicy: IfNotPresent
+          
+          command:
+            - /usr/local/bin/greyd
+            - --role=coordinator
+            - --node-id=$(POD_NAME)
+            - --peers=grey-coordinator-0.grey-coordinator-headless,grey-coordinator-1.grey-coordinator-headless,grey-coordinator-2.grey-coordinator-headless,grey-coordinator-3.grey-coordinator-headless,grey-coordinator-4.grey-coordinator-headless
+          
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          
+          envFrom:
+            - configMapRef:
+                name: grey-config
+          
+          ports:
+            - name: grpc
+              containerPort: 8080
+              protocol: TCP
+            - name: raft
+              containerPort: 8081
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          
+          resources:
+            requests:
+              cpu: "4"
+              memory: "8Gi"
+            limits:
+              cpu: "8"
+              memory: "16Gi"
+          
+          # Startup probe: Allow time for Raft election
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30  # Up to 150s for initial election
+          
+          # Liveness: Detect deadlocks
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          
+          # Readiness: Only route traffic when ready
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
+          
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/grey
+            - name: wal
+              mountPath: /var/lib/grey/wal
+      
+      # Init container for permission setup
+      initContainers:
+        - name: init-permissions
+          image: busybox:1.36
+          command: ['sh', '-c', 'chown -R 1000:1000 /var/lib/grey']
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/grey
+  
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: ssd-premium  # Use fast SSD for Raft log
+        resources:
+          requests:
+            storage: 100Gi
+    - metadata:
+        name: wal
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: ssd-premium
+        resources:
+          requests:
+            storage: 50Gi
+
+---
+# =============================================================================
+# Worker StatefulSet — Task Execution Nodes (95 nodes)
+# =============================================================================
+# Workers handle:
+#   - Task execution
+#   - Data processing
+#   - Storage operations
+#
+# Why StatefulSet over Deployment:
+#   - Stable network identities for work stealing
+#   - Persistent local cache per worker
+#   - Ordered scaling for predictable behavior
+# =============================================================================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: grey-worker
+  namespace: grey-production
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: worker
+spec:
+  serviceName: grey-worker-headless
+  replicas: 95
+  podManagementPolicy: Parallel  # Fast parallel startup
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 10  # Aggressive rolling update (10 at a time)
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grey
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grey
+        app.kubernetes.io/component: worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      # Schedule on worker node pool
+      nodeSelector:
+        grey.io/role: worker
+      
+      # Spread workers across zones (soft constraint)
+      topologySpreadConstraints:
+        - maxSkew: 5  # Allow some imbalance for efficiency
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: worker
+      
+      # Prefer spreading across nodes (soft)
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/component: worker
+                topologyKey: kubernetes.io/hostname
+      
+      terminationGracePeriodSeconds: 60
+      
+      containers:
+        - name: worker
+          image: grey-distributed/grey:v1.0.0
+          imagePullPolicy: IfNotPresent
+          
+          command:
+            - /usr/local/bin/greyd
+            - --role=worker
+            - --node-id=$(POD_NAME)
+            - --coordinators=grey-coordinator-headless.grey-production.svc.cluster.local:8080
+          
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            # Worker-specific tuning
+            - name: GREY_WORKER_THREADS
+              value: "4"
+            - name: GREY_WORKER_QUEUE_SIZE
+              value: "10000"
+          
+          envFrom:
+            - configMapRef:
+                name: grey-config
+          
+          ports:
+            - name: grpc
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          
+          resources:
+            requests:
+              cpu: "2"
+              memory: "4Gi"
+            limits:
+              cpu: "4"
+              memory: "8Gi"
+          
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          
+          volumeMounts:
+            - name: cache
+              mountPath: /var/lib/grey/cache
+            - name: scratch
+              mountPath: /tmp/grey
+  
+  volumeClaimTemplates:
+    - metadata:
+        name: cache
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: ssd-standard  # Standard SSD for cache
+        resources:
+          requests:
+            storage: 50Gi
+    - metadata:
+        name: scratch
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: ssd-standard
+        resources:
+          requests:
+            storage: 20Gi
+
+---
+# =============================================================================
+# Headless Services for DNS Discovery
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: grey-coordinator-headless
+  namespace: grey-production
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: coordinator
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless for direct pod discovery
+  ports:
+    - name: grpc
+      port: 8080
+      targetPort: 8080
+    - name: raft
+      port: 8081
+      targetPort: 8081
+  selector:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: coordinator
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grey-worker-headless
+  namespace: grey-production
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: worker
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: grpc
+      port: 8080
+      targetPort: 8080
+  selector:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: worker
+
+---
+# =============================================================================
+# Load Balancer for External Access
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: grey-api
+  namespace: grey-production
+  annotations:
+    # Cloud-specific annotations
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+spec:
+  type: LoadBalancer
+  ports:
+    - name: grpc
+      port: 8080
+      targetPort: 8080
+  selector:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: coordinator
+
+---
+# =============================================================================
+# PodDisruptionBudgets — Maintain Availability
+# =============================================================================
+# Coordinator PDB: Maintain Raft quorum (at least 3 of 5)
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: grey-coordinator-pdb
+  namespace: grey-production
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: coordinator
+
+---
+# Worker PDB: Allow up to 20% disruption
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: grey-worker-pdb
+  namespace: grey-production
+spec:
+  maxUnavailable: 19  # ~20% of 95 workers
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: worker
+
+---
+# =============================================================================
+# Network Policies — Security Boundaries
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grey-coordinator-policy
+  namespace: grey-production
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: coordinator
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Coordinators accept from other coordinators (Raft)
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: coordinator
+      ports:
+        - port: 8081
+    # Coordinators accept from workers (registration, heartbeats)
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: worker
+      ports:
+        - port: 8080
+    # Accept external API traffic
+    - from: []
+      ports:
+        - port: 8080
+    # Prometheus scraping
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - port: 9090
+  egress:
+    # Coordinators can reach other coordinators
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: coordinator
+      ports:
+        - port: 8080
+        - port: 8081
+    # Coordinators can reach workers
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: worker
+      ports:
+        - port: 8080
+    # DNS
+    - to: []
+      ports:
+        - port: 53
+          protocol: UDP
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grey-worker-policy
+  namespace: grey-production
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: worker
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Workers accept from coordinators (task dispatch)
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: coordinator
+      ports:
+        - port: 8080
+    # Workers accept from other workers (work stealing)
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: worker
+      ports:
+        - port: 8080
+    # Prometheus scraping
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - port: 9090
+  egress:
+    # Workers can reach coordinators
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: coordinator
+      ports:
+        - port: 8080
+    # Workers can reach other workers
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: worker
+      ports:
+        - port: 8080
+    # DNS
+    - to: []
+      ports:
+        - port: 53
+          protocol: UDP
+
+---
+# =============================================================================
+# ServiceMonitor — Prometheus Integration
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: grey-servicemonitor
+  namespace: grey-production
+  labels:
+    app.kubernetes.io/name: grey
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grey
+  namespaceSelector:
+    matchNames:
+      - grey-production
+  endpoints:
+    - port: metrics
+      interval: 15s
+      path: /metrics
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+          targetLabel: component
+
+---
+# =============================================================================
+# HorizontalPodAutoscaler — Worker Autoscaling
+# =============================================================================
+# Note: Coordinators should NOT autoscale (fixed at 5 for Raft)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: grey-worker-hpa
+  namespace: grey-production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: grey-worker
+  minReplicas: 95
+  maxReplicas: 200  # Scale up to 200 workers under load
+  metrics:
+    # Scale on CPU utilization
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    # Scale on memory utilization
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+    # Scale on custom queue depth metric
+    - type: Pods
+      pods:
+        metric:
+          name: grey_scheduler_queue_depth
+        target:
+          type: AverageValue
+          averageValue: "5000"
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 20
+          periodSeconds: 60
+        - type: Pods
+          value: 10
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300  # Wait 5 min before scaling down
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 120
+
+---
+# =============================================================================
+# ResourceQuota — Cluster Resource Limits
+# =============================================================================
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: grey-quota
+  namespace: grey-production
+spec:
+  hard:
+    requests.cpu: "500"
+    requests.memory: "1000Gi"
+    limits.cpu: "1000"
+    limits.memory: "2000Gi"
+    persistentvolumeclaims: "400"
+    pods: "250"
+
+---
+# =============================================================================
+# LimitRange — Default Pod Limits
+# =============================================================================
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: grey-limits
+  namespace: grey-production
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "2"
+        memory: "4Gi"
+      defaultRequest:
+        cpu: "500m"
+        memory: "1Gi"
+      max:
+        cpu: "16"
+        memory: "32Gi"
+    - type: PersistentVolumeClaim
+      max:
+        storage: "500Gi"

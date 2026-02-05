@@ -1,0 +1,491 @@
+{
+  "title": "Grey Distributed — Global Finance Settlement Dashboard",
+  "description": "Real-time visualization of global financial settlement and clearing operations",
+  "version": "1.0.0",
+  "refreshInterval": "1s",
+  "timeRange": {
+    "default": "1h",
+    "options": ["5m", "15m", "1h", "4h", "24h", "7d"]
+  },
+  "variables": [
+    {
+      "name": "currency",
+      "label": "Currency",
+      "type": "multiselect",
+      "options": ["USD", "EUR", "CNY", "JPY", "GBP", "CHF", "GREY"],
+      "default": "all"
+    },
+    {
+      "name": "settlement_type",
+      "label": "Settlement Type",
+      "type": "select",
+      "options": ["all", "rtgs", "netting", "deferred", "atomic"],
+      "default": "all"
+    }
+  ],
+  "sections": [
+    {
+      "title": "Global Overview",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Settlement Volume (24h)",
+              "type": "stat",
+              "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+              "query": "sum(increase(grey_finance_settlement_volume_usd[24h]))",
+              "format": "currency_usd_trillion",
+              "sparkline": true,
+              "color": "#22c55e"
+            },
+            {
+              "title": "Active Transactions",
+              "type": "stat",
+              "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+              "query": "grey_finance_active_transactions",
+              "format": "short",
+              "sparkline": true
+            },
+            {
+              "title": "Settlement Rate",
+              "type": "stat",
+              "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+              "query": "rate(grey_finance_settlements_total[5m]) * 60",
+              "format": "short",
+              "unit": "/min",
+              "sparkline": true
+            },
+            {
+              "title": "Avg Settlement Time",
+              "type": "stat",
+              "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+              "query": "histogram_quantile(0.50, grey_finance_settlement_latency_ms)",
+              "unit": "ms",
+              "thresholds": {
+                "ok": [0, 50],
+                "warning": [50, 100],
+                "critical": [100, null]
+              }
+            },
+            {
+              "title": "Finality Depth",
+              "type": "stat",
+              "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+              "query": "grey_finance_finality_depth_blocks",
+              "subtitle": "Blocks to finality"
+            },
+            {
+              "title": "Failed Settlements",
+              "type": "stat",
+              "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+              "query": "sum(increase(grey_finance_settlement_failed_total[1h]))",
+              "color": "#ef4444",
+              "thresholds": {
+                "ok": [0, 5],
+                "warning": [5, 20],
+                "critical": [20, null]
+              }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Global Settlement Flows",
+              "type": "sankey",
+              "gridPos": { "x": 0, "y": 4, "w": 16, "h": 12 },
+              "query": "grey_finance_settlement_flow_usd",
+              "groupBy": ["source_region", "dest_region"],
+              "valueField": "volume_usd",
+              "colors": {
+                "north_america": "#3b82f6",
+                "western_europe": "#22c55e",
+                "east_asia": "#f59e0b",
+                "middle_east": "#a855f7",
+                "other": "#6b7280"
+              }
+            },
+            {
+              "title": "Settlement by Currency",
+              "type": "piechart",
+              "gridPos": { "x": 16, "y": 4, "w": 8, "h": 6 },
+              "query": "sum by (currency) (grey_finance_settlement_volume_usd)",
+              "colors": {
+                "USD": "#22c55e",
+                "EUR": "#3b82f6",
+                "CNY": "#ef4444",
+                "JPY": "#f59e0b",
+                "GBP": "#a855f7",
+                "GREY": "#06b6d4"
+              }
+            },
+            {
+              "title": "Market Hours",
+              "type": "heatmap",
+              "gridPos": { "x": 16, "y": 10, "w": 8, "h": 6 },
+              "query": "grey_finance_market_activity",
+              "xAxis": "hour_utc",
+              "yAxis": "market",
+              "colorField": "activity_level"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Real-Time Gross Settlement (RTGS)",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "RTGS Queue Depth",
+              "type": "timeseries",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "grey_finance_rtgs_queue_depth{priority='high'}",
+                  "legendFormat": "High Priority"
+                },
+                {
+                  "expr": "grey_finance_rtgs_queue_depth{priority='normal'}",
+                  "legendFormat": "Normal"
+                },
+                {
+                  "expr": "grey_finance_rtgs_queue_depth{priority='low'}",
+                  "legendFormat": "Low Priority"
+                }
+              ],
+              "yAxis": { "label": "Transactions" }
+            },
+            {
+              "title": "RTGS Latency Distribution",
+              "type": "histogram",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+              "query": "grey_finance_rtgs_latency_ms",
+              "buckets": [5, 10, 20, 50, 100, 200, 500, 1000],
+              "xAxis": { "label": "Latency (ms)" },
+              "yAxis": { "label": "Count" }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Liquidity Reserves by Currency",
+              "type": "barchart",
+              "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+              "query": "grey_finance_liquidity_reserve_usd",
+              "xAxis": { "label": "Currency" },
+              "yAxis": { "label": "Reserve (USD equivalent)" },
+              "thresholds": [
+                { "value": 1000000000, "color": "#ef4444", "label": "Min reserve" }
+              ]
+            },
+            {
+              "title": "Gridlock Detection",
+              "type": "gauge",
+              "gridPos": { "x": 12, "y": 8, "w": 6, "h": 8 },
+              "query": "grey_finance_gridlock_risk_score",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "ok": [0, 30],
+                "warning": [30, 60],
+                "critical": [60, 100]
+              },
+              "description": "Risk of payment gridlock"
+            },
+            {
+              "title": "Netting Efficiency",
+              "type": "gauge",
+              "gridPos": { "x": 18, "y": 8, "w": 6, "h": 8 },
+              "query": "grey_finance_netting_efficiency_percent",
+              "unit": "%",
+              "thresholds": {
+                "critical": [0, 50],
+                "warning": [50, 70],
+                "ok": [70, 100]
+              },
+              "description": "Gross-to-net reduction"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Cross-Border Settlements",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Cross-Border Transaction Status",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 0, "w": 14, "h": 10 },
+              "query": "grey_finance_cross_border_status",
+              "columns": [
+                { "field": "tx_id", "label": "Transaction ID", "width": "15%" },
+                { "field": "source_currency", "label": "From", "width": "8%" },
+                { "field": "dest_currency", "label": "To", "width": "8%" },
+                { "field": "amount_usd", "label": "Amount (USD)", "width": "12%", "format": "currency" },
+                { "field": "fx_rate", "label": "FX Rate", "width": "10%", "format": "number:6" },
+                { "field": "phase", "label": "Phase", "width": "12%" },
+                { "field": "latency_ms", "label": "Latency", "width": "10%" },
+                { "field": "status", "label": "Status", "width": "10%" }
+              ],
+              "rowStyles": {
+                "status": {
+                  "completed": "bg-green-100",
+                  "pending": "bg-yellow-100",
+                  "failed": "bg-red-100"
+                }
+              }
+            },
+            {
+              "title": "FX Rate Deviations",
+              "type": "timeseries",
+              "gridPos": { "x": 14, "y": 0, "w": 10, "h": 10 },
+              "queries": [
+                {
+                  "expr": "(grey_finance_fx_rate_internal - grey_finance_fx_rate_market) / grey_finance_fx_rate_market * 100",
+                  "legendFormat": "{{currency_pair}} deviation %"
+                }
+              ],
+              "yAxis": { "label": "Deviation %" },
+              "thresholdLines": [
+                { "value": 0.1, "color": "#f59e0b", "label": "Alert threshold" },
+                { "value": -0.1, "color": "#f59e0b" }
+              ]
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Correspondent Bank Network",
+              "type": "nodegraph",
+              "gridPos": { "x": 0, "y": 10, "w": 24, "h": 10 },
+              "query": "grey_finance_correspondent_network",
+              "nodes": {
+                "query": "grey_finance_banks",
+                "label": "name",
+                "size": "volume",
+                "color": "tier"
+              },
+              "edges": {
+                "query": "grey_finance_relationships",
+                "source": "bank_a",
+                "target": "bank_b",
+                "width": "volume"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Atomic Settlement",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Atomic Swap Status",
+              "type": "stat",
+              "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+              "query": "grey_finance_atomic_swaps_active",
+              "subtitle": "Active swaps"
+            },
+            {
+              "title": "Swap Success Rate",
+              "type": "gauge",
+              "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+              "query": "rate(grey_finance_atomic_swaps_completed[1h]) / rate(grey_finance_atomic_swaps_initiated[1h]) * 100",
+              "unit": "%",
+              "thresholds": {
+                "critical": [0, 95],
+                "warning": [95, 99],
+                "ok": [99, 100]
+              }
+            },
+            {
+              "title": "HTLC Timeouts",
+              "type": "stat",
+              "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+              "query": "sum(increase(grey_finance_htlc_timeout_total[1h]))",
+              "color": "#f59e0b"
+            },
+            {
+              "title": "DvP Completions",
+              "type": "timeseries",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "rate(grey_finance_dvp_completed_total[5m]) * 60",
+                  "legendFormat": "Completed/min"
+                },
+                {
+                  "expr": "rate(grey_finance_dvp_failed_total[5m]) * 60",
+                  "legendFormat": "Failed/min"
+                }
+              ],
+              "yAxis": { "label": "Settlements/min" }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Multi-Asset Settlement Pipeline",
+              "type": "timeline",
+              "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 },
+              "query": "grey_finance_settlement_pipeline",
+              "phases": [
+                { "name": "matching", "color": "#3b82f6" },
+                { "name": "validation", "color": "#8b5cf6" },
+                { "name": "netting", "color": "#a855f7" },
+                { "name": "clearing", "color": "#f59e0b" },
+                { "name": "settlement", "color": "#22c55e" },
+                { "name": "confirmation", "color": "#06b6d4" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Regulatory Compliance",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Compliance Status by Jurisdiction",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 10 },
+              "query": "grey_finance_compliance_status",
+              "columns": [
+                { "field": "jurisdiction", "label": "Jurisdiction", "width": "20%" },
+                { "field": "reporting_status", "label": "Reporting", "width": "15%" },
+                { "field": "aml_status", "label": "AML", "width": "15%" },
+                { "field": "kyc_status", "label": "KYC", "width": "15%" },
+                { "field": "last_audit", "label": "Last Audit", "width": "15%", "format": "date" },
+                { "field": "score", "label": "Score", "width": "20%", "format": "progressbar" }
+              ]
+            },
+            {
+              "title": "Suspicious Activity Alerts",
+              "type": "timeseries",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 10 },
+              "queries": [
+                {
+                  "expr": "sum(increase(grey_finance_aml_alert_total[1h]))",
+                  "legendFormat": "AML Alerts"
+                },
+                {
+                  "expr": "sum(increase(grey_finance_fraud_alert_total[1h]))",
+                  "legendFormat": "Fraud Alerts"
+                }
+              ],
+              "yAxis": { "label": "Alerts/hour" }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Consensus & Finality",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Regional Consensus Latency",
+              "type": "heatmap",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+              "query": "grey_finance_consensus_latency_ms",
+              "xAxis": "time",
+              "yAxis": "region",
+              "colorScale": {
+                "colors": ["#22c55e", "#fbbf24", "#ef4444"],
+                "min": 0,
+                "max": 100
+              }
+            },
+            {
+              "title": "Finality Confirmation",
+              "type": "timeseries",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "grey_finance_finality_time_ms{quantile='0.50'}",
+                  "legendFormat": "p50"
+                },
+                {
+                  "expr": "grey_finance_finality_time_ms{quantile='0.99'}",
+                  "legendFormat": "p99"
+                }
+              ],
+              "yAxis": { "label": "Time to finality (ms)" },
+              "thresholdLines": [
+                { "value": 50, "color": "#22c55e", "label": "Target" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "alerts": [
+    {
+      "name": "settlement_latency_high",
+      "description": "Settlement latency exceeds SLA",
+      "query": "histogram_quantile(0.95, grey_finance_settlement_latency_ms) > 100",
+      "severity": "critical",
+      "annotations": {
+        "summary": "p95 settlement latency is {{$value}}ms (SLA: 100ms)"
+      }
+    },
+    {
+      "name": "settlement_failure_rate",
+      "description": "Settlement failure rate too high",
+      "query": "rate(grey_finance_settlement_failed_total[5m]) / rate(grey_finance_settlement_total[5m]) > 0.01",
+      "severity": "critical",
+      "annotations": {
+        "summary": "Settlement failure rate is {{$value | percent}}"
+      }
+    },
+    {
+      "name": "liquidity_shortage",
+      "description": "Liquidity reserve below minimum",
+      "query": "grey_finance_liquidity_reserve_usd < grey_finance_liquidity_minimum_usd",
+      "severity": "critical",
+      "annotations": {
+        "summary": "{{$labels.currency}} liquidity at {{$value | humanize}}"
+      }
+    },
+    {
+      "name": "gridlock_risk",
+      "description": "Payment gridlock detected",
+      "query": "grey_finance_gridlock_risk_score > 70",
+      "severity": "critical",
+      "annotations": {
+        "summary": "Gridlock risk score at {{$value}}"
+      }
+    },
+    {
+      "name": "fx_deviation",
+      "description": "Internal FX rate deviates from market",
+      "query": "abs(grey_finance_fx_rate_internal - grey_finance_fx_rate_market) / grey_finance_fx_rate_market > 0.001",
+      "severity": "warning",
+      "annotations": {
+        "summary": "{{$labels.currency_pair}} deviation {{$value | percent}}"
+      }
+    },
+    {
+      "name": "consensus_partition",
+      "description": "Financial consensus partition detected",
+      "query": "grey_finance_consensus_partitioned == 1",
+      "severity": "critical",
+      "annotations": {
+        "summary": "Finance consensus partition - {{$labels.region}} isolated"
+      }
+    }
+  ]
+}

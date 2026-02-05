@@ -1,0 +1,376 @@
+# Grey Distributed — Kubernetes Minimal Cluster Manifest
+#
+# Usage:
+#   kubectl apply -f minimal_cluster.yaml
+#   kubectl wait --for=condition=ready pod -l app=grey-node --timeout=120s
+#   kubectl delete -f minimal_cluster.yaml
+#
+# Requirements:
+#   - Kubernetes 1.25+
+#   - 2 CPU, 4 GB RAM per node
+#   - Default StorageClass for PVCs
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: grey-system
+  labels:
+    app.kubernetes.io/name: grey-distributed
+    app.kubernetes.io/component: namespace
+
+---
+# ============================================================================
+# ConfigMap — Cluster Configuration
+# ============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grey-config
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey-distributed
+    app.kubernetes.io/component: config
+data:
+  GREY_LOG_LEVEL: "info"
+  GREY_ELECTION_TIMEOUT: "150ms"
+  GREY_HEARTBEAT_INTERVAL: "50ms"
+  GREY_SEED: "42"
+  GREY_DATA_DIR: "/var/grey"
+
+---
+# ============================================================================
+# Headless Service — Internal DNS for StatefulSet
+# ============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: grey-headless
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey-distributed
+    app.kubernetes.io/component: headless-service
+spec:
+  clusterIP: None
+  selector:
+    app: grey-node
+  ports:
+    - name: consensus
+      port: 5000
+      targetPort: 5000
+    - name: http
+      port: 5100
+      targetPort: 5100
+    - name: metrics
+      port: 5200
+      targetPort: 5200
+
+---
+# ============================================================================
+# Service — External Access
+# ============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: grey-cluster
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey-distributed
+    app.kubernetes.io/component: service
+spec:
+  type: ClusterIP
+  selector:
+    app: grey-node
+  ports:
+    - name: consensus
+      port: 5000
+      targetPort: 5000
+    - name: http
+      port: 5100
+      targetPort: 5100
+    - name: metrics
+      port: 5200
+      targetPort: 5200
+
+---
+# ============================================================================
+# StatefulSet — 3-Node Grey Cluster
+# ============================================================================
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: grey-node
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey-distributed
+    app.kubernetes.io/component: statefulset
+spec:
+  serviceName: grey-headless
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: grey-node
+  template:
+    metadata:
+      labels:
+        app: grey-node
+        app.kubernetes.io/name: grey-distributed
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5200"
+        prometheus.io/path: "/metrics"
+    spec:
+      terminationGracePeriodSeconds: 30
+      
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      
+      initContainers:
+        - name: init-peers
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              # Wait for DNS to be ready for all peers
+              for i in 0 1 2; do
+                until nslookup grey-node-${i}.grey-headless.grey-system.svc.cluster.local; do
+                  echo "Waiting for grey-node-${i}..."
+                  sleep 2
+                done
+              done
+              echo "All peers reachable"
+      
+      containers:
+        - name: greyd
+          image: grey-distributed:latest
+          imagePullPolicy: IfNotPresent
+          
+          ports:
+            - name: consensus
+              containerPort: 5000
+              protocol: TCP
+            - name: http
+              containerPort: 5100
+              protocol: TCP
+            - name: metrics
+              containerPort: 5200
+              protocol: TCP
+          
+          envFrom:
+            - configMapRef:
+                name: grey-config
+          
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: GREY_NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: GREY_LISTEN_ADDR
+              value: "0.0.0.0:5000"
+            - name: GREY_CLUSTER_PEERS
+              value: "grey-node-0.grey-headless.grey-system.svc.cluster.local:5000,grey-node-1.grey-headless.grey-system.svc.cluster.local:5000,grey-node-2.grey-headless.grey-system.svc.cluster.local:5000"
+          
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          
+          volumeMounts:
+            - name: data
+              mountPath: /var/grey
+          
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 5100
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 5100
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: 5100
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30  # Allow up to 150s for startup
+      
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: grey-node
+                topologyKey: kubernetes.io/hostname
+  
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: grey-distributed
+          app.kubernetes.io/component: storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+
+---
+# ============================================================================
+# PodDisruptionBudget — Maintain Quorum During Disruptions
+# ============================================================================
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: grey-pdb
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey-distributed
+    app.kubernetes.io/component: pdb
+spec:
+  minAvailable: 2  # Maintain quorum (2/3)
+  selector:
+    matchLabels:
+      app: grey-node
+
+---
+# ============================================================================
+# NetworkPolicy — Restrict Traffic
+# ============================================================================
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grey-network-policy
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey-distributed
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: grey-node
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow intra-cluster communication
+    - from:
+        - podSelector:
+            matchLabels:
+              app: grey-node
+      ports:
+        - port: 5000
+          protocol: TCP
+    # Allow HTTP API access
+    - ports:
+        - port: 5100
+          protocol: TCP
+    # Allow metrics scraping
+    - ports:
+        - port: 5200
+          protocol: TCP
+  egress:
+    # Allow intra-cluster communication
+    - to:
+        - podSelector:
+            matchLabels:
+              app: grey-node
+      ports:
+        - port: 5000
+          protocol: TCP
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+
+---
+# ============================================================================
+# ServiceMonitor — Prometheus Operator Integration (Optional)
+# ============================================================================
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: grey-servicemonitor
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey-distributed
+    app.kubernetes.io/component: servicemonitor
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grey-distributed
+      app.kubernetes.io/component: service
+  namespaceSelector:
+    matchNames:
+      - grey-system
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+
+---
+# ============================================================================
+# HorizontalPodAutoscaler (Disabled by default — uncomment to enable)
+# ============================================================================
+
+# apiVersion: autoscaling/v2
+# kind: HorizontalPodAutoscaler
+# metadata:
+#   name: grey-hpa
+#   namespace: grey-system
+# spec:
+#   scaleTargetRef:
+#     apiVersion: apps/v1
+#     kind: StatefulSet
+#     name: grey-node
+#   minReplicas: 3
+#   maxReplicas: 7  # Odd numbers preferred for quorum
+#   metrics:
+#     - type: Resource
+#       resource:
+#         name: cpu
+#         target:
+#           type: Utilization
+#           averageUtilization: 70

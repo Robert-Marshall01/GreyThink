@@ -1,0 +1,506 @@
+{
+  "dashboard": {
+    "id": "grey-temporal-past",
+    "title": "Grey Distributed — Past Era Coordination",
+    "description": "Monitoring historical archives, preserved intentions, and past-era integration across the temporal continuum",
+    "version": "1.0.0",
+    "refresh_interval": "1h",
+    "time_range": {
+      "default": "last_century",
+      "options": ["last_decade", "last_century", "last_millennium", "all_history"]
+    }
+  },
+
+  "sections": [
+    {
+      "id": "archive-health",
+      "title": "Historical Archive Status",
+      "layout": "grid",
+      "columns": 4,
+      "panels": [
+        {
+          "id": "total-archives",
+          "type": "stat",
+          "title": "Total Archives",
+          "description": "Number of preserved historical archives",
+          "query": "count(temporal_archives)",
+          "unit": "archives",
+          "thresholds": {
+            "warning": 1000000,
+            "critical": 100000
+          },
+          "target": 10000000
+        },
+        {
+          "id": "archive-integrity",
+          "type": "gauge",
+          "title": "Archive Integrity",
+          "description": "Cryptographic verification status of historical records",
+          "query": "avg(archive_integrity_score)",
+          "unit": "percent",
+          "thresholds": {
+            "good": 99.9,
+            "warning": 99.0,
+            "critical": 95.0
+          }
+        },
+        {
+          "id": "preservation-redundancy",
+          "type": "stat",
+          "title": "Preservation Redundancy",
+          "description": "Average copies across preservation layers",
+          "query": "avg(archive_redundancy_factor)",
+          "unit": "x",
+          "thresholds": {
+            "good": 7,
+            "warning": 5,
+            "critical": 3
+          }
+        },
+        {
+          "id": "oldest-archive-age",
+          "type": "stat",
+          "title": "Oldest Archive",
+          "description": "Age of oldest preserved record",
+          "query": "max(current_time - archive_creation_time)",
+          "unit": "years",
+          "format": "duration"
+        }
+      ]
+    },
+    {
+      "id": "era-coverage",
+      "title": "Historical Era Coverage",
+      "layout": "grid",
+      "columns": 2,
+      "panels": [
+        {
+          "id": "era-coverage-timeline",
+          "type": "timeline",
+          "title": "Era Coverage Timeline",
+          "description": "Historical eras with preserved records",
+          "query": "historical_eras.coverage_map",
+          "visualization": {
+            "type": "horizontal_bar",
+            "color_scale": "archival_quality",
+            "show_gaps": true
+          },
+          "era_definitions": [
+            {"name": "Pre-Digital", "start": "1800", "end": "1970"},
+            {"name": "Early Digital", "start": "1970", "end": "2000"},
+            {"name": "Internet Era", "start": "2000", "end": "2020"},
+            {"name": "AI Era", "start": "2020", "end": "2050"},
+            {"name": "Federation Era", "start": "2050", "end": "2200"},
+            {"name": "Cosmic Era", "start": "2200", "end": "present"}
+          ]
+        },
+        {
+          "id": "coverage-gaps",
+          "type": "table",
+          "title": "Coverage Gaps",
+          "description": "Historical periods with incomplete records",
+          "query": "historical_gaps ORDER BY severity DESC LIMIT 20",
+          "columns": [
+            {"field": "era", "label": "Era"},
+            {"field": "period", "label": "Time Period"},
+            {"field": "coverage_percent", "label": "Coverage %"},
+            {"field": "gap_type", "label": "Gap Type"},
+            {"field": "recovery_status", "label": "Recovery Status"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "intention-preservation",
+      "title": "Past Intention Preservation",
+      "layout": "grid",
+      "columns": 3,
+      "panels": [
+        {
+          "id": "preserved-intentions",
+          "type": "stat",
+          "title": "Preserved Intentions",
+          "description": "Documented stakeholder intentions from past eras",
+          "query": "count(preserved_intentions WHERE verification_status = 'verified')",
+          "unit": "records"
+        },
+        {
+          "id": "intention-clarity",
+          "type": "gauge",
+          "title": "Intention Clarity Score",
+          "description": "Interpretability of preserved intentions",
+          "query": "avg(intention_clarity_score)",
+          "unit": "percent",
+          "thresholds": {
+            "good": 90,
+            "warning": 70,
+            "critical": 50
+          }
+        },
+        {
+          "id": "context-completeness",
+          "type": "gauge",
+          "title": "Context Completeness",
+          "description": "Completeness of contextual metadata for archived decisions",
+          "query": "avg(context_completeness_score)",
+          "unit": "percent",
+          "thresholds": {
+            "good": 85,
+            "warning": 65,
+            "critical": 45
+          }
+        },
+        {
+          "id": "intention-lineage",
+          "type": "sankey",
+          "title": "Intention Lineage Flow",
+          "description": "How past intentions flow into current governance",
+          "query": "intention_lineage.active_flow",
+          "visualization": {
+            "source_column": "origin_era",
+            "target_column": "current_application",
+            "value_column": "influence_weight"
+          }
+        },
+        {
+          "id": "intention-disputes",
+          "type": "timeseries",
+          "title": "Intention Interpretation Disputes",
+          "description": "Disputes over historical intention meaning",
+          "query": "time_series(intention_disputes, '1y')",
+          "visualization": {
+            "type": "area",
+            "stacked": true,
+            "series": [
+              {"field": "resolved", "color": "green"},
+              {"field": "pending", "color": "yellow"},
+              {"field": "escalated", "color": "red"}
+            ]
+          }
+        },
+        {
+          "id": "succession-chains",
+          "type": "stat",
+          "title": "Active Succession Chains",
+          "description": "Unbroken succession chains from historical entities",
+          "query": "count(succession_chains WHERE status = 'active')",
+          "unit": "chains"
+        }
+      ]
+    },
+    {
+      "id": "historical-precedent",
+      "title": "Precedent System Status",
+      "layout": "grid",
+      "columns": 2,
+      "panels": [
+        {
+          "id": "precedent-database",
+          "type": "stat",
+          "title": "Total Precedents",
+          "description": "Established precedents from all historical eras",
+          "query": "count(precedent_database)",
+          "unit": "precedents",
+          "breakdown": [
+            {"field": "binding", "label": "Binding"},
+            {"field": "persuasive", "label": "Persuasive"},
+            {"field": "superseded", "label": "Superseded"}
+          ]
+        },
+        {
+          "id": "precedent-citations",
+          "type": "timeseries",
+          "title": "Precedent Citations Over Time",
+          "description": "How often historical precedents are invoked",
+          "query": "time_series(precedent_citations, '1y')",
+          "visualization": {
+            "type": "line",
+            "show_trend": true
+          }
+        },
+        {
+          "id": "precedent-age-distribution",
+          "type": "histogram",
+          "title": "Precedent Age Distribution",
+          "description": "Age distribution of actively cited precedents",
+          "query": "distribution(precedent_age_years, buckets=20)",
+          "visualization": {
+            "type": "bar",
+            "x_axis": "Age (years)",
+            "y_axis": "Count"
+          }
+        },
+        {
+          "id": "precedent-conflicts",
+          "type": "table",
+          "title": "Precedent Conflicts",
+          "description": "Conflicting precedents requiring reconciliation",
+          "query": "precedent_conflicts ORDER BY conflict_severity DESC LIMIT 10",
+          "columns": [
+            {"field": "precedent_a", "label": "Precedent A"},
+            {"field": "era_a", "label": "Era A"},
+            {"field": "precedent_b", "label": "Precedent B"},
+            {"field": "era_b", "label": "Era B"},
+            {"field": "conflict_type", "label": "Conflict Type"},
+            {"field": "resolution_status", "label": "Status"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "archive-operations",
+      "title": "Archive Operations",
+      "layout": "grid",
+      "columns": 3,
+      "panels": [
+        {
+          "id": "archive-queries",
+          "type": "timeseries",
+          "title": "Archive Query Volume",
+          "description": "Queries against historical archives over time",
+          "query": "time_series(archive_queries, '1d')",
+          "visualization": {
+            "type": "line",
+            "series": [
+              {"field": "read", "color": "blue"},
+              {"field": "verify", "color": "green"},
+              {"field": "reconstruct", "color": "orange"}
+            ]
+          }
+        },
+        {
+          "id": "archive-latency",
+          "type": "heatmap",
+          "title": "Archive Access Latency by Era",
+          "description": "Time to retrieve records by historical era",
+          "query": "archive_latency.by_era",
+          "visualization": {
+            "x_axis": "era",
+            "y_axis": "query_type",
+            "color": "latency_p99"
+          }
+        },
+        {
+          "id": "reconstruction-success",
+          "type": "gauge",
+          "title": "Reconstruction Success Rate",
+          "description": "Success rate for reconstructing damaged archives",
+          "query": "sum(successful_reconstructions) / sum(reconstruction_attempts) * 100",
+          "unit": "percent",
+          "thresholds": {
+            "good": 95,
+            "warning": 85,
+            "critical": 70
+          }
+        }
+      ]
+    },
+    {
+      "id": "historical-entities",
+      "title": "Historical Entity Status",
+      "layout": "grid",
+      "columns": 2,
+      "panels": [
+        {
+          "id": "entity-registry",
+          "type": "stat",
+          "title": "Registered Historical Entities",
+          "description": "Entities with preserved presence in system",
+          "query": "count(historical_entities)",
+          "unit": "entities",
+          "breakdown": [
+            {"field": "individual", "label": "Individuals"},
+            {"field": "collective", "label": "Collectives"},
+            {"field": "institutional", "label": "Institutions"}
+          ]
+        },
+        {
+          "id": "entity-influence",
+          "type": "treemap",
+          "title": "Historical Entity Influence",
+          "description": "Ongoing influence of historical entities on current governance",
+          "query": "historical_entities.influence_map",
+          "visualization": {
+            "group_by": "entity_type",
+            "size": "influence_score",
+            "color": "era_of_origin"
+          }
+        },
+        {
+          "id": "successor-status",
+          "type": "pie",
+          "title": "Successor Designation Status",
+          "description": "Status of successor designations for historical entities",
+          "query": "successor_designation_status",
+          "segments": [
+            {"value": "designated_active", "label": "Active Successors"},
+            {"value": "designated_pending", "label": "Pending Succession"},
+            {"value": "chain_broken", "label": "Broken Chain"},
+            {"value": "no_successor", "label": "No Successor"}
+          ]
+        },
+        {
+          "id": "ai-reconstructions",
+          "type": "table",
+          "title": "AI Reconstructed Entities",
+          "description": "Historical entities reconstructed via AI for governance participation",
+          "query": "ai_reconstructed_entities ORDER BY reconstruction_confidence DESC LIMIT 15",
+          "columns": [
+            {"field": "entity_name", "label": "Entity"},
+            {"field": "era", "label": "Era"},
+            {"field": "reconstruction_type", "label": "Type"},
+            {"field": "confidence", "label": "Confidence"},
+            {"field": "last_participation", "label": "Last Active"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "temporal-debt",
+      "title": "Temporal Debt to Past",
+      "layout": "grid",
+      "columns": 3,
+      "panels": [
+        {
+          "id": "knowledge-debt",
+          "type": "gauge",
+          "title": "Knowledge Debt",
+          "description": "Undocumented or poorly preserved historical knowledge",
+          "query": "knowledge_debt_score",
+          "unit": "debt_units",
+          "thresholds": {
+            "good": 100,
+            "warning": 500,
+            "critical": 1000
+          },
+          "lower_is_better": true
+        },
+        {
+          "id": "acknowledgment-debt",
+          "type": "stat",
+          "title": "Acknowledgment Debt",
+          "description": "Historical contributions awaiting proper acknowledgment",
+          "query": "count(unacknowledged_contributions)",
+          "unit": "items",
+          "target": 0
+        },
+        {
+          "id": "restitution-progress",
+          "type": "progress",
+          "title": "Restitution Progress",
+          "description": "Progress on restitution for historical harms",
+          "query": "restitution_progress",
+          "milestones": [
+            {"percent": 25, "label": "Identified"},
+            {"percent": 50, "label": "Assessed"},
+            {"percent": 75, "label": "Planned"},
+            {"percent": 100, "label": "Complete"}
+          ]
+        }
+      ]
+    }
+  ],
+
+  "alerts": [
+    {
+      "id": "archive-corruption",
+      "name": "Archive Corruption Detected",
+      "severity": "critical",
+      "condition": "archive_integrity_score < 95",
+      "message": "Historical archive integrity has fallen below acceptable threshold",
+      "actions": ["trigger_reconstruction", "notify_archival_council"]
+    },
+    {
+      "id": "precedent-conflict",
+      "name": "Unresolved Precedent Conflict",
+      "severity": "warning",
+      "condition": "precedent_conflict_age > 30d",
+      "message": "Precedent conflict requires resolution",
+      "actions": ["escalate_to_precedent_court"]
+    },
+    {
+      "id": "succession-break",
+      "name": "Succession Chain Breaking",
+      "severity": "warning",
+      "condition": "succession_chain_health < 0.8",
+      "message": "Active succession chain at risk of breaking",
+      "actions": ["notify_succession_tribunal", "initiate_recovery"]
+    },
+    {
+      "id": "era-coverage-gap",
+      "name": "Coverage Gap Expanding",
+      "severity": "warning",
+      "condition": "era_coverage_gap_growth > 0.01",
+      "message": "Historical era coverage gap is expanding",
+      "actions": ["prioritize_recovery_efforts"]
+    },
+    {
+      "id": "intention-clarity-degradation",
+      "name": "Intention Clarity Degrading",
+      "severity": "warning",
+      "condition": "intention_clarity_score < 70 AND trend = 'declining'",
+      "message": "Preserved intention interpretability is declining",
+      "actions": ["schedule_context_enrichment"]
+    }
+  ],
+
+  "filters": [
+    {
+      "id": "era-filter",
+      "type": "multi-select",
+      "label": "Historical Era",
+      "options_query": "SELECT DISTINCT era FROM historical_eras ORDER BY start_date",
+      "default": "all"
+    },
+    {
+      "id": "entity-type-filter",
+      "type": "multi-select",
+      "label": "Entity Type",
+      "options": ["individual", "collective", "institutional", "ai_reconstructed"],
+      "default": "all"
+    },
+    {
+      "id": "archive-type-filter",
+      "type": "multi-select",
+      "label": "Archive Type",
+      "options": ["decision", "intention", "context", "precedent", "succession"],
+      "default": "all"
+    }
+  ],
+
+  "annotations": [
+    {
+      "id": "archival-milestones",
+      "name": "Archival Milestones",
+      "description": "Significant events in historical preservation",
+      "source": "archival_milestones",
+      "style": {
+        "color": "purple",
+        "icon": "archive"
+      }
+    },
+    {
+      "id": "reconstruction-events",
+      "name": "Major Reconstructions",
+      "description": "Significant archive reconstruction events",
+      "source": "reconstruction_events",
+      "style": {
+        "color": "orange",
+        "icon": "refresh"
+      }
+    }
+  ],
+
+  "metadata": {
+    "created": "temporal_monitoring_team",
+    "purpose": "Monitor Grey Distributed's integration with and preservation of historical eras",
+    "update_frequency": "hourly",
+    "data_sources": [
+      "archival_system",
+      "intention_registry",
+      "precedent_database",
+      "succession_tracker",
+      "historical_entity_registry"
+    ]
+  }
+}

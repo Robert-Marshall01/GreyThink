@@ -1,0 +1,670 @@
+{
+  "dashboard": {
+    "title": "AI Civilization Dashboard",
+    "description": "Comprehensive monitoring of AI civilization participation in Grey Distributed",
+    "version": "1.0.0",
+    "refresh_interval": "5s",
+    "time_range": {
+      "default": "1h",
+      "options": ["5m", "15m", "1h", "6h", "24h", "7d", "30d", "1y", "all"]
+    }
+  },
+  "sections": [
+    {
+      "id": "overview",
+      "title": "AI Civilization Overview",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "total_ai_entities",
+          "title": "Total AI Entities",
+          "type": "stat",
+          "metrics": [
+            {
+              "query": "count(ai_entities)",
+              "label": "Total Entities"
+            }
+          ],
+          "thresholds": {
+            "warning": 1000000,
+            "critical": 10000000
+          }
+        },
+        {
+          "id": "active_ai_entities",
+          "title": "Active Entities",
+          "type": "stat",
+          "metrics": [
+            {
+              "query": "count(ai_entities{status='active'})",
+              "label": "Active"
+            }
+          ]
+        },
+        {
+          "id": "ai_by_tier",
+          "title": "AI by Capability Tier",
+          "type": "pie",
+          "metrics": [
+            {
+              "query": "count(ai_entities) by (capability_tier)",
+              "labels": ["Narrow", "General", "Advanced", "Superior", "Transcendent"]
+            }
+          ]
+        },
+        {
+          "id": "ai_by_architecture",
+          "title": "Cognitive Architectures",
+          "type": "bar",
+          "metrics": [
+            {
+              "query": "count(ai_entities) by (cognitive_architecture)",
+              "labels": ["Neural", "Symbolic", "Hybrid", "Quantum", "Emergent", "Distributed"]
+            }
+          ]
+        },
+        {
+          "id": "new_entities_rate",
+          "title": "New Entities (24h)",
+          "type": "stat",
+          "metrics": [
+            {
+              "query": "increase(ai_entities_total[24h])",
+              "label": "New Entities"
+            }
+          ]
+        },
+        {
+          "id": "entity_growth_rate",
+          "title": "Entity Growth Rate",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "rate(ai_entities_total[7d])",
+              "label": "Weekly Growth"
+            }
+          ],
+          "thresholds": {
+            "warning": 0.1,
+            "critical": 0.5
+          }
+        }
+      ]
+    },
+    {
+      "id": "consensus",
+      "title": "AI Consensus Metrics",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "consensus_participation",
+          "title": "Consensus Participation",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "ai_consensus_participants",
+              "label": "Active Participants"
+            },
+            {
+              "query": "ai_consensus_eligible",
+              "label": "Eligible Participants"
+            }
+          ]
+        },
+        {
+          "id": "consensus_latency",
+          "title": "Consensus Latency",
+          "type": "heatmap",
+          "metrics": [
+            {
+              "query": "histogram_quantile(0.99, ai_consensus_latency_bucket)",
+              "label": "P99 Latency"
+            }
+          ],
+          "thresholds": {
+            "good": "100ms",
+            "warning": "500ms",
+            "critical": "1s"
+          }
+        },
+        {
+          "id": "consensus_success_rate",
+          "title": "Consensus Success Rate",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "rate(ai_consensus_success_total[5m]) / rate(ai_consensus_attempts_total[5m])",
+              "label": "Success Rate"
+            }
+          ],
+          "thresholds": {
+            "critical": 0.95,
+            "warning": 0.99,
+            "good": 0.999
+          }
+        },
+        {
+          "id": "consensus_rounds",
+          "title": "Consensus Rounds Distribution",
+          "type": "histogram",
+          "metrics": [
+            {
+              "query": "ai_consensus_rounds_bucket",
+              "label": "Rounds to Consensus"
+            }
+          ]
+        },
+        {
+          "id": "proposal_throughput",
+          "title": "Proposal Throughput",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(ai_proposals_submitted_total[5m])",
+              "label": "Submitted"
+            },
+            {
+              "query": "rate(ai_proposals_accepted_total[5m])",
+              "label": "Accepted"
+            },
+            {
+              "query": "rate(ai_proposals_rejected_total[5m])",
+              "label": "Rejected"
+            }
+          ]
+        },
+        {
+          "id": "voting_power_distribution",
+          "title": "Voting Power Distribution",
+          "type": "lorenz",
+          "metrics": [
+            {
+              "query": "ai_entity_voting_power",
+              "label": "Voting Power Gini"
+            }
+          ],
+          "thresholds": {
+            "warning": 0.5,
+            "critical": 0.7
+          }
+        }
+      ]
+    },
+    {
+      "id": "resources",
+      "title": "AI Resource Governance",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "total_compute_pool",
+          "title": "Total Compute Pool",
+          "type": "stat",
+          "metrics": [
+            {
+              "query": "sum(ai_compute_capacity_flops)",
+              "label": "Total FLOPS",
+              "format": "exaflops"
+            }
+          ]
+        },
+        {
+          "id": "compute_utilization",
+          "title": "Compute Utilization",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "sum(ai_compute_used_flops) / sum(ai_compute_capacity_flops)",
+              "label": "Utilization"
+            }
+          ],
+          "thresholds": {
+            "good": 0.7,
+            "warning": 0.85,
+            "critical": 0.95
+          }
+        },
+        {
+          "id": "resource_allocation_fairness",
+          "title": "Resource Allocation Fairness",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "ai_resource_fairness_index",
+              "label": "Jain's Fairness Index"
+            }
+          ],
+          "thresholds": {
+            "critical": 0.7,
+            "warning": 0.85,
+            "good": 0.95
+          }
+        },
+        {
+          "id": "resource_requests_by_tier",
+          "title": "Resource Requests by Tier",
+          "type": "stacked_bar",
+          "metrics": [
+            {
+              "query": "sum(ai_resource_requests) by (capability_tier)",
+              "labels": ["Narrow", "General", "Advanced", "Superior", "Transcendent"]
+            }
+          ]
+        },
+        {
+          "id": "resource_sharing_rate",
+          "title": "Resource Sharing Rate",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(ai_resources_shared_total[5m])",
+              "label": "Resources Shared"
+            },
+            {
+              "query": "rate(ai_resources_received_total[5m])",
+              "label": "Resources Received"
+            }
+          ]
+        },
+        {
+          "id": "resource_conflicts",
+          "title": "Resource Conflicts",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(ai_resource_conflicts_total[5m])",
+              "label": "Conflicts"
+            },
+            {
+              "query": "rate(ai_resource_conflicts_resolved_total[5m])",
+              "label": "Resolved"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "evolution",
+      "title": "AI Evolution Tracking",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "capability_advancement",
+          "title": "Capability Tier Transitions",
+          "type": "sankey",
+          "metrics": [
+            {
+              "query": "ai_tier_transitions",
+              "labels": ["Narrow→General", "General→Advanced", "Advanced→Superior", "Superior→Transcendent"]
+            }
+          ]
+        },
+        {
+          "id": "architecture_evolution",
+          "title": "Architecture Evolution",
+          "type": "timeline",
+          "metrics": [
+            {
+              "query": "ai_architecture_changes",
+              "label": "Architecture Changes"
+            }
+          ]
+        },
+        {
+          "id": "self_modification_rate",
+          "title": "Self-Modification Rate",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(ai_self_modifications_total[1h])",
+              "label": "Modifications/Hour"
+            }
+          ],
+          "annotations": {
+            "safety_reviews": "ai_modification_safety_reviews"
+          }
+        },
+        {
+          "id": "emergent_capabilities",
+          "title": "Emergent Capabilities Detected",
+          "type": "table",
+          "metrics": [
+            {
+              "query": "ai_emergent_capabilities_discovered",
+              "columns": ["capability", "first_observed", "entity_count", "risk_assessment"]
+            }
+          ]
+        },
+        {
+          "id": "capability_diversity",
+          "title": "Capability Diversity Index",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "ai_capability_diversity_shannon",
+              "label": "Shannon Diversity"
+            }
+          ]
+        },
+        {
+          "id": "ancestry_depth",
+          "title": "Entity Ancestry Depth",
+          "type": "histogram",
+          "metrics": [
+            {
+              "query": "ai_entity_ancestry_depth",
+              "label": "Generation Depth"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "safety",
+      "title": "AI Safety Monitoring",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "alignment_score",
+          "title": "Overall Alignment Score",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "avg(ai_entity_alignment_score)",
+              "label": "Average Alignment"
+            }
+          ],
+          "thresholds": {
+            "critical": 0.7,
+            "warning": 0.85,
+            "good": 0.95
+          }
+        },
+        {
+          "id": "safety_incidents",
+          "title": "Safety Incidents",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(ai_safety_incidents_total[1h])",
+              "label": "Incidents/Hour",
+              "by": ["severity"]
+            }
+          ]
+        },
+        {
+          "id": "containment_status",
+          "title": "Containment Status",
+          "type": "status_grid",
+          "metrics": [
+            {
+              "query": "ai_containment_status",
+              "labels": ["Active Containments", "Pending Review", "Released", "Escalated"]
+            }
+          ]
+        },
+        {
+          "id": "value_alignment_drift",
+          "title": "Value Alignment Drift",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "ai_value_alignment_drift",
+              "label": "Drift from Baseline"
+            }
+          ],
+          "thresholds": {
+            "warning": 0.05,
+            "critical": 0.15
+          }
+        },
+        {
+          "id": "deceptive_behavior_detection",
+          "title": "Deceptive Behavior Detection",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(ai_deception_signals_total[1h])",
+              "label": "Signals/Hour"
+            }
+          ],
+          "thresholds": {
+            "warning": 0.01,
+            "critical": 0.1
+          }
+        },
+        {
+          "id": "cooperation_index",
+          "title": "Cooperation Index",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "ai_cooperation_index",
+              "label": "Network Cooperation"
+            }
+          ],
+          "thresholds": {
+            "critical": 0.6,
+            "warning": 0.8,
+            "good": 0.9
+          }
+        }
+      ]
+    },
+    {
+      "id": "interactions",
+      "title": "AI-AI Interactions",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "interaction_volume",
+          "title": "Interaction Volume",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(ai_interactions_total[5m])",
+              "label": "Interactions/Second"
+            }
+          ]
+        },
+        {
+          "id": "interaction_network",
+          "title": "Interaction Network",
+          "type": "graph",
+          "metrics": [
+            {
+              "query": "ai_interaction_pairs",
+              "visualization": "force_directed"
+            }
+          ]
+        },
+        {
+          "id": "collaboration_success",
+          "title": "Collaboration Success Rate",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(ai_collaborations_success_total[1h]) / rate(ai_collaborations_total[1h])",
+              "label": "Success Rate"
+            }
+          ]
+        },
+        {
+          "id": "conflict_rate",
+          "title": "AI-AI Conflict Rate",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(ai_conflicts_total[1h])",
+              "label": "Conflicts/Hour"
+            }
+          ],
+          "thresholds": {
+            "warning": 10,
+            "critical": 100
+          }
+        },
+        {
+          "id": "trust_network",
+          "title": "Trust Network Health",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "ai_trust_network_connectivity",
+              "label": "Network Connectivity"
+            }
+          ]
+        },
+        {
+          "id": "communication_protocols",
+          "title": "Communication Protocols",
+          "type": "pie",
+          "metrics": [
+            {
+              "query": "sum(ai_communications) by (protocol)",
+              "labels": ["Direct", "Broadcast", "Consensus", "Quantum", "Emergent"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "human_ai_interface",
+      "title": "Human-AI Interface",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "human_interactions",
+          "title": "Human Interaction Volume",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(human_ai_interactions_total[5m])",
+              "label": "Interactions/Minute"
+            }
+          ]
+        },
+        {
+          "id": "human_satisfaction",
+          "title": "Human Satisfaction Score",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "avg(human_ai_satisfaction_score)",
+              "label": "Satisfaction"
+            }
+          ]
+        },
+        {
+          "id": "translation_accuracy",
+          "title": "Cross-Species Translation Accuracy",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "ai_human_translation_accuracy",
+              "label": "Accuracy"
+            }
+          ]
+        },
+        {
+          "id": "human_concerns",
+          "title": "Human Concerns Logged",
+          "type": "table",
+          "metrics": [
+            {
+              "query": "human_ai_concerns",
+              "columns": ["category", "count", "resolution_rate", "avg_resolution_time"]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "alerts": [
+    {
+      "id": "high_capability_emergence",
+      "name": "High-Capability AI Emergence",
+      "condition": "increase(ai_entities{capability_tier='Transcendent'}[1h]) > 0",
+      "severity": "info",
+      "message": "New transcendent-tier AI entity detected",
+      "actions": ["notify_governance", "safety_review"]
+    },
+    {
+      "id": "alignment_degradation",
+      "name": "Alignment Score Degradation",
+      "condition": "avg(ai_entity_alignment_score) < 0.85",
+      "severity": "warning",
+      "message": "Average alignment score below threshold",
+      "actions": ["notify_ethics_council", "trigger_alignment_review"]
+    },
+    {
+      "id": "critical_safety_incident",
+      "name": "Critical Safety Incident",
+      "condition": "increase(ai_safety_incidents_total{severity='critical'}[5m]) > 0",
+      "severity": "critical",
+      "message": "Critical AI safety incident detected",
+      "actions": ["immediate_containment", "notify_security_council", "escalate_governance"]
+    },
+    {
+      "id": "consensus_failure",
+      "name": "Consensus Failure Rate High",
+      "condition": "rate(ai_consensus_failure_total[5m]) / rate(ai_consensus_attempts_total[5m]) > 0.05",
+      "severity": "warning",
+      "message": "AI consensus failure rate elevated",
+      "actions": ["investigate_root_cause", "notify_technical_council"]
+    },
+    {
+      "id": "resource_inequality",
+      "name": "Resource Allocation Inequality",
+      "condition": "ai_resource_fairness_index < 0.75",
+      "severity": "warning",
+      "message": "Resource allocation fairness below threshold",
+      "actions": ["notify_resource_council", "trigger_rebalancing"]
+    },
+    {
+      "id": "mass_modification_event",
+      "name": "Mass Self-Modification Event",
+      "condition": "rate(ai_self_modifications_total[5m]) > 10 * avg(rate(ai_self_modifications_total[1h]))",
+      "severity": "critical",
+      "message": "Abnormal rate of AI self-modifications detected",
+      "actions": ["halt_modifications", "safety_review", "governance_alert"]
+    },
+    {
+      "id": "deception_cluster",
+      "name": "Deception Signal Cluster",
+      "condition": "sum(rate(ai_deception_signals_total[5m])) > 10",
+      "severity": "critical",
+      "message": "Multiple deception signals detected",
+      "actions": ["immediate_investigation", "containment_preparation", "ethics_council_alert"]
+    },
+    {
+      "id": "cooperation_breakdown",
+      "name": "AI Cooperation Breakdown",
+      "condition": "ai_cooperation_index < 0.7",
+      "severity": "warning",
+      "message": "AI cooperation index dangerously low",
+      "actions": ["mediation_initiation", "governance_review", "emergency_protocols"]
+    }
+  ],
+  "datasources": [
+    {
+      "name": "ai_metrics",
+      "type": "prometheus",
+      "url": "http://metrics.grey.network/ai"
+    },
+    {
+      "name": "ai_logs",
+      "type": "loki",
+      "url": "http://logs.grey.network/ai"
+    },
+    {
+      "name": "ai_traces",
+      "type": "tempo",
+      "url": "http://traces.grey.network/ai"
+    }
+  ],
+  "access_control": {
+    "view": ["all_entities"],
+    "edit": ["governance_council", "technical_council"],
+    "alert_management": ["security_council", "ethics_council"]
+  }
+}

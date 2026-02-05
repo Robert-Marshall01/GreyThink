@@ -1,0 +1,350 @@
+{
+  "dashboard": {
+    "title": "Grey Distributed — Asteroid Mining Governance",
+    "description": "Monitoring of asteroid mining claims, resource extraction, dispute resolution, and governance health",
+    "refresh_interval_seconds": 600,
+    "tags": ["cosmic", "asteroid", "mining", "governance"]
+  },
+  
+  "sections": [
+    {
+      "title": "Mining Overview",
+      "layout": "grid-4",
+      "panels": [
+        {
+          "title": "Registered Asteroids",
+          "type": "stat",
+          "metric": "asteroid.registered.count",
+          "format": "integer"
+        },
+        {
+          "title": "Active Claims",
+          "type": "stat",
+          "metric": "asteroid.claims.active.count",
+          "format": "integer"
+        },
+        {
+          "title": "Active Operations",
+          "type": "stat",
+          "metric": "asteroid.operations.active.count",
+          "format": "integer"
+        },
+        {
+          "title": "Governance Health",
+          "type": "gauge",
+          "metric": "asteroid.governance.health.score",
+          "format": "percent",
+          "thresholds": {
+            "critical": 0.5,
+            "warning": 0.7,
+            "normal": 0.9
+          }
+        }
+      ]
+    },
+    
+    {
+      "title": "Claim Management",
+      "layout": "grid-2",
+      "panels": [
+        {
+          "title": "Claims by Status",
+          "type": "pie",
+          "metrics": [
+            { "name": "Active", "metric": "asteroid.claims.active.count", "color": "green" },
+            { "name": "Pending", "metric": "asteroid.claims.pending.count", "color": "blue" },
+            { "name": "Contested", "metric": "asteroid.claims.contested.count", "color": "orange" },
+            { "name": "Suspended", "metric": "asteroid.claims.suspended.count", "color": "yellow" },
+            { "name": "Expired", "metric": "asteroid.claims.expired.count", "color": "gray" }
+          ]
+        },
+        {
+          "title": "Claims by Type",
+          "type": "bar",
+          "metrics": [
+            { "name": "Full", "metric": "asteroid.claims.type.full.count" },
+            { "name": "Partial", "metric": "asteroid.claims.type.partial.count" },
+            { "name": "Resource-Specific", "metric": "asteroid.claims.type.resource.count" },
+            { "name": "Exploration", "metric": "asteroid.claims.type.exploration.count" },
+            { "name": "Shared", "metric": "asteroid.claims.type.shared.count" }
+          ]
+        },
+        {
+          "title": "Recent Claim Activity",
+          "type": "timeseries",
+          "metrics": [
+            { "name": "New Claims", "metric": "asteroid.claims.new.24h", "color": "green" },
+            { "name": "Expired", "metric": "asteroid.claims.expired.24h", "color": "red" },
+            { "name": "Transferred", "metric": "asteroid.claims.transferred.24h", "color": "blue" }
+          ],
+          "time_range": "30d"
+        },
+        {
+          "title": "Claims Approaching Expiry",
+          "type": "table",
+          "metric": "asteroid.claims.expiring_soon",
+          "columns": [
+            { "name": "Claim ID", "field": "claim_id" },
+            { "name": "Asteroid", "field": "asteroid_name" },
+            { "name": "Claimant", "field": "claimant_name" },
+            { "name": "Days to Expiry", "field": "days_remaining" },
+            { "name": "Activity Status", "field": "activity_status" }
+          ],
+          "filter": "days_remaining < 90"
+        }
+      ]
+    },
+    
+    {
+      "title": "Resource Extraction",
+      "layout": "grid-2",
+      "panels": [
+        {
+          "title": "Total Extraction by Resource",
+          "type": "bar-horizontal",
+          "metric": "asteroid.extraction.by_resource",
+          "unit": "kg",
+          "resources": [
+            { "name": "Water Ice", "key": "water_ice", "color": "blue" },
+            { "name": "Iron", "key": "iron", "color": "gray" },
+            { "name": "Nickel", "key": "nickel", "color": "silver" },
+            { "name": "Platinum Group", "key": "platinum_group", "color": "gold" },
+            { "name": "Rare Earths", "key": "rare_earths", "color": "green" }
+          ]
+        },
+        {
+          "title": "Extraction Rate (Daily)",
+          "type": "timeseries",
+          "metric": "asteroid.extraction.rate.kg_per_day",
+          "unit": "kg/day",
+          "time_range": "90d"
+        },
+        {
+          "title": "Top Extracting Entities",
+          "type": "table",
+          "metric": "asteroid.extraction.by_entity",
+          "columns": [
+            { "name": "Entity", "field": "entity_name" },
+            { "name": "Total Extracted (kg)", "field": "total_kg" },
+            { "name": "Active Claims", "field": "claim_count" },
+            { "name": "Active Operations", "field": "operation_count" }
+          ],
+          "limit": 10
+        },
+        {
+          "title": "Extraction by Asteroid Class",
+          "type": "pie",
+          "metric": "asteroid.extraction.by_class",
+          "classes": [
+            { "name": "C-Type (Carbon)", "key": "c_class", "color": "brown" },
+            { "name": "S-Type (Silicate)", "key": "s_class", "color": "tan" },
+            { "name": "M-Type (Metallic)", "key": "m_class", "color": "silver" }
+          ]
+        }
+      ]
+    },
+    
+    {
+      "title": "Asteroid Distribution",
+      "layout": "grid-2",
+      "panels": [
+        {
+          "title": "Asteroids by Orbital Region",
+          "type": "pie",
+          "metrics": [
+            { "name": "Near-Earth", "metric": "asteroid.region.near_earth.count", "color": "green" },
+            { "name": "Mars-Crossing", "metric": "asteroid.region.mars_crossing.count", "color": "red" },
+            { "name": "Main Belt", "metric": "asteroid.region.main_belt.count", "color": "gray" },
+            { "name": "Trojans", "metric": "asteroid.region.trojans.count", "color": "blue" }
+          ]
+        },
+        {
+          "title": "Communication Latency by Region",
+          "type": "box-plot",
+          "metric": "asteroid.communication.latency_by_region",
+          "unit": "minutes",
+          "regions": ["near_earth", "mars_crossing", "main_belt", "trojans"]
+        }
+      ]
+    },
+    
+    {
+      "title": "Dispute Resolution",
+      "layout": "grid-3",
+      "panels": [
+        {
+          "title": "Active Disputes",
+          "type": "stat",
+          "metric": "asteroid.disputes.active.count",
+          "format": "integer",
+          "thresholds": {
+            "critical": 10,
+            "warning": 5,
+            "normal": 2
+          }
+        },
+        {
+          "title": "Disputes by Type",
+          "type": "pie",
+          "metrics": [
+            { "name": "Overlapping Claims", "metric": "asteroid.disputes.type.overlapping.count", "color": "red" },
+            { "name": "Inactivity Challenge", "metric": "asteroid.disputes.type.inactivity.count", "color": "orange" },
+            { "name": "Boundary Dispute", "metric": "asteroid.disputes.type.boundary.count", "color": "yellow" },
+            { "name": "Resource Theft", "metric": "asteroid.disputes.type.theft.count", "color": "purple" },
+            { "name": "Safety Violation", "metric": "asteroid.disputes.type.safety.count", "color": "blue" }
+          ]
+        },
+        {
+          "title": "Dispute Timeline",
+          "type": "table",
+          "metric": "asteroid.disputes.list",
+          "columns": [
+            { "name": "Dispute ID", "field": "dispute_id" },
+            { "name": "Type", "field": "dispute_type" },
+            { "name": "Parties", "field": "party_count" },
+            { "name": "Status", "field": "status" },
+            { "name": "Days Open", "field": "days_open" }
+          ]
+        }
+      ]
+    },
+    
+    {
+      "title": "Governance Metrics",
+      "layout": "grid-3",
+      "panels": [
+        {
+          "title": "Dispute Resolution Rate",
+          "type": "gauge",
+          "metric": "asteroid.governance.dispute_resolution.rate",
+          "format": "percent",
+          "description": "Disputes resolved within 30 days"
+        },
+        {
+          "title": "Claim Approval Time",
+          "type": "stat",
+          "metric": "asteroid.governance.claim_approval.average_days",
+          "format": "decimal-1",
+          "unit": "days"
+        },
+        {
+          "title": "Activity Compliance",
+          "type": "gauge",
+          "metric": "asteroid.governance.activity_compliance.rate",
+          "format": "percent",
+          "description": "Claims meeting activity requirements"
+        }
+      ]
+    },
+    
+    {
+      "title": "Network Status",
+      "layout": "grid-2",
+      "panels": [
+        {
+          "title": "Asteroid Nodes Online",
+          "type": "timeseries",
+          "metrics": [
+            { "name": "Online", "metric": "asteroid.nodes.online.count", "color": "green" },
+            { "name": "Degraded", "metric": "asteroid.nodes.degraded.count", "color": "yellow" },
+            { "name": "Offline", "metric": "asteroid.nodes.offline.count", "color": "red" }
+          ],
+          "time_range": "7d"
+        },
+        {
+          "title": "Earth Sync Status by Region",
+          "type": "status-grid",
+          "metric": "asteroid.sync.by_region",
+          "regions": ["near_earth", "mars_crossing", "main_belt", "trojans"],
+          "status_values": {
+            "synced": { "label": "Synced", "color": "green" },
+            "syncing": { "label": "Syncing", "color": "blue" },
+            "delayed": { "label": "Delayed", "color": "yellow" },
+            "isolated": { "label": "Isolated", "color": "red" }
+          }
+        }
+      ]
+    }
+  ],
+  
+  "alerts": [
+    {
+      "name": "asteroid_claim_conflict",
+      "description": "New overlapping claim detected",
+      "condition": "asteroid.claims.overlapping.new == 1",
+      "severity": "warning",
+      "duration": "0",
+      "actions": ["notify_governance", "freeze_affected_claims"]
+    },
+    {
+      "name": "asteroid_dispute_escalation",
+      "description": "Dispute escalated to arbitration",
+      "condition": "asteroid.disputes.escalated.new == 1",
+      "severity": "info",
+      "duration": "0",
+      "actions": ["notify_arbitration_panel"]
+    },
+    {
+      "name": "asteroid_inactivity_warning",
+      "description": "Claim approaching inactivity threshold",
+      "condition": "asteroid.claims.*.days_inactive > 180",
+      "severity": "warning",
+      "duration": "0",
+      "actions": ["notify_claimant", "schedule_review"]
+    },
+    {
+      "name": "asteroid_theft_allegation",
+      "description": "Resource theft allegation filed",
+      "condition": "asteroid.disputes.type.theft.new == 1",
+      "severity": "critical",
+      "duration": "0",
+      "actions": ["freeze_operations", "notify_governance", "collect_evidence"]
+    },
+    {
+      "name": "asteroid_node_isolation",
+      "description": "Mining operation node lost contact",
+      "condition": "asteroid.nodes.*.minutes_since_contact > asteroid.nodes.*.expected_latency * 3",
+      "severity": "warning",
+      "duration": "30m",
+      "actions": ["retry_contact", "notify_ops"]
+    },
+    {
+      "name": "asteroid_governance_overload",
+      "description": "Too many pending disputes affecting governance",
+      "condition": "asteroid.disputes.active.count > 20",
+      "severity": "warning",
+      "duration": "0",
+      "actions": ["prioritize_disputes", "notify_governance_council"]
+    }
+  ],
+  
+  "variables": [
+    {
+      "name": "region",
+      "type": "query",
+      "query": "asteroid.regions.list",
+      "multi": true,
+      "include_all": true
+    },
+    {
+      "name": "resource_type",
+      "type": "query",
+      "query": "asteroid.resources.types",
+      "multi": true,
+      "include_all": true
+    },
+    {
+      "name": "entity",
+      "type": "query",
+      "query": "asteroid.entities.list",
+      "multi": true,
+      "include_all": false
+    },
+    {
+      "name": "time_range",
+      "type": "interval",
+      "options": ["24h", "7d", "30d", "90d", "1y"],
+      "default": "30d"
+    }
+  ]
+}

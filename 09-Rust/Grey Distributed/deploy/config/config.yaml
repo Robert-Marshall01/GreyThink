@@ -1,0 +1,171 @@
+# =============================================================================
+# Grey Distributed - Local Development Configuration
+# =============================================================================
+#
+# This configuration is optimized for local Docker Compose development.
+# For production, use the Kubernetes ConfigMap in deploy/kubernetes/configmap.yaml
+#
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Cluster Configuration
+# ---------------------------------------------------------------------------
+cluster:
+  name: grey-local
+  
+  # Static discovery for docker-compose (coordinators are known)
+  discovery:
+    method: static
+    static:
+      peers:
+        - grey-coordinator-1:7070
+        - grey-coordinator-2:7070
+        - grey-coordinator-3:7070
+  
+  bootstrap:
+    expect_nodes: 3
+    timeout: 2m
+
+# ---------------------------------------------------------------------------
+# Consensus Configuration (Raft)
+# ---------------------------------------------------------------------------
+consensus:
+  election_timeout:
+    min: 500ms
+    max: 1000ms
+  heartbeat_interval: 100ms
+  pre_vote: true
+  snapshot:
+    threshold: 5000
+    retain: 2
+  compaction:
+    max_age: 24h
+    min_entries: 500
+
+# ---------------------------------------------------------------------------
+# Resource Governance
+# ---------------------------------------------------------------------------
+governance:
+  enabled: true
+  global_limits:
+    max_cpu_cores: 16
+    max_memory_gb: 32
+    max_storage_tb: 1
+    max_tasks_per_second: 10000
+  default_tenant_quota:
+    cpu_cores: 4
+    memory_gb: 8
+    storage_gb: 20
+    tasks_per_second: 500
+    max_concurrent_tasks: 50
+  throttling:
+    enabled: true
+    algorithm: token_bucket
+    default_rps: 500
+    burst_percent: 30
+
+# ---------------------------------------------------------------------------
+# Scheduler Configuration
+# ---------------------------------------------------------------------------
+scheduler:
+  workers: 4
+  queue:
+    max_depth: 10000
+    policy: fair
+  fairness:
+    enabled: true
+    algorithm: drf
+    rebalance_interval: 15s
+  retries:
+    max_attempts: 3
+    initial_delay: 500ms
+    max_delay: 1m
+    backoff_multiplier: 2.0
+
+# ---------------------------------------------------------------------------
+# Storage Configuration
+# ---------------------------------------------------------------------------
+storage:
+  data_dir: /var/lib/grey/data
+  replication:
+    factor: 3
+    read_quorum: 2
+    write_quorum: 2
+    sync_mode: async  # Faster for local dev
+  sharding:
+    num_shards: 16
+    rebalance_threshold: 15
+  compaction:
+    interval: 30m
+    min_file_size: 16MB
+    max_file_size: 64MB
+
+# ---------------------------------------------------------------------------
+# Network Configuration
+# ---------------------------------------------------------------------------
+network:
+  http_addr: ":8080"
+  grpc_addr: ":9090"
+  raft_addr: ":7070"
+  gossip_addr: ":7071"
+  
+  # TLS disabled for local development
+  tls:
+    enabled: false
+  
+  max_connections: 1000
+  connection_timeout: 10s
+  request_timeout: 30s
+  
+  rate_limit:
+    enabled: false
+
+# ---------------------------------------------------------------------------
+# Fault Tolerance Configuration
+# ---------------------------------------------------------------------------
+fault_tolerance:
+  phi_threshold: 6.0
+  min_samples: 20
+  self_healing:
+    enabled: true
+    replace_after: 5m
+    max_concurrent: 1
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 3
+    reset_timeout: 15s
+    half_open_limit: 2
+
+# ---------------------------------------------------------------------------
+# Observability Configuration
+# ---------------------------------------------------------------------------
+observability:
+  logging:
+    level: debug  # More verbose for local dev
+    format: text  # Human-readable
+    output: stdout
+  metrics:
+    enabled: true
+    path: /metrics
+    labels:
+      cluster: grey-local
+      environment: development
+  tracing:
+    enabled: false  # Disable for simpler local setup
+  audit:
+    enabled: false
+
+# ---------------------------------------------------------------------------
+# Security Configuration (Relaxed for Local Dev)
+# ---------------------------------------------------------------------------
+security:
+  auth:
+    enabled: false
+  authorization:
+    enabled: false
+  attestation:
+    enabled: false
+  isolation:
+    network: none
+    compute: none
+    storage: none

@@ -1,0 +1,540 @@
+# =============================================================================
+# Grey Distributed — Helm Values for 100+ Node Scale
+# =============================================================================
+#
+# This values file configures Grey for large-scale production deployments.
+#
+# Usage:
+#   helm install grey ./charts/grey -f values/scale.yaml
+#   helm upgrade grey ./charts/grey -f values/scale.yaml
+#
+# Key Tuning Areas:
+#   1. Coordinator sizing (fixed 5 nodes)
+#   2. Worker scaling (95-200 nodes)
+#   3. Resource requests/limits
+#   4. Network and consensus timeouts
+#   5. Storage and caching
+#   6. Observability sampling
+#
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Global Configuration
+# -----------------------------------------------------------------------------
+global:
+  # Cluster identification
+  clusterName: grey-production
+  environment: production
+  
+  # Image configuration
+  image:
+    repository: grey-distributed/grey
+    tag: v1.0.0
+    pullPolicy: IfNotPresent
+  
+  # Pull secrets for private registry
+  imagePullSecrets:
+    - name: grey-registry-secret
+  
+  # Common labels applied to all resources
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/instance: production
+    app.kubernetes.io/version: "1.0.0"
+  
+  # Pod security context
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    runAsNonRoot: true
+
+# -----------------------------------------------------------------------------
+# Coordinator Configuration
+# -----------------------------------------------------------------------------
+# Coordinators run Raft consensus and cluster coordination.
+# CRITICAL: Never auto-scale coordinators. Keep at 5 for optimal quorum.
+# -----------------------------------------------------------------------------
+coordinator:
+  enabled: true
+  
+  # Fixed replica count (3, 5, or 7 for Raft quorum)
+  replicaCount: 5
+  
+  # Node selection
+  nodeSelector:
+    grey.io/role: coordinator
+  
+  # Tolerations for dedicated nodes
+  tolerations:
+    - key: grey.io/role
+      value: coordinator
+      effect: NoSchedule
+  
+  # Anti-affinity: spread across AZs, never co-locate
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: coordinator
+          topologyKey: kubernetes.io/hostname
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/component: coordinator
+  
+  # Resource allocation (generous for consensus stability)
+  resources:
+    requests:
+      cpu: "4"
+      memory: "8Gi"
+    limits:
+      cpu: "8"
+      memory: "16Gi"
+  
+  # Raft consensus tuning for large clusters
+  raft:
+    # Election timeout: 300-500ms for cross-AZ latency
+    electionTimeoutMs: 300
+    # Heartbeat interval: 100ms (3x per election timeout minimum)
+    heartbeatIntervalMs: 100
+    # Max entries per append (higher = more throughput, more memory)
+    maxEntriesPerAppend: 1000
+    # Snapshot after this many log entries
+    snapshotThreshold: 100000
+    # Pre-vote to prevent disruption from partitioned nodes
+    preVote: true
+    # Leader lease for read optimization
+    leaderLease: true
+    leaderLeaseDurationMs: 500
+  
+  # Storage configuration
+  storage:
+    dataSize: 100Gi
+    walSize: 50Gi
+    storageClass: ssd-premium
+    # Enable WAL sync for durability (slight latency cost)
+    walSync: true
+    walSyncIntervalMs: 100
+  
+  # Network tuning
+  network:
+    maxConnections: 500
+    connectionPoolSize: 50
+    keepaliveIntervalSec: 30
+    # GRPC settings
+    grpcMaxRecvMsgSize: 16777216  # 16MB
+    grpcMaxSendMsgSize: 16777216
+    grpcMaxConcurrentStreams: 1000
+  
+  # Probes
+  startupProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    failureThreshold: 30
+  livenessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 3
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    failureThreshold: 3
+  
+  # Graceful shutdown
+  terminationGracePeriodSeconds: 120
+  
+  # Pod disruption budget (maintain quorum)
+  podDisruptionBudget:
+    minAvailable: 3  # 3 of 5 for quorum
+
+# -----------------------------------------------------------------------------
+# Worker Configuration
+# -----------------------------------------------------------------------------
+# Workers execute tasks. Scale horizontally based on workload.
+# -----------------------------------------------------------------------------
+worker:
+  enabled: true
+  
+  # Scaling configuration
+  replicaCount: 95
+  autoscaling:
+    enabled: true
+    minReplicas: 95
+    maxReplicas: 200
+    targetCPUUtilization: 70
+    targetMemoryUtilization: 80
+    # Custom metric scaling
+    customMetrics:
+      - name: grey_scheduler_queue_depth
+        targetAverageValue: "5000"
+    # Scaling behavior
+    behavior:
+      scaleUp:
+        stabilizationWindowSeconds: 60
+        policies:
+          - type: Percent
+            value: 20
+            periodSeconds: 60
+      scaleDown:
+        stabilizationWindowSeconds: 300
+        policies:
+          - type: Percent
+            value: 10
+            periodSeconds: 120
+  
+  # Node selection
+  nodeSelector:
+    grey.io/role: worker
+  
+  # Tolerations
+  tolerations: []
+  
+  # Affinity: prefer spreading, but allow co-location
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: worker
+            topologyKey: kubernetes.io/hostname
+    topologySpreadConstraints:
+      - maxSkew: 5
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/component: worker
+  
+  # Resource allocation
+  resources:
+    requests:
+      cpu: "2"
+      memory: "4Gi"
+    limits:
+      cpu: "4"
+      memory: "8Gi"
+  
+  # Worker-specific tuning
+  config:
+    # Thread pool for task execution
+    workerThreads: 4
+    # Local task queue size before backpressure
+    queueSize: 10000
+    # Work stealing interval
+    stealIntervalMs: 50
+    # Task timeout
+    defaultTaskTimeoutSec: 300
+    # Max concurrent tasks
+    maxConcurrentTasks: 100
+  
+  # Storage
+  storage:
+    cacheSize: 50Gi
+    scratchSize: 20Gi
+    storageClass: ssd-standard
+    # In-memory cache size
+    memoryCacheMb: 1024
+  
+  # Pod disruption budget
+  podDisruptionBudget:
+    maxUnavailable: 19  # ~20% disruption allowed
+
+# -----------------------------------------------------------------------------
+# Scheduler Configuration
+# -----------------------------------------------------------------------------
+scheduler:
+  # Queue configuration
+  queueSize: 100000
+  batchSize: 1000
+  
+  # Priority levels (1-10, higher = more important)
+  priorityLevels: 10
+  
+  # Fairness settings
+  fairness:
+    enabled: true
+    # Tenant weight normalization interval
+    normalizationIntervalSec: 60
+    # Max share any tenant can claim
+    maxTenantShare: 0.3
+    # Starvation prevention threshold
+    starvationThresholdSec: 300
+  
+  # Admission control
+  admissionControl:
+    enabled: true
+    # Reject when queue exceeds this depth
+    maxQueueDepth: 80000
+    # Rate limit per tenant (tasks/sec)
+    defaultRateLimit: 1000
+  
+  # Preemption
+  preemption:
+    enabled: true
+    # Only preempt tasks running longer than this
+    minRuntimeSec: 60
+    # Max preemptions per scheduling cycle
+    maxPreemptionsPerCycle: 10
+
+# -----------------------------------------------------------------------------
+# Network Configuration
+# -----------------------------------------------------------------------------
+network:
+  # Service mesh integration
+  serviceMesh:
+    enabled: false
+    provider: istio
+  
+  # mTLS between nodes
+  mtls:
+    enabled: true
+    certManager:
+      enabled: true
+      issuerRef:
+        name: grey-ca-issuer
+        kind: ClusterIssuer
+  
+  # Connection settings
+  maxConnections: 1000
+  connectionPoolSize: 50
+  connectionTimeoutMs: 5000
+  requestTimeoutMs: 30000
+  
+  # Retry configuration
+  retry:
+    maxAttempts: 3
+    backoffBaseMs: 100
+    backoffMaxMs: 5000
+    backoffMultiplier: 2.0
+  
+  # Circuit breaker
+  circuitBreaker:
+    enabled: true
+    failureThreshold: 5
+    resetTimeoutSec: 30
+    halfOpenRequests: 3
+
+# -----------------------------------------------------------------------------
+# Fault Tolerance Configuration
+# -----------------------------------------------------------------------------
+faultTolerance:
+  # Phi Accrual failure detector
+  failureDetector:
+    phiThreshold: 8.0
+    heartbeatIntervalMs: 500
+    historySize: 100
+    minStdDevMs: 100
+  
+  # Suspicion and quarantine
+  suspicion:
+    timeoutSec: 10
+    quarantineDurationSec: 60
+  
+  # Node recovery
+  recovery:
+    autoRecoveryEnabled: true
+    recoveryBackoffBaseSec: 5
+    recoveryBackoffMaxSec: 300
+
+# -----------------------------------------------------------------------------
+# Storage Configuration
+# -----------------------------------------------------------------------------
+storage:
+  # Sharding
+  shardCount: 256
+  
+  # Replication
+  replicationFactor: 3
+  
+  # Quorum levels
+  defaultReadQuorum: majority
+  defaultWriteQuorum: majority
+  
+  # Compaction
+  compaction:
+    enabled: true
+    intervalHours: 24
+    tombstoneRetentionHours: 168  # 7 days
+  
+  # Backup
+  backup:
+    enabled: true
+    schedule: "0 2 * * *"  # 2 AM daily
+    retentionDays: 30
+    destination: s3://grey-backups/production/
+
+# -----------------------------------------------------------------------------
+# Observability Configuration
+# -----------------------------------------------------------------------------
+observability:
+  # Metrics
+  metrics:
+    enabled: true
+    port: 9090
+    path: /metrics
+    # Scrape interval recommendation
+    scrapeIntervalSec: 15
+  
+  # Tracing
+  tracing:
+    enabled: true
+    # Sampling rate (1% for production scale)
+    samplingRate: 0.01
+    # OTLP exporter
+    exporter:
+      type: otlp
+      endpoint: jaeger-collector.monitoring:4317
+      insecure: true
+  
+  # Logging
+  logging:
+    level: info
+    format: json
+    # Causal logging
+    causalLogging: true
+    lamportClockEnabled: true
+  
+  # Service monitor for Prometheus Operator
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring
+    interval: 15s
+    labels:
+      release: prometheus
+  
+  # Alerts
+  alerts:
+    enabled: true
+    # Prometheus rules
+    rules:
+      - name: grey-alerts
+        rules:
+          - alert: GreyCoordinatorDown
+            expr: up{job="grey-coordinator"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Grey coordinator is down"
+          - alert: GreyHighQueueDepth
+            expr: grey_scheduler_queue_depth > 50000
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Grey scheduler queue depth is high"
+
+# -----------------------------------------------------------------------------
+# Security Configuration
+# -----------------------------------------------------------------------------
+security:
+  # Pod security
+  podSecurityPolicy:
+    enabled: false  # Deprecated in K8s 1.25+
+  
+  podSecurityStandards:
+    enforce: restricted
+  
+  # Network policies
+  networkPolicy:
+    enabled: true
+  
+  # Secrets management
+  secrets:
+    provider: kubernetes  # or vault, aws-secrets-manager
+    rotation:
+      enabled: true
+      intervalDays: 90
+  
+  # RBAC
+  rbac:
+    create: true
+    serviceAccountName: grey
+
+# -----------------------------------------------------------------------------
+# Multi-Tenancy Configuration
+# -----------------------------------------------------------------------------
+multiTenancy:
+  enabled: true
+  
+  # Isolation level
+  isolation:
+    namespace: true
+    network: true
+    storage: true
+  
+  # Default quotas per tenant
+  defaultQuotas:
+    maxCPU: 100
+    maxMemory: 200Gi
+    maxTasks: 10000
+    maxConcurrentTasks: 500
+  
+  # Quota enforcement
+  quotaEnforcement:
+    enabled: true
+    # Throttle at 90% of quota
+    throttleThreshold: 0.9
+    # Reject at 100% of quota
+    rejectThreshold: 1.0
+
+# -----------------------------------------------------------------------------
+# Ingress Configuration
+# -----------------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: GRPC
+    nginx.ingress.kubernetes.io/proxy-body-size: 16m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  hosts:
+    - host: grey.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: grey-tls
+      hosts:
+        - grey.example.com
+
+# -----------------------------------------------------------------------------
+# Service Accounts and RBAC
+# -----------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  name: grey
+  annotations: {}
+
+rbac:
+  create: true
+  rules:
+    - apiGroups: [""]
+      resources: ["pods", "services", "endpoints"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: [""]
+      resources: ["pods/exec"]
+      verbs: ["create"]
+
+# -----------------------------------------------------------------------------
+# Extra Environment Variables
+# -----------------------------------------------------------------------------
+extraEnv:
+  - name: RUST_BACKTRACE
+    value: "1"
+  - name: RUST_LOG
+    value: "grey=info,tower=warn"
+
+# -----------------------------------------------------------------------------
+# Extra Volumes
+# -----------------------------------------------------------------------------
+extraVolumes: []
+extraVolumeMounts: []

@@ -1,0 +1,358 @@
+# =============================================================================
+# Grey Distributed — Kubernetes Services
+# =============================================================================
+#
+# Service architecture:
+#   - Headless service for coordinator StatefulSet (DNS-based discovery)
+#   - ClusterIP services for internal communication
+#   - LoadBalancer/NodePort for external access
+#
+# Traffic flow:
+#   External → Gateway (LB) → Coordinator (ClusterIP) → Worker (ClusterIP)
+#
+# =============================================================================
+---
+# =============================================================================
+# Coordinator Headless Service — DNS discovery for StatefulSet
+# =============================================================================
+#
+# Headless service (clusterIP: None) provides:
+#   - Stable DNS names: grey-coordinator-0.grey-coordinator-headless.grey-system.svc
+#   - Direct pod-to-pod communication for Raft
+#   - No load balancing — clients connect to specific pods
+#
+# Why headless for coordinators?
+#   - Raft requires stable identities
+#   - Leader election needs direct addressing
+#   - Membership changes require knowing all peers
+#
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: grey-coordinator-headless
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: coordinator
+  annotations:
+    # Publish not-ready addresses for bootstrap
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless
+  publishNotReadyAddresses: true  # Allow Raft bootstrap before ready
+  
+  selector:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: coordinator
+  
+  ports:
+    - name: raft
+      port: 7070
+      targetPort: raft
+      protocol: TCP
+    - name: gossip
+      port: 7071
+      targetPort: gossip
+      protocol: UDP
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+    - name: grpc
+      port: 9090
+      targetPort: grpc
+      protocol: TCP
+
+---
+# =============================================================================
+# Coordinator ClusterIP Service — Internal API access
+# =============================================================================
+#
+# Standard ClusterIP service for internal components to reach
+# any healthy coordinator. Kubernetes handles load balancing.
+#
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: grey-coordinator
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: coordinator
+spec:
+  type: ClusterIP
+  
+  selector:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: coordinator
+  
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+    - name: grpc
+      port: 9090
+      targetPort: grpc
+      protocol: TCP
+
+---
+# =============================================================================
+# Worker Service — Internal task execution API
+# =============================================================================
+#
+# Workers are accessed by coordinators for task dispatch and by each
+# other for data replication. Load balanced across all healthy workers.
+#
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: grey-worker
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: worker
+spec:
+  type: ClusterIP
+  
+  selector:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: worker
+  
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+    - name: grpc
+      port: 9090
+      targetPort: grpc
+      protocol: TCP
+
+---
+# =============================================================================
+# Gateway External Service — Public API access
+# =============================================================================
+#
+# LoadBalancer service exposes the Grey API externally.
+# In cloud environments, this provisions a cloud load balancer.
+#
+# Tradeoffs:
+#   - LoadBalancer: Production use, cloud-native LB integration
+#   - NodePort: Development, bare-metal clusters
+#   - ClusterIP + Ingress: Fine-grained routing, TLS termination
+#
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: grey-gateway
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: gateway
+  annotations:
+    # AWS NLB annotations (uncomment for AWS)
+    # service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    # service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    # service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "tcp"
+    
+    # GCP annotations (uncomment for GCP)
+    # cloud.google.com/neg: '{"ingress": true}'
+    # cloud.google.com/backend-config: '{"default": "grey-backend-config"}'
+    
+    # Azure annotations (uncomment for Azure)
+    # service.beta.kubernetes.io/azure-load-balancer-internal: "false"
+    
+    # Health check path for cloud LB
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: "/health/ready"
+spec:
+  type: LoadBalancer
+  
+  # External traffic policy: Local preserves source IP, Cluster for better distribution
+  externalTrafficPolicy: Local
+  
+  # Session affinity for long-running gRPC streams
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600
+  
+  selector:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: gateway
+  
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+    - name: https
+      port: 443
+      targetPort: http  # TLS termination at LB or ingress
+      protocol: TCP
+    - name: grpc
+      port: 9090
+      targetPort: grpc
+      protocol: TCP
+
+---
+# =============================================================================
+# Gateway Internal Service — For other namespaces to access
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: grey-gateway-internal
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: gateway
+spec:
+  type: ClusterIP
+  
+  selector:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: gateway
+  
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+    - name: grpc
+      port: 9090
+      targetPort: grpc
+
+---
+# =============================================================================
+# Ingress — HTTP/HTTPS routing with TLS termination
+# =============================================================================
+#
+# Ingress provides:
+#   - TLS termination with automatic cert-manager integration
+#   - Path-based routing
+#   - Rate limiting and WAF integration
+#
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grey-ingress
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: ingress
+  annotations:
+    # TLS with cert-manager
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    
+    # Nginx ingress annotations
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "64m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-connections: "50"
+    
+    # Backend protocol
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    
+    # CORS for API access
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+spec:
+  ingressClassName: nginx
+  
+  tls:
+    - hosts:
+        - grey.example.com
+        - api.grey.example.com
+      secretName: grey-tls-ingress
+  
+  rules:
+    # Main API endpoint
+    - host: grey.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grey-gateway
+                port:
+                  name: http
+    
+    # Dedicated API subdomain
+    - host: api.grey.example.com
+      http:
+        paths:
+          - path: /v1
+            pathType: Prefix
+            backend:
+              service:
+                name: grey-gateway
+                port:
+                  name: http
+          - path: /metrics
+            pathType: Prefix
+            backend:
+              service:
+                name: grey-coordinator
+                port:
+                  name: http
+
+---
+# =============================================================================
+# gRPC Ingress — Separate ingress for gRPC traffic
+# =============================================================================
+#
+# gRPC requires special handling:
+#   - HTTP/2 support
+#   - Long-lived connections
+#   - Different timeout settings
+#
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grey-grpc-ingress
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: ingress
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    
+    # Nginx gRPC annotations
+    nginx.ingress.kubernetes.io/backend-protocol: "GRPC"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    
+    # HTTP/2 for gRPC
+    nginx.ingress.kubernetes.io/http2-push-preload: "true"
+spec:
+  ingressClassName: nginx
+  
+  tls:
+    - hosts:
+        - grpc.grey.example.com
+      secretName: grey-grpc-tls
+  
+  rules:
+    - host: grpc.grey.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grey-gateway
+                port:
+                  name: grpc

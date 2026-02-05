@@ -1,0 +1,322 @@
+# =============================================================================
+# Grey Distributed — Tenant Rights Policy
+# =============================================================================
+#
+# This policy defines the rights, guarantees, and obligations for tenants
+# participating in the federated Grey deployment.
+#
+# Rights are categorized as:
+# - Fundamental: Always guaranteed, cannot be waived
+# - Standard: Default for all tenants, can be upgraded
+# - Premium: Available with higher-tier subscriptions
+# - Sovereign: For regulated industries with strict requirements
+
+apiVersion: grey.io/v1
+kind: TenantRightsPolicy
+metadata:
+  name: default-tenant-rights
+  namespace: grey-governance
+  labels:
+    grey.io/policy-type: rights
+    grey.io/version: "1.0.0"
+
+spec:
+  # ===========================================================================
+  # Fundamental Rights (Always Guaranteed)
+  # ===========================================================================
+  fundamentalRights:
+    - name: data-ownership
+      description: |
+        Tenants retain full ownership of their data. Grey acts only as a
+        processor, never claiming ownership of tenant data.
+      enforcement: strict
+      audit: required
+      
+    - name: data-portability
+      description: |
+        Tenants have the right to export their data in standard formats
+        at any time, without penalty or delay.
+      enforcement: strict
+      exportFormats:
+        - json
+        - parquet
+        - csv
+        - protobuf
+      maxExportTime: 24h
+      
+    - name: deletion-right
+      description: |
+        Tenants can request complete deletion of their data. Grey will
+        remove all copies within the specified timeframe.
+      enforcement: strict
+      deletionTimeframe: 30d
+      verification: cryptographic-proof
+      
+    - name: transparency
+      description: |
+        Tenants have access to complete audit logs of all operations
+        performed on their data and workloads.
+      enforcement: strict
+      logRetention: 90d
+      realTimeAccess: true
+      
+    - name: non-discrimination
+      description: |
+        All tenants receive fair access to resources. Priority is based
+        only on quota allocations, never on tenant identity.
+      enforcement: strict
+      fairnessMetric: max-min-fairness
+
+  # ===========================================================================
+  # Resource Guarantees
+  # ===========================================================================
+  resourceGuarantees:
+    # Minimum guaranteed resources (as percentage of quota)
+    minimumGuaranteed:
+      compute: 50%
+      memory: 50%
+      storage: 75%
+      network: 25%
+      
+    # Maximum time to provision guaranteed resources
+    provisioningSLA:
+      guaranteed: 30s
+      bestEffort: 5m
+      
+    # Burst allowance beyond quota
+    burstAllowance:
+      enabled: true
+      maxBurst: 150%  # of quota
+      maxDuration: 1h
+      cooldown: 15m
+      
+    # Preemption protection
+    preemption:
+      guaranteedProtection: true  # Guaranteed resources cannot be preempted
+      burstPreemptable: true      # Burst resources can be preempted
+      gracePeriod: 30s
+
+  # ===========================================================================
+  # Isolation Guarantees
+  # ===========================================================================
+  isolationGuarantees:
+    tiers:
+      - name: shared
+        description: Multi-tenant with logical isolation
+        guarantees:
+          - namespace-isolation
+          - network-policies
+          - resource-quotas
+        audit: basic
+        
+      - name: dedicated
+        description: Dedicated workers, shared control plane
+        guarantees:
+          - physical-worker-isolation
+          - dedicated-network-segment
+          - encryption-at-rest
+        audit: standard
+        
+      - name: isolated
+        description: Fully isolated workers and control plane
+        guarantees:
+          - dedicated-cluster-segment
+          - private-networking
+          - encryption-at-rest
+          - encryption-in-transit
+        audit: enhanced
+        
+      - name: sovereign
+        description: Complete isolation with audit and compliance
+        guarantees:
+          - dedicated-infrastructure
+          - air-gapped-options
+          - customer-managed-keys
+          - full-audit-trail
+          - compliance-attestation
+        audit: comprehensive
+
+  # ===========================================================================
+  # Data Residency Rights
+  # ===========================================================================
+  dataResidency:
+    enforcement: strict
+    
+    regions:
+      - name: us
+        clusters:
+          - us-east-1
+          - us-west-2
+        compliance:
+          - SOC2
+          - HIPAA
+          
+      - name: eu
+        clusters:
+          - eu-west-1
+          - eu-central-1
+        compliance:
+          - GDPR
+          - SOC2
+          
+      - name: apac
+        clusters:
+          - ap-southeast-1
+          - ap-northeast-1
+        compliance:
+          - SOC2
+          
+    # Tenants can specify allowed regions
+    tenantControl:
+      allowedRegions: configurable
+      dataReplication: requires-consent
+      crossBorderTransfer: requires-consent
+
+  # ===========================================================================
+  # Privacy Rights
+  # ===========================================================================
+  privacyRights:
+    - name: data-minimization
+      description: Grey collects only data necessary for operation
+      enforcement: strict
+      
+    - name: purpose-limitation
+      description: Data is used only for stated purposes
+      enforcement: strict
+      
+    - name: consent-management
+      description: Tenants control consent for data processing
+      enforcement: strict
+      
+    - name: access-control
+      description: Tenants control who can access their data
+      enforcement: strict
+      
+    - name: encryption
+      description: Data encrypted at rest and in transit
+      enforcement: strict
+      algorithms:
+        atRest: AES-256-GCM
+        inTransit: TLS-1.3
+
+  # ===========================================================================
+  # SLA Guarantees
+  # ===========================================================================
+  slaGuarantees:
+    availability:
+      target: 99.9%
+      measurement: monthly
+      exclusions:
+        - scheduled-maintenance
+        - force-majeure
+        
+    performance:
+      taskStartLatency:
+        p50: 100ms
+        p99: 1s
+      throughput:
+        minPerSecond: 1000  # tasks per second per 100 cores
+        
+    durability:
+      data: 99.999999999%  # 11 nines
+      metadata: 99.9999%   # 6 nines
+      
+    recovery:
+      rto: 4h   # Recovery Time Objective
+      rpo: 1h   # Recovery Point Objective
+
+  # ===========================================================================
+  # Communication Rights
+  # ===========================================================================
+  communicationRights:
+    - name: incident-notification
+      description: Notification of security incidents within 24 hours
+      timeframe: 24h
+      
+    - name: change-notification
+      description: 30-day notice for material changes
+      timeframe: 30d
+      exceptions:
+        - security-patches
+        - legal-requirements
+        
+    - name: support-access
+      description: Access to technical support
+      tiers:
+        basic: email-only
+        standard: email-chat
+        premium: 24x7-phone
+
+  # ===========================================================================
+  # Dispute Resolution Rights
+  # ===========================================================================
+  disputeResolution:
+    escalationPath:
+      - level: automated
+        description: Automated quota and resource arbitration
+        sla: immediate
+        
+      - level: support
+        description: Human support review
+        sla: 4h
+        
+      - level: management
+        description: Management escalation
+        sla: 24h
+        
+      - level: executive
+        description: Executive review
+        sla: 72h
+        
+      - level: arbitration
+        description: External arbitration
+        sla: 30d
+        
+    # Tenants can invoke formal dispute process
+    formalDispute:
+      initiationMethod: api-or-portal
+      evidenceCollection: automated
+      neutralArbitrator: available
+
+  # ===========================================================================
+  # Tenant Obligations
+  # ===========================================================================
+  tenantObligations:
+    - name: acceptable-use
+      description: Tenants must comply with acceptable use policy
+      
+    - name: quota-respect
+      description: Tenants should stay within allocated quotas
+      
+    - name: security-hygiene
+      description: Tenants must maintain secure credentials
+      
+    - name: timely-payment
+      description: Payment due within terms
+      
+    - name: legal-compliance
+      description: Tenants must comply with applicable laws
+
+  # ===========================================================================
+  # Policy Metadata
+  # ===========================================================================
+  enforcement:
+    mode: active
+    violationHandling:
+      warning:
+        threshold: 1
+        action: notify
+      suspension:
+        threshold: 3
+        action: suspend-non-critical
+      termination:
+        threshold: 5
+        action: terminate
+        
+  audit:
+    enabled: true
+    frequency: continuous
+    retention: 365d
+    accessibleTo:
+      - tenant-admins
+      - grey-compliance

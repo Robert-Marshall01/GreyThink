@@ -1,0 +1,522 @@
+{
+  "__metadata": {
+    "title": "Grey Distributed — Performance Dashboard",
+    "description": "Throughput, latency, and cost tradeoff monitoring at scale",
+    "version": "1.0.0",
+    "refresh_interval": "10s"
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": "Prometheus",
+        "enable": true,
+        "expr": "changes(grey_leader_id[5m]) > 0",
+        "iconColor": "#FF9830",
+        "name": "Leader Elections",
+        "titleFormat": "Leader Change"
+      }
+    ]
+  },
+  "editable": true,
+  "graphTooltip": 2,
+  "id": null,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "Key Performance Indicators",
+      "type": "row"
+    },
+    {
+      "id": 1,
+      "title": "Tasks/Second",
+      "description": "Current task processing throughput",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(grey_tasks_completed_total[1m]))",
+          "legendFormat": "Tasks/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 1000 },
+              { "color": "green", "value": 5000 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "P50 Latency",
+      "description": "Median task latency",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(grey_task_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P50"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.1 },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "P99 Latency",
+      "description": "99th percentile latency (tail)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(grey_task_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red", "value": 2 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Active Workers",
+      "description": "Workers processing tasks",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "count(grey_worker_active == 1)",
+          "legendFormat": "Active"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "green", "value": 80 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Queue Depth",
+      "description": "Pending tasks awaiting execution",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(grey_scheduler_queue_depth)",
+          "legendFormat": "Queue"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5000 },
+              { "color": "red", "value": 20000 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Error Rate",
+      "description": "Task failure rate",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(grey_tasks_failed_total[5m])) / sum(rate(grey_tasks_completed_total[5m])) * 100",
+          "legendFormat": "Error %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 101,
+      "title": "Throughput Analysis",
+      "type": "row"
+    },
+    {
+      "id": 7,
+      "title": "Throughput Over Time",
+      "description": "Task completion rate by priority",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 6 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(grey_tasks_completed_total[1m])) by (priority)",
+          "legendFormat": "Priority {{ priority }}"
+        },
+        {
+          "expr": "sum(rate(grey_tasks_completed_total[1m]))",
+          "legendFormat": "Total"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "fillOpacity": 20, "lineWidth": 2, "stacking": { "mode": "normal" } }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Throughput by Worker",
+      "description": "Per-worker task completion",
+      "type": "heatmap",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 6 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(grey_tasks_completed_total[1m])) by (worker_id)",
+          "legendFormat": "{{ worker_id }}"
+        }
+      ],
+      "options": {
+        "calculate": true,
+        "color": { "scheme": "Spectral" }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "id": 102,
+      "title": "Latency Distribution",
+      "type": "row"
+    },
+    {
+      "id": 9,
+      "title": "Latency Percentiles Over Time",
+      "description": "P50, P95, P99 latency tracking",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(grey_task_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(grey_task_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(grey_task_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P99"
+        },
+        {
+          "expr": "histogram_quantile(0.999, sum(rate(grey_task_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P99.9"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "lineWidth": 2 }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Latency Histogram",
+      "description": "Distribution of task latencies",
+      "type": "histogram",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(increase(grey_task_duration_seconds_bucket[5m])) by (le)",
+          "legendFormat": "{{ le }}"
+        }
+      ],
+      "options": {
+        "bucketSize": 50,
+        "combine": false
+      }
+    },
+    {
+      "id": 11,
+      "title": "Latency by Task Type",
+      "description": "Latency breakdown by task category",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 23 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(grey_task_duration_seconds_bucket[5m])) by (le, task_type))",
+          "legendFormat": "{{ task_type }} P95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 },
+      "id": 103,
+      "title": "Cost-Performance Tradeoffs",
+      "type": "row"
+    },
+    {
+      "id": 12,
+      "title": "Throughput per Dollar",
+      "description": "Tasks completed per dollar spent",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(grey_tasks_completed_total[1h])) * 3600 / sum(grey_node_cost_per_hour)",
+          "legendFormat": "Tasks/$/hr"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "fillOpacity": 30 },
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 5000 },
+              { "color": "green", "value": 10000 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 13,
+      "title": "Latency vs Cluster Size",
+      "description": "Correlation between nodes and latency",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(grey_task_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P95 Latency"
+        },
+        {
+          "expr": "count(grey_node_info{component=\"worker\"}) * 0.01",
+          "legendFormat": "Worker Count (scaled)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Worker Count (scaled)" },
+            "properties": [{ "id": "custom.axisPlacement", "value": "right" }]
+          }
+        ]
+      }
+    },
+    {
+      "id": 14,
+      "title": "Efficiency Score",
+      "description": "Combined efficiency metric: throughput / (cost * latency)",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 40 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(grey_tasks_completed_total[5m])) / (sum(grey_node_cost_per_hour) * histogram_quantile(0.95, sum(rate(grey_task_duration_seconds_bucket[5m])) by (le)) + 0.001) * 100",
+          "legendFormat": "Efficiency"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 40 },
+              { "color": "green", "value": 70 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 15,
+      "title": "Optimal Worker Count Analysis",
+      "description": "Suggests optimal worker count based on queue depth",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 40 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "count(grey_node_info{component=\"worker\"})",
+          "legendFormat": "Actual Workers"
+        },
+        {
+          "expr": "sum(grey_scheduler_queue_depth) / 100",
+          "legendFormat": "Suggested (queue/100)"
+        },
+        {
+          "expr": "ceil(sum(rate(grey_tasks_submitted_total[5m])) / 50)",
+          "legendFormat": "Suggested (rate-based)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 48 },
+      "id": 104,
+      "title": "Consensus Performance",
+      "type": "row"
+    },
+    {
+      "id": 16,
+      "title": "Raft Commit Rate",
+      "description": "Log entries committed per second",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 49 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(grey_raft_commits_total[1m])",
+          "legendFormat": "Commits/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      }
+    },
+    {
+      "id": 17,
+      "title": "Leader Election Time",
+      "description": "Time to elect new leader",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 49 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(grey_raft_election_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P95 Election"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    }
+  ],
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["grey", "performance", "throughput", "latency", "production"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "grey-production", "value": "grey-production" },
+        "datasource": "Prometheus",
+        "definition": "label_values(grey_node_info, namespace)",
+        "hide": 0,
+        "label": "Namespace",
+        "name": "namespace",
+        "query": "label_values(grey_node_info, namespace)",
+        "refresh": 1,
+        "type": "query"
+      },
+      {
+        "current": { "selected": false, "text": "All", "value": "$__all" },
+        "datasource": "Prometheus",
+        "definition": "label_values(grey_node_info{component=\"worker\"}, worker_id)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Worker",
+        "multi": true,
+        "name": "worker",
+        "query": "label_values(grey_node_info{component=\"worker\"}, worker_id)",
+        "refresh": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timezone": "browser",
+  "title": "Grey — Performance",
+  "uid": "grey-performance",
+  "version": 1
+}

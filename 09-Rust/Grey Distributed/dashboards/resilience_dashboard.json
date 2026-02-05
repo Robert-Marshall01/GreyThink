@@ -1,0 +1,463 @@
+{
+  "title": "Grey Distributed — Resilience Dashboard",
+  "description": "Monitoring existential resilience across black swan events and planetary crises",
+  "version": "1.0.0",
+  "refreshInterval": "1m",
+  "timeRange": {
+    "default": "24h",
+    "options": ["1h", "6h", "24h", "7d", "30d", "1y"]
+  },
+  "variables": [
+    {
+      "name": "region",
+      "label": "Region",
+      "type": "multiselect",
+      "options": ["global", "americas", "europe", "asia_pacific", "africa_mena"],
+      "default": "global"
+    },
+    {
+      "name": "sector",
+      "label": "Sector",
+      "type": "multiselect",
+      "options": ["all", "energy", "finance", "communications", "logistics"],
+      "default": "all"
+    },
+    {
+      "name": "threat_level",
+      "label": "Threat Level",
+      "type": "select",
+      "options": ["all", "nominal", "elevated", "high", "critical", "existential"],
+      "default": "all"
+    }
+  ],
+  "sections": [
+    {
+      "title": "Threat Overview",
+      "collapsed": false,
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Current Threat Level",
+              "type": "stat",
+              "gridPos": { "x": 0, "y": 0, "w": 6, "h": 6 },
+              "query": "grey_threat_level_current",
+              "colorMode": "background",
+              "thresholds": {
+                "nominal": "#22c55e",
+                "elevated": "#eab308",
+                "high": "#f97316",
+                "critical": "#ef4444",
+                "existential": "#7f1d1d"
+              }
+            },
+            {
+              "title": "Active Threats",
+              "type": "stat",
+              "gridPos": { "x": 6, "y": 0, "w": 4, "h": 3 },
+              "query": "count(grey_active_threats)",
+              "sparkline": true
+            },
+            {
+              "title": "Mitigations Active",
+              "type": "stat",
+              "gridPos": { "x": 10, "y": 0, "w": 4, "h": 3 },
+              "query": "count(grey_active_mitigations)",
+              "color": "#22c55e"
+            },
+            {
+              "title": "Degraded Regions",
+              "type": "stat",
+              "gridPos": { "x": 14, "y": 0, "w": 4, "h": 3 },
+              "query": "count(grey_region_status{status='degraded'})",
+              "thresholds": { "ok": [0, 0], "warning": [1, 3], "critical": [4, null] }
+            },
+            {
+              "title": "System Resilience Score",
+              "type": "gauge",
+              "gridPos": { "x": 18, "y": 0, "w": 6, "h": 6 },
+              "query": "grey_system_resilience_score",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "critical": [0, 50],
+                "warning": [50, 75],
+                "ok": [75, 100]
+              },
+              "unit": "%"
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Threat Map",
+              "type": "geomap",
+              "gridPos": { "x": 0, "y": 6, "w": 12, "h": 10 },
+              "query": "grey_threat_location",
+              "layers": [
+                {
+                  "name": "Active Threats",
+                  "color": "#ef4444",
+                  "query": "grey_threat_location{status='active'}"
+                },
+                {
+                  "name": "Degraded Nodes",
+                  "color": "#f97316",
+                  "query": "grey_node_status{status='degraded'}"
+                },
+                {
+                  "name": "Healthy Nodes",
+                  "color": "#22c55e",
+                  "query": "grey_node_status{status='healthy'}"
+                }
+              ]
+            },
+            {
+              "title": "Threat Timeline",
+              "type": "timeline",
+              "gridPos": { "x": 12, "y": 6, "w": 12, "h": 10 },
+              "query": "grey_threat_events",
+              "fields": {
+                "time": "timestamp",
+                "title": "threat_name",
+                "type": "threat_category"
+              },
+              "colors": {
+                "pandemic": "#8b5cf6",
+                "financial": "#f59e0b",
+                "climate": "#22c55e",
+                "cyber": "#ef4444",
+                "infrastructure": "#3b82f6"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Black Swan Readiness",
+      "collapsed": false,
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Pandemic Resilience",
+              "type": "gauge",
+              "gridPos": { "x": 0, "y": 0, "w": 6, "h": 6 },
+              "query": "grey_pandemic_resilience_score",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "critical": [0, 60],
+                "warning": [60, 80],
+                "ok": [80, 100]
+              },
+              "subtitle": "Workforce, automation, geographic"
+            },
+            {
+              "title": "Financial Crash Resilience",
+              "type": "gauge",
+              "gridPos": { "x": 6, "y": 0, "w": 6, "h": 6 },
+              "query": "grey_financial_crash_resilience_score",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "critical": [0, 60],
+                "warning": [60, 80],
+                "ok": [80, 100]
+              },
+              "subtitle": "Liquidity, autonomy, fallbacks"
+            },
+            {
+              "title": "Climate Event Resilience",
+              "type": "gauge",
+              "gridPos": { "x": 12, "y": 0, "w": 6, "h": 6 },
+              "query": "grey_climate_resilience_score",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "critical": [0, 60],
+                "warning": [60, 80],
+                "ok": [80, 100]
+              },
+              "subtitle": "Geographic, energy, adaptation"
+            },
+            {
+              "title": "Cyber Warfare Resilience",
+              "type": "gauge",
+              "gridPos": { "x": 18, "y": 0, "w": 6, "h": 6 },
+              "query": "grey_cyber_resilience_score",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "critical": [0, 60],
+                "warning": [60, 80],
+                "ok": [80, 100]
+              },
+              "subtitle": "Defense, isolation, recovery"
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Black Swan Drill Results",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 6, "w": 24, "h": 8 },
+              "query": "grey_drill_results",
+              "columns": [
+                { "field": "scenario", "label": "Scenario", "width": "20%" },
+                { "field": "last_drill", "label": "Last Drill", "width": "12%", "format": "date" },
+                { "field": "rto_target", "label": "RTO Target", "width": "10%" },
+                { "field": "rto_achieved", "label": "RTO Achieved", "width": "10%" },
+                { "field": "rpo_target", "label": "RPO Target", "width": "10%" },
+                { "field": "rpo_achieved", "label": "RPO Achieved", "width": "10%" },
+                { "field": "pass_rate", "label": "Pass Rate", "width": "10%", "format": "percent" },
+                { "field": "issues_found", "label": "Issues", "width": "8%" },
+                { "field": "status", "label": "Status", "width": "10%" }
+              ],
+              "rowStyles": {
+                "status": {
+                  "pass": "bg-green-100",
+                  "partial": "bg-yellow-100",
+                  "fail": "bg-red-100"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Planetary Crisis Readiness",
+      "collapsed": false,
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Grid Failure Readiness",
+              "type": "stat",
+              "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+              "query": "grey_grid_failure_readiness_score",
+              "unit": "%",
+              "thresholds": { "critical": [0, 70], "warning": [70, 90], "ok": [90, 100] }
+            },
+            {
+              "title": "Internet Partition Readiness",
+              "type": "stat",
+              "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+              "query": "grey_partition_readiness_score",
+              "unit": "%",
+              "thresholds": { "critical": [0, 70], "warning": [70, 90], "ok": [90, 100] }
+            },
+            {
+              "title": "Supply Chain Collapse Readiness",
+              "type": "stat",
+              "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+              "query": "grey_supply_chain_readiness_score",
+              "unit": "%",
+              "thresholds": { "critical": [0, 70], "warning": [70, 90], "ok": [90, 100] }
+            },
+            {
+              "title": "Governance Failure Readiness",
+              "type": "stat",
+              "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+              "query": "grey_governance_failure_readiness_score",
+              "unit": "%",
+              "thresholds": { "critical": [0, 70], "warning": [70, 90], "ok": [90, 100] }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Autonomous Operation Capability",
+              "type": "heatmap",
+              "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+              "query": "grey_autonomous_capability_by_region_sector",
+              "xAxis": "sector",
+              "yAxis": "region",
+              "colorScale": {
+                "min": 0,
+                "max": 100,
+                "colors": ["#ef4444", "#f97316", "#eab308", "#22c55e"]
+              },
+              "description": "Time region/sector can operate without external coordination"
+            },
+            {
+              "title": "Resource Stockpile Status",
+              "type": "barchart",
+              "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+              "query": "grey_stockpile_days_remaining",
+              "orientation": "horizontal",
+              "categories": ["fuel_reserves", "spare_parts", "currency_reserves", "food_supplies", "medical_supplies"],
+              "thresholds": [
+                { "value": 30, "color": "#ef4444" },
+                { "value": 90, "color": "#eab308" },
+                { "value": 180, "color": "#22c55e" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Recovery Capability",
+      "collapsed": false,
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Recovery Time by Scenario",
+              "type": "barchart",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+              "queries": [
+                { "expr": "grey_rto_target", "legendFormat": "Target RTO" },
+                { "expr": "grey_rto_achieved", "legendFormat": "Achieved RTO" }
+              ],
+              "groupBy": "scenario",
+              "yAxis": { "label": "Hours" }
+            },
+            {
+              "title": "Failover Chain Health",
+              "type": "sankey",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+              "query": "grey_failover_chain_status",
+              "description": "Primary → Secondary → Tertiary → Emergency failover paths"
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Last Recovery Operations",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 },
+              "query": "grey_recovery_operations",
+              "columns": [
+                { "field": "timestamp", "label": "Time", "width": "12%", "format": "datetime" },
+                { "field": "event", "label": "Event", "width": "18%" },
+                { "field": "affected_scope", "label": "Scope", "width": "12%" },
+                { "field": "detection_time", "label": "Detection", "width": "10%" },
+                { "field": "recovery_time", "label": "Recovery", "width": "10%" },
+                { "field": "data_loss", "label": "Data Loss", "width": "10%" },
+                { "field": "automated", "label": "Automated", "width": "8%" },
+                { "field": "lessons", "label": "Lessons Learned", "width": "20%" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Redundancy Status",
+      "collapsed": true,
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Geographic Redundancy",
+              "type": "worldmap",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 10 },
+              "query": "grey_node_distribution",
+              "highlights": {
+                "minimum_coverage": 3,
+                "warning_coverage": 5,
+                "healthy_coverage": 7
+              }
+            },
+            {
+              "title": "Redundancy by Layer",
+              "type": "table",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 10 },
+              "query": "grey_redundancy_status",
+              "columns": [
+                { "field": "layer", "label": "Layer", "width": "25%" },
+                { "field": "copies", "label": "Copies", "width": "15%" },
+                { "field": "target", "label": "Target", "width": "15%" },
+                { "field": "geographic_spread", "label": "Geo Spread", "width": "15%" },
+                { "field": "last_verified", "label": "Last Verified", "width": "15%", "format": "relative" },
+                { "field": "status", "label": "Status", "width": "15%" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "alerts": [
+    {
+      "name": "threat_level_elevated",
+      "description": "System threat level has increased",
+      "query": "grey_threat_level_current >= 2",
+      "severity": "warning",
+      "annotations": {
+        "summary": "Threat level is {{$value}}: {{$labels.threat_name}}"
+      }
+    },
+    {
+      "name": "threat_level_critical",
+      "description": "System threat level is critical or existential",
+      "query": "grey_threat_level_current >= 4",
+      "severity": "critical",
+      "annotations": {
+        "summary": "CRITICAL: Threat level {{$value}} - immediate response required"
+      }
+    },
+    {
+      "name": "resilience_score_low",
+      "description": "System resilience score below threshold",
+      "query": "grey_system_resilience_score < 70",
+      "severity": "warning",
+      "annotations": {
+        "summary": "Resilience score is {{$value}}%, below 70% threshold"
+      }
+    },
+    {
+      "name": "drill_overdue",
+      "description": "Resilience drill is overdue",
+      "query": "grey_drill_days_since_last > 90",
+      "severity": "warning",
+      "annotations": {
+        "summary": "{{$labels.scenario}} drill is {{$value}} days overdue"
+      }
+    },
+    {
+      "name": "recovery_sla_breach",
+      "description": "Recovery time exceeded SLA",
+      "query": "grey_rto_achieved > grey_rto_target",
+      "severity": "critical",
+      "annotations": {
+        "summary": "Recovery for {{$labels.scenario}} took {{$value}} vs target {{$labels.target}}"
+      }
+    },
+    {
+      "name": "redundancy_insufficient",
+      "description": "Redundancy below minimum threshold",
+      "query": "grey_redundancy_copies < grey_redundancy_minimum",
+      "severity": "critical",
+      "annotations": {
+        "summary": "{{$labels.layer}} has only {{$value}} copies, minimum is {{$labels.minimum}}"
+      }
+    },
+    {
+      "name": "autonomous_capability_low",
+      "description": "Region cannot operate autonomously long enough",
+      "query": "grey_autonomous_capability_hours < 168",
+      "severity": "warning",
+      "annotations": {
+        "summary": "{{$labels.region}} can only operate autonomously for {{$value}} hours"
+      }
+    },
+    {
+      "name": "stockpile_low",
+      "description": "Critical resource stockpile running low",
+      "query": "grey_stockpile_days_remaining < 30",
+      "severity": "warning",
+      "annotations": {
+        "summary": "{{$labels.resource}} stockpile has only {{$value}} days remaining"
+      }
+    }
+  ]
+}

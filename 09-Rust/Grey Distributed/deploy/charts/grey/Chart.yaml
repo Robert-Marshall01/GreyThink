@@ -1,0 +1,87 @@
+# =============================================================================
+# Grey Distributed — Helm Chart
+# =============================================================================
+#
+# This Helm chart deploys a complete Grey Distributed cluster including:
+#   - Coordinator StatefulSet (consensus, scheduling)
+#   - Worker Deployment (task execution)
+#   - Gateway Deployment (external API)
+#   - All supporting resources (services, configs, secrets)
+#
+# Usage:
+#   # Install with default values
+#   helm install grey ./charts/grey -n grey-system --create-namespace
+#
+#   # Install with custom values
+#   helm install grey ./charts/grey -n grey-system -f custom-values.yaml
+#
+#   # Upgrade
+#   helm upgrade grey ./charts/grey -n grey-system -f custom-values.yaml
+#
+#   # Dry-run to preview changes
+#   helm upgrade grey ./charts/grey --dry-run --debug
+#
+# =============================================================================
+apiVersion: v2
+name: grey
+description: Grey Distributed — Production-grade distributed systems platform
+
+# Chart version (incremented on chart changes)
+version: 1.0.0
+
+# Application version (Grey Distributed release)
+appVersion: "1.0.0"
+
+# Chart type: application (deployable) or library (shared templates)
+type: application
+
+# Keywords for discovery
+keywords:
+  - distributed
+  - consensus
+  - raft
+  - scheduling
+  - multi-tenant
+
+# Home page and sources
+home: https://grey.systems
+sources:
+  - https://github.com/grey-systems/grey-distributed
+
+# Maintainers
+maintainers:
+  - name: Grey Team
+    email: team@grey.systems
+    url: https://grey.systems
+
+# Chart icon (optional)
+icon: https://grey.systems/logo.png
+
+# Dependencies
+dependencies:
+  # Optional: Prometheus for metrics
+  - name: prometheus
+    version: "25.x.x"
+    repository: "https://prometheus-community.github.io/helm-charts"
+    condition: monitoring.prometheus.enabled
+    alias: prometheus
+  
+  # Optional: cert-manager for TLS
+  - name: cert-manager
+    version: "1.x.x"
+    repository: "https://charts.jetstack.io"
+    condition: security.tls.certManager.enabled
+    alias: certManager
+
+# Minimum Kubernetes version
+kubeVersion: ">=1.25.0"
+
+# Annotations for ArtifactHub and other registries
+annotations:
+  artifacthub.io/changes: |
+    - Initial release with coordinator, worker, gateway components
+    - Support for multi-tenant isolation
+    - Integrated observability with Prometheus and OpenTelemetry
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/operator: "false"
+  artifacthub.io/prerelease: "false"

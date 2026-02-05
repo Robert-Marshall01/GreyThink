@@ -1,0 +1,464 @@
+{
+  "title": "Grey Distributed — Legacy Dashboard",
+  "description": "Visualization of versioning, forks, and archival status",
+  "version": "1.0.0",
+  "refreshInterval": "5m",
+  "timeRange": {
+    "default": "30d",
+    "options": ["7d", "30d", "90d", "1y", "5y", "all"]
+  },
+  "variables": [
+    {
+      "name": "version",
+      "label": "Version",
+      "type": "select",
+      "options": ["all", "v1.x", "v2.x", "v3.x"],
+      "default": "all"
+    },
+    {
+      "name": "fork_type",
+      "label": "Fork Type",
+      "type": "select",
+      "options": ["all", "experimental", "long-term", "hard", "regional", "vendor"],
+      "default": "all"
+    }
+  ],
+  "sections": [
+    {
+      "title": "Version Overview",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Current Versions",
+              "type": "stat",
+              "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+              "metrics": [
+                {
+                  "name": "latest_stable",
+                  "label": "Latest Stable",
+                  "query": "grey_version_latest{channel='stable'}",
+                  "format": "version",
+                  "thresholds": {
+                    "info": "v2.0.0"
+                  }
+                },
+                {
+                  "name": "latest_lts",
+                  "label": "Latest LTS",
+                  "query": "grey_version_latest{channel='lts'}",
+                  "format": "version"
+                },
+                {
+                  "name": "latest_preview",
+                  "label": "Latest Preview",
+                  "query": "grey_version_latest{channel='preview'}",
+                  "format": "version"
+                }
+              ]
+            },
+            {
+              "title": "Version Adoption",
+              "type": "piechart",
+              "gridPos": { "x": 6, "y": 0, "w": 6, "h": 8 },
+              "query": "sum by (version) (grey_deployments_active)",
+              "legend": {
+                "show": true,
+                "position": "right"
+              },
+              "colors": {
+                "v2.1.x": "#22c55e",
+                "v2.0.x": "#3b82f6",
+                "v1.2.x": "#f59e0b",
+                "v1.1.x": "#ef4444",
+                "other": "#6b7280"
+              }
+            },
+            {
+              "title": "Support Status",
+              "type": "table",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+              "query": "grey_version_support_status",
+              "columns": [
+                { "field": "version", "label": "Version", "width": "15%" },
+                { "field": "release_date", "label": "Released", "width": "15%" },
+                { "field": "support_status", "label": "Status", "width": "15%" },
+                { "field": "eol_date", "label": "End of Life", "width": "15%" },
+                { "field": "active_deployments", "label": "Deployments", "width": "15%" },
+                { "field": "migration_progress", "label": "Migration %", "width": "15%" }
+              ],
+              "rowStyles": {
+                "support_status": {
+                  "active": "bg-green-100",
+                  "security-only": "bg-yellow-100",
+                  "end-of-life": "bg-red-100"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Version Upgrade Rate",
+              "type": "timeseries",
+              "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "rate(grey_version_upgrades_total[1d])",
+                  "legendFormat": "{{from_version}} → {{to_version}}"
+                }
+              ],
+              "yAxis": {
+                "label": "Upgrades/day",
+                "min": 0
+              }
+            },
+            {
+              "title": "Deprecation Warnings",
+              "type": "timeseries",
+              "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "sum by (feature) (grey_deprecation_warnings_total)",
+                  "legendFormat": "{{feature}}"
+                }
+              ],
+              "yAxis": {
+                "label": "Warnings issued",
+                "min": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Fork Status",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Active Forks",
+              "type": "stat",
+              "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+              "query": "count(grey_fork_status{state='active'})",
+              "thresholds": {
+                "ok": [0, 10],
+                "warning": [10, 20],
+                "critical": [20, null]
+              }
+            },
+            {
+              "title": "Reconciling",
+              "type": "stat",
+              "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+              "query": "count(grey_fork_status{state='reconciling'})",
+              "color": "#3b82f6"
+            },
+            {
+              "title": "Archived",
+              "type": "stat",
+              "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+              "query": "count(grey_fork_status{state='archived'})",
+              "color": "#6b7280"
+            },
+            {
+              "title": "Fork Types Distribution",
+              "type": "piechart",
+              "gridPos": { "x": 12, "y": 0, "w": 6, "h": 8 },
+              "query": "count by (type) (grey_fork_status{state='active'})",
+              "colors": {
+                "experimental": "#22c55e",
+                "long-term": "#3b82f6",
+                "regional": "#f59e0b",
+                "vendor": "#8b5cf6",
+                "hard": "#ef4444"
+              }
+            },
+            {
+              "title": "Divergence Heatmap",
+              "type": "heatmap",
+              "gridPos": { "x": 18, "y": 0, "w": 6, "h": 8 },
+              "query": "grey_fork_divergence_score",
+              "xAxis": "fork_id",
+              "yAxis": "component",
+              "colorScale": {
+                "min": 0,
+                "max": 1,
+                "colors": ["#22c55e", "#f59e0b", "#ef4444"]
+              }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Fork Registry",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 8, "w": 24, "h": 10 },
+              "query": "grey_fork_info",
+              "columns": [
+                { "field": "fork_id", "label": "Fork ID", "width": "15%", "link": "/forks/{{fork_id}}" },
+                { "field": "type", "label": "Type", "width": "10%" },
+                { "field": "state", "label": "State", "width": "10%" },
+                { "field": "fork_point", "label": "Fork Point", "width": "10%" },
+                { "field": "commits_ahead", "label": "Ahead", "width": "8%" },
+                { "field": "commits_behind", "label": "Behind", "width": "8%" },
+                { "field": "divergence_score", "label": "Divergence", "width": "10%", "format": "percent" },
+                { "field": "last_sync", "label": "Last Sync", "width": "12%", "format": "relative" },
+                { "field": "maintainers", "label": "Maintainers", "width": "17%" }
+              ],
+              "filters": ["$fork_type"],
+              "sorting": { "field": "divergence_score", "order": "desc" }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Fork Divergence Over Time",
+              "type": "timeseries",
+              "gridPos": { "x": 0, "y": 18, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "grey_fork_divergence_score",
+                  "legendFormat": "{{fork_id}}"
+                }
+              ],
+              "yAxis": {
+                "label": "Divergence Score",
+                "min": 0,
+                "max": 1
+              },
+              "thresholds": [
+                { "value": 0.3, "color": "#f59e0b", "label": "Reconciliation recommended" },
+                { "value": 0.5, "color": "#ef4444", "label": "High divergence" }
+              ]
+            },
+            {
+              "title": "Reconciliation Activity",
+              "type": "timeseries",
+              "gridPos": { "x": 12, "y": 18, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "rate(grey_fork_reconciliation_total[7d])",
+                  "legendFormat": "Reconciliations"
+                },
+                {
+                  "expr": "rate(grey_fork_conflicts_resolved_total[7d])",
+                  "legendFormat": "Conflicts resolved"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Archival Status",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Archive Size",
+              "type": "stat",
+              "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+              "query": "sum(grey_archive_size_bytes)",
+              "format": "bytes",
+              "color": "#3b82f6"
+            },
+            {
+              "title": "Artifacts Preserved",
+              "type": "stat",
+              "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+              "query": "count(grey_archive_artifact_info)",
+              "format": "number"
+            },
+            {
+              "title": "Last Verification",
+              "type": "stat",
+              "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+              "query": "max(grey_archive_last_verification_timestamp)",
+              "format": "relative"
+            },
+            {
+              "title": "Integrity Status",
+              "type": "gauge",
+              "gridPos": { "x": 12, "y": 0, "w": 6, "h": 8 },
+              "query": "grey_archive_integrity_score",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "critical": [0, 95],
+                "warning": [95, 99],
+                "ok": [99, 100]
+              },
+              "unit": "%"
+            },
+            {
+              "title": "Storage Distribution",
+              "type": "piechart",
+              "gridPos": { "x": 18, "y": 0, "w": 6, "h": 8 },
+              "query": "sum by (tier) (grey_archive_size_bytes)",
+              "colors": {
+                "hot": "#ef4444",
+                "standard": "#f59e0b",
+                "cold": "#3b82f6",
+                "archive": "#6b7280"
+              }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Archive by Category",
+              "type": "barchart",
+              "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+              "query": "sum by (category) (grey_archive_size_bytes)",
+              "orientation": "horizontal",
+              "xAxis": { "label": "Size (bytes)" },
+              "yAxis": { "label": "Category" }
+            },
+            {
+              "title": "Verification History",
+              "type": "timeseries",
+              "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "grey_archive_verification_passed",
+                  "legendFormat": "Passed"
+                },
+                {
+                  "expr": "grey_archive_verification_failed",
+                  "legendFormat": "Failed"
+                }
+              ],
+              "yAxis": { "label": "Artifacts" }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Recent Archive Operations",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 16, "w": 24, "h": 8 },
+              "query": "grey_archive_operations",
+              "columns": [
+                { "field": "timestamp", "label": "Time", "width": "15%", "format": "datetime" },
+                { "field": "operation", "label": "Operation", "width": "12%" },
+                { "field": "artifact_id", "label": "Artifact", "width": "25%" },
+                { "field": "category", "label": "Category", "width": "12%" },
+                { "field": "tier", "label": "Tier", "width": "10%" },
+                { "field": "size", "label": "Size", "width": "10%", "format": "bytes" },
+                { "field": "status", "label": "Status", "width": "8%" },
+                { "field": "actor", "label": "Actor", "width": "8%" }
+              ],
+              "limit": 50
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Compatibility Matrix",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Protocol Compatibility",
+              "type": "heatmap",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 10 },
+              "query": "grey_protocol_compatibility",
+              "xAxis": "source_version",
+              "yAxis": "target_version",
+              "colorScale": {
+                "values": {
+                  "full": "#22c55e",
+                  "limited": "#f59e0b",
+                  "none": "#ef4444"
+                }
+              }
+            },
+            {
+              "title": "SDK Compatibility",
+              "type": "heatmap",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 10 },
+              "query": "grey_sdk_compatibility",
+              "xAxis": "sdk_version",
+              "yAxis": "server_version",
+              "colorScale": {
+                "values": {
+                  "full": "#22c55e",
+                  "limited": "#f59e0b",
+                  "none": "#ef4444"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "alerts": [
+    {
+      "name": "version_eol_approaching",
+      "description": "Version approaching end-of-life",
+      "query": "grey_version_eol_days_remaining < 90",
+      "severity": "warning",
+      "annotations": {
+        "summary": "Version {{$labels.version}} EOL in {{$value}} days",
+        "runbook": "/docs/operations/version-migration"
+      }
+    },
+    {
+      "name": "fork_high_divergence",
+      "description": "Fork has high divergence from upstream",
+      "query": "grey_fork_divergence_score > 0.5",
+      "severity": "warning",
+      "annotations": {
+        "summary": "Fork {{$labels.fork_id}} divergence at {{$value | percent}}",
+        "runbook": "/docs/forks/reconciliation"
+      }
+    },
+    {
+      "name": "fork_stale",
+      "description": "Fork has not synced with upstream recently",
+      "query": "time() - grey_fork_last_sync_timestamp > 604800",
+      "severity": "warning",
+      "annotations": {
+        "summary": "Fork {{$labels.fork_id}} not synced in 7+ days"
+      }
+    },
+    {
+      "name": "archive_integrity_failure",
+      "description": "Archive integrity verification failed",
+      "query": "grey_archive_verification_failed > 0",
+      "severity": "critical",
+      "annotations": {
+        "summary": "{{$value}} artifacts failed integrity verification",
+        "runbook": "/docs/operations/archive-recovery"
+      }
+    },
+    {
+      "name": "archive_verification_overdue",
+      "description": "Archive verification not run recently",
+      "query": "time() - max(grey_archive_last_verification_timestamp) > 2592000",
+      "severity": "warning",
+      "annotations": {
+        "summary": "Archive verification not run in 30+ days"
+      }
+    },
+    {
+      "name": "deprecation_deadline",
+      "description": "Deprecated feature removal approaching",
+      "query": "grey_deprecation_removal_days_remaining < 30",
+      "severity": "warning",
+      "annotations": {
+        "summary": "{{$labels.feature}} removal in {{$value}} days"
+      }
+    }
+  ]
+}

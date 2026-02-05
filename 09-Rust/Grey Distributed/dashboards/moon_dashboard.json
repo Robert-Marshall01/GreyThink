@@ -1,0 +1,336 @@
+{
+  "dashboard": {
+    "title": "Grey Distributed — Lunar Base Operations",
+    "description": "Real-time monitoring of lunar bases, near-real-time Earth coordination, and power/thermal management",
+    "refresh_interval_seconds": 30,
+    "tags": ["cosmic", "moon", "interplanetary"]
+  },
+  
+  "sections": [
+    {
+      "title": "Lunar Network Overview",
+      "layout": "grid-4",
+      "panels": [
+        {
+          "title": "Active Bases",
+          "type": "stat",
+          "metric": "moon.bases.active.count",
+          "format": "integer"
+        },
+        {
+          "title": "Total Nodes",
+          "type": "stat",
+          "metric": "moon.nodes.total.count",
+          "format": "integer"
+        },
+        {
+          "title": "Network Health",
+          "type": "gauge",
+          "metric": "moon.network.health.score",
+          "format": "percent",
+          "thresholds": {
+            "critical": 0.5,
+            "warning": 0.8,
+            "normal": 0.95
+          }
+        },
+        {
+          "title": "Earth RTT",
+          "type": "stat",
+          "metric": "moon.earth.rtt.seconds",
+          "format": "decimal-2",
+          "unit": "sec",
+          "description": "Round-trip time to Earth (nominal: ~2.6s)"
+        }
+      ]
+    },
+    
+    {
+      "title": "Earth Communication",
+      "layout": "grid-3",
+      "panels": [
+        {
+          "title": "Earth Connection Quality",
+          "type": "gauge",
+          "metric": "moon.earth.connection.quality",
+          "format": "percent",
+          "thresholds": {
+            "critical": 0.3,
+            "warning": 0.6,
+            "normal": 0.9
+          }
+        },
+        {
+          "title": "Communication Path",
+          "type": "status",
+          "metric": "moon.earth.path.type",
+          "status_values": {
+            "direct": { "label": "Direct LOS", "color": "green" },
+            "orbital_relay": { "label": "Orbital Relay", "color": "blue" },
+            "surface_relay": { "label": "Surface Relay", "color": "yellow" },
+            "lagrange_relay": { "label": "L2 Relay", "color": "purple" },
+            "unavailable": { "label": "UNAVAILABLE", "color": "red" }
+          }
+        },
+        {
+          "title": "Bandwidth Utilization",
+          "type": "timeseries",
+          "metric": "moon.earth.bandwidth.percent",
+          "unit": "percent",
+          "time_range": "24h"
+        }
+      ]
+    },
+    
+    {
+      "title": "Base Details",
+      "layout": "repeating",
+      "repeat_variable": "base_id",
+      "panels": [
+        {
+          "title": "${base_name} - Overview",
+          "type": "stat-group",
+          "metrics": [
+            { "name": "Nodes", "metric": "moon.base.${base_id}.nodes.total", "format": "integer" },
+            { "name": "Health", "metric": "moon.base.${base_id}.health.score", "format": "percent" },
+            { "name": "Region", "metric": "moon.base.${base_id}.region", "format": "text" }
+          ]
+        },
+        {
+          "title": "${base_name} - Solar Phase",
+          "type": "status",
+          "metric": "moon.base.${base_id}.solar.phase",
+          "status_values": {
+            "day": { "label": "Lunar Day ☀️", "color": "yellow" },
+            "night": { "label": "Lunar Night 🌑", "color": "dark-blue" },
+            "transition": { "label": "Transition", "color": "orange" },
+            "polar_light": { "label": "Polar Light", "color": "green" }
+          }
+        },
+        {
+          "title": "${base_name} - Power Status",
+          "type": "multi-bar",
+          "metrics": [
+            { "name": "Available (W)", "metric": "moon.base.${base_id}.power.available_w", "color": "green" },
+            { "name": "Consumption (W)", "metric": "moon.base.${base_id}.power.consumption_w", "color": "blue" }
+          ]
+        },
+        {
+          "title": "${base_name} - Battery",
+          "type": "gauge",
+          "metric": "moon.base.${base_id}.battery.percent",
+          "format": "percent",
+          "thresholds": {
+            "critical": 0.15,
+            "warning": 0.3,
+            "normal": 0.6
+          }
+        }
+      ]
+    },
+    
+    {
+      "title": "Solar Cycle Tracking",
+      "layout": "grid-2",
+      "panels": [
+        {
+          "title": "Bases in Daylight",
+          "type": "pie",
+          "metrics": [
+            { "name": "Daylight", "metric": "moon.bases.in_day.count", "color": "yellow" },
+            { "name": "Night", "metric": "moon.bases.in_night.count", "color": "navy" },
+            { "name": "Transition", "metric": "moon.bases.in_transition.count", "color": "orange" }
+          ]
+        },
+        {
+          "title": "Time to Next Phase Transition",
+          "type": "table",
+          "metric": "moon.bases.phase_transitions",
+          "columns": [
+            { "name": "Base", "field": "base_name" },
+            { "name": "Current Phase", "field": "current_phase" },
+            { "name": "Hours to Transition", "field": "hours_remaining" },
+            { "name": "Next Phase", "field": "next_phase" }
+          ]
+        }
+      ]
+    },
+    
+    {
+      "title": "Thermal Management",
+      "layout": "grid-3",
+      "panels": [
+        {
+          "title": "Average Surface Temp",
+          "type": "timeseries",
+          "metric": "moon.surface.temperature.average_c",
+          "unit": "°C",
+          "time_range": "7d",
+          "annotations": [
+            { "value": 127, "label": "Day peak" },
+            { "value": -173, "label": "Night low" }
+          ]
+        },
+        {
+          "title": "Radiator Load (All Bases)",
+          "type": "gauge",
+          "metric": "moon.thermal.radiator.load.average",
+          "format": "percent",
+          "thresholds": {
+            "critical": 0.95,
+            "warning": 0.85,
+            "normal": 0.7
+          }
+        },
+        {
+          "title": "Heater Status",
+          "type": "status-grid",
+          "metric": "moon.base.*.heater.active",
+          "grid_source": "moon.bases.list"
+        }
+      ]
+    },
+    
+    {
+      "title": "Far-Side Operations",
+      "layout": "grid-2",
+      "panels": [
+        {
+          "title": "Far-Side Bases",
+          "type": "table",
+          "metric": "moon.bases.far_side",
+          "columns": [
+            { "name": "Base", "field": "base_name" },
+            { "name": "Status", "field": "status" },
+            { "name": "Relay Path", "field": "relay_path" },
+            { "name": "Added Latency (ms)", "field": "added_latency_ms" }
+          ]
+        },
+        {
+          "title": "Relay Network Status",
+          "type": "network-graph",
+          "metric": "moon.relay.network",
+          "nodes": "moon.relays.list",
+          "edges": "moon.relay.links",
+          "highlight_path": "moon.relay.earth_path"
+        }
+      ]
+    },
+    
+    {
+      "title": "Inter-Base Coordination",
+      "layout": "grid-2",
+      "panels": [
+        {
+          "title": "Base Connectivity Matrix",
+          "type": "heatmap",
+          "metric": "moon.inter_base.latency_matrix_ms",
+          "x_axis": "moon.bases.list",
+          "y_axis": "moon.bases.list",
+          "color_scale": "latency"
+        },
+        {
+          "title": "Federated Consensus Status",
+          "type": "status-list",
+          "metric": "moon.base.*.federation.status",
+          "status_values": {
+            "synced": { "label": "Synced", "color": "green" },
+            "syncing": { "label": "Syncing", "color": "blue" },
+            "behind": { "label": "Behind", "color": "yellow" },
+            "isolated": { "label": "Isolated", "color": "red" }
+          }
+        }
+      ]
+    }
+  ],
+  
+  "alerts": [
+    {
+      "name": "moon_base_offline",
+      "description": "Lunar base has gone offline",
+      "condition": "moon.base.*.online == 0",
+      "severity": "critical",
+      "duration": "5m",
+      "actions": ["page_oncall", "notify_earth_control"]
+    },
+    {
+      "name": "moon_earth_connection_lost",
+      "description": "Earth connection lost for all paths",
+      "condition": "moon.earth.path.type == 'unavailable'",
+      "severity": "critical",
+      "duration": "5m",
+      "actions": ["page_oncall", "activate_autonomous_mode"]
+    },
+    {
+      "name": "moon_battery_critical",
+      "description": "Base battery level critical (approaching night)",
+      "condition": "moon.base.*.battery.percent < 0.15 AND moon.base.*.solar.phase == 'transition'",
+      "severity": "critical",
+      "duration": "0",
+      "actions": ["reduce_non_essential", "page_oncall"]
+    },
+    {
+      "name": "moon_night_survival",
+      "description": "Base entering night without sufficient reserves",
+      "condition": "moon.base.*.battery.percent < 0.3 AND moon.base.*.hours_to_night < 24",
+      "severity": "warning",
+      "duration": "0",
+      "actions": ["charge_priority", "reduce_consumption"]
+    },
+    {
+      "name": "moon_thermal_overload",
+      "description": "Thermal radiator capacity exceeded",
+      "condition": "moon.base.*.thermal.radiator.load > 0.95",
+      "severity": "critical",
+      "duration": "10m",
+      "actions": ["reduce_power_load", "page_oncall"]
+    },
+    {
+      "name": "moon_far_side_isolated",
+      "description": "Far-side base lost all relay connectivity",
+      "condition": "moon.base.*.region == 'far_side' AND moon.base.*.relay.count == 0",
+      "severity": "critical",
+      "duration": "15m",
+      "actions": ["activate_backup_relay", "page_oncall"]
+    },
+    {
+      "name": "moon_consensus_degraded",
+      "description": "Base consensus health degraded",
+      "condition": "moon.base.*.consensus.health < 0.7",
+      "severity": "warning",
+      "duration": "15m",
+      "actions": ["notify_ops", "investigate"]
+    },
+    {
+      "name": "moon_latency_anomaly",
+      "description": "Earth latency significantly above normal",
+      "condition": "moon.earth.rtt.seconds > 5.0",
+      "severity": "warning",
+      "duration": "5m",
+      "actions": ["investigate_relay", "notify_ops"]
+    }
+  ],
+  
+  "variables": [
+    {
+      "name": "base_id",
+      "type": "query",
+      "query": "moon.bases.list",
+      "multi": true,
+      "include_all": true
+    },
+    {
+      "name": "region",
+      "type": "query",
+      "query": "moon.regions.list",
+      "multi": true,
+      "include_all": true
+    },
+    {
+      "name": "time_range",
+      "type": "interval",
+      "options": ["1h", "6h", "24h", "7d", "14d", "30d"],
+      "default": "24h"
+    }
+  ]
+}

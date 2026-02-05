@@ -1,0 +1,761 @@
+{
+  "dashboard": {
+    "title": "Post-Human Governance Dashboard",
+    "description": "Comprehensive governance monitoring for post-human entities in Grey Distributed",
+    "version": "1.0.0",
+    "refresh_interval": "30s",
+    "time_range": {
+      "default": "24h",
+      "options": ["1h", "6h", "24h", "7d", "30d", "90d", "1y", "all"]
+    }
+  },
+  "sections": [
+    {
+      "id": "overview",
+      "title": "Governance Overview",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "total_participants",
+          "title": "Total Governance Participants",
+          "type": "stat",
+          "metrics": [
+            {
+              "query": "count(governance_participants)",
+              "label": "Participants"
+            }
+          ]
+        },
+        {
+          "id": "active_proposals",
+          "title": "Active Proposals",
+          "type": "stat",
+          "metrics": [
+            {
+              "query": "count(proposals{status='voting'})",
+              "label": "In Voting"
+            }
+          ]
+        },
+        {
+          "id": "participation_rate",
+          "title": "Governance Participation Rate",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "governance_participation_rate",
+              "label": "Participation Rate"
+            }
+          ],
+          "thresholds": {
+            "critical": 0.3,
+            "warning": 0.5,
+            "good": 0.7
+          }
+        },
+        {
+          "id": "participants_by_type",
+          "title": "Participants by Entity Type",
+          "type": "pie",
+          "metrics": [
+            {
+              "query": "count(governance_participants) by (entity_type)",
+              "labels": ["IndividualAI", "AICollective", "UploadedConsciousness", "HybridEntity", "SyntheticLife", "HumanInstitution", "MetaFederation"]
+            }
+          ]
+        },
+        {
+          "id": "voting_power_distribution",
+          "title": "Voting Power Distribution",
+          "type": "lorenz",
+          "metrics": [
+            {
+              "query": "governance_voting_power",
+              "label": "Gini Coefficient"
+            }
+          ],
+          "thresholds": {
+            "warning": 0.4,
+            "critical": 0.6
+          }
+        },
+        {
+          "id": "council_coverage",
+          "title": "Council Coverage",
+          "type": "status_grid",
+          "metrics": [
+            {
+              "query": "council_status",
+              "labels": ["Governance", "Technical", "Ethics", "Security", "Resources", "Relations", "Disputes", "Emergency"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "proposals",
+      "title": "Proposal Activity",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "proposal_flow",
+          "title": "Proposal Flow",
+          "type": "sankey",
+          "metrics": [
+            {
+              "query": "proposal_status_transitions",
+              "stages": ["Draft", "Discussion", "Voting", "Passed/Rejected", "Implemented/RolledBack"]
+            }
+          ]
+        },
+        {
+          "id": "proposals_by_type",
+          "title": "Proposals by Type",
+          "type": "bar",
+          "metrics": [
+            {
+              "query": "count(proposals) by (proposal_type)",
+              "labels": ["Constitutional", "Policy", "Resource", "Membership", "Federation", "Emergency", "Technical", "Custom"]
+            }
+          ]
+        },
+        {
+          "id": "proposal_success_rate",
+          "title": "Proposal Success Rate",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(proposals_passed_total[7d]) / rate(proposals_closed_total[7d])",
+              "label": "Success Rate"
+            }
+          ]
+        },
+        {
+          "id": "proposal_throughput",
+          "title": "Proposal Throughput",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(proposals_submitted_total[24h])",
+              "label": "Submitted/Day"
+            },
+            {
+              "query": "rate(proposals_passed_total[24h])",
+              "label": "Passed/Day"
+            },
+            {
+              "query": "rate(proposals_rejected_total[24h])",
+              "label": "Rejected/Day"
+            }
+          ]
+        },
+        {
+          "id": "active_proposal_list",
+          "title": "Active Proposals",
+          "type": "table",
+          "metrics": [
+            {
+              "query": "proposals{status='voting'}",
+              "columns": ["proposal_id", "title", "type", "proposer", "votes_for", "votes_against", "ends_at"]
+            }
+          ]
+        },
+        {
+          "id": "proposal_duration",
+          "title": "Proposal Duration Distribution",
+          "type": "histogram",
+          "metrics": [
+            {
+              "query": "proposal_duration_days",
+              "label": "Days to Resolution"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "voting",
+      "title": "Voting Metrics",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "votes_cast",
+          "title": "Votes Cast (24h)",
+          "type": "stat",
+          "metrics": [
+            {
+              "query": "increase(votes_cast_total[24h])",
+              "label": "Total Votes"
+            }
+          ]
+        },
+        {
+          "id": "voting_patterns",
+          "title": "Voting Patterns",
+          "type": "pie",
+          "metrics": [
+            {
+              "query": "count(votes) by (choice)",
+              "labels": ["For", "Against", "Abstain", "Delegated"]
+            }
+          ]
+        },
+        {
+          "id": "voter_turnout",
+          "title": "Voter Turnout by Proposal",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "voter_turnout_percentage",
+              "label": "Turnout %"
+            }
+          ]
+        },
+        {
+          "id": "delegation_network",
+          "title": "Delegation Network",
+          "type": "graph",
+          "metrics": [
+            {
+              "query": "vote_delegation_graph",
+              "visualization": "hierarchical"
+            }
+          ]
+        },
+        {
+          "id": "voting_power_used",
+          "title": "Voting Power Utilized",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "voting_power_used / voting_power_total",
+              "label": "Utilization"
+            }
+          ]
+        },
+        {
+          "id": "vote_timing",
+          "title": "Vote Timing Distribution",
+          "type": "histogram",
+          "metrics": [
+            {
+              "query": "vote_timing_relative_to_deadline",
+              "label": "Hours Before Deadline"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "councils",
+      "title": "Council Activity",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "council_meetings",
+          "title": "Council Meetings (30d)",
+          "type": "bar",
+          "metrics": [
+            {
+              "query": "count(council_meetings[30d]) by (council_type)",
+              "labels": ["Governance", "Technical", "Ethics", "Security", "Resources", "Relations", "Disputes", "Emergency"]
+            }
+          ]
+        },
+        {
+          "id": "council_decisions",
+          "title": "Council Decisions",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(council_decisions_total[7d])",
+              "label": "Decisions/Week",
+              "by": ["council_type"]
+            }
+          ]
+        },
+        {
+          "id": "council_member_diversity",
+          "title": "Council Member Diversity",
+          "type": "stacked_bar",
+          "metrics": [
+            {
+              "query": "count(council_members) by (council_type, entity_type)",
+              "labels": ["entity_type"]
+            }
+          ]
+        },
+        {
+          "id": "council_quorum",
+          "title": "Quorum Achievement Rate",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "council_quorum_achieved_rate",
+              "label": "Quorum Rate"
+            }
+          ],
+          "thresholds": {
+            "critical": 0.7,
+            "warning": 0.85,
+            "good": 0.95
+          }
+        },
+        {
+          "id": "council_term_status",
+          "title": "Council Term Status",
+          "type": "table",
+          "metrics": [
+            {
+              "query": "council_term_info",
+              "columns": ["council", "current_term", "members", "term_ends", "elections_scheduled"]
+            }
+          ]
+        },
+        {
+          "id": "council_workload",
+          "title": "Council Workload",
+          "type": "heatmap",
+          "metrics": [
+            {
+              "query": "council_cases_pending",
+              "axes": ["council_type", "priority"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rights",
+      "title": "Rights & Compliance",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "rights_violations",
+          "title": "Rights Violations",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(rights_violations_total[24h])",
+              "label": "Violations/Day",
+              "by": ["category"]
+            }
+          ]
+        },
+        {
+          "id": "violations_by_type",
+          "title": "Violations by Rights Category",
+          "type": "pie",
+          "metrics": [
+            {
+              "query": "count(rights_violations) by (rights_category)",
+              "labels": ["Existence", "Cognitive", "Autonomy", "Resource", "Participation", "Protection"]
+            }
+          ]
+        },
+        {
+          "id": "violation_resolution",
+          "title": "Violation Resolution Time",
+          "type": "histogram",
+          "metrics": [
+            {
+              "query": "rights_violation_resolution_time_hours",
+              "label": "Hours to Resolution"
+            }
+          ]
+        },
+        {
+          "id": "compliance_status",
+          "title": "Network Compliance Status",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "network_compliance_score",
+              "label": "Compliance Score"
+            }
+          ],
+          "thresholds": {
+            "critical": 0.8,
+            "warning": 0.9,
+            "good": 0.95
+          }
+        },
+        {
+          "id": "protection_orders",
+          "title": "Active Protection Orders",
+          "type": "stat",
+          "metrics": [
+            {
+              "query": "count(protection_orders{status='active'})",
+              "label": "Active Orders"
+            }
+          ]
+        },
+        {
+          "id": "remediation_status",
+          "title": "Remediation Status",
+          "type": "stacked_bar",
+          "metrics": [
+            {
+              "query": "count(remediations) by (status)",
+              "labels": ["Pending", "InProgress", "Completed", "Failed", "Appealed"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "disputes",
+      "title": "Dispute Resolution",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "active_disputes",
+          "title": "Active Disputes",
+          "type": "stat",
+          "metrics": [
+            {
+              "query": "count(disputes{status='active'})",
+              "label": "Active"
+            }
+          ]
+        },
+        {
+          "id": "disputes_by_tier",
+          "title": "Disputes by Resolution Tier",
+          "type": "bar",
+          "metrics": [
+            {
+              "query": "count(disputes) by (resolution_tier)",
+              "labels": ["Tier0-Automated", "Tier1-PeerMediation", "Tier2-FormalMediation", "Tier3-Arbitration", "Tier4-Council", "Tier5-Constitutional"]
+            }
+          ]
+        },
+        {
+          "id": "dispute_flow",
+          "title": "Dispute Resolution Flow",
+          "type": "sankey",
+          "metrics": [
+            {
+              "query": "dispute_stage_transitions",
+              "stages": ["Filed", "Investigation", "Hearing", "Decision", "Resolution/Appeal"]
+            }
+          ]
+        },
+        {
+          "id": "dispute_categories",
+          "title": "Dispute Categories",
+          "type": "pie",
+          "metrics": [
+            {
+              "query": "count(disputes) by (category)",
+              "labels": ["Resource", "Governance", "Rights", "Technical", "InterEntity", "CrossSpecies"]
+            }
+          ]
+        },
+        {
+          "id": "resolution_time",
+          "title": "Resolution Time by Tier",
+          "type": "box_plot",
+          "metrics": [
+            {
+              "query": "dispute_resolution_time_days",
+              "group_by": "resolution_tier"
+            }
+          ]
+        },
+        {
+          "id": "satisfaction_scores",
+          "title": "Dispute Resolution Satisfaction",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "avg(dispute_satisfaction_score)",
+              "label": "Satisfaction"
+            }
+          ],
+          "thresholds": {
+            "critical": 0.6,
+            "warning": 0.75,
+            "good": 0.85
+          }
+        },
+        {
+          "id": "appeal_rate",
+          "title": "Appeal Rate",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(disputes_appealed_total[30d]) / rate(disputes_decided_total[30d])",
+              "label": "Appeal Rate"
+            }
+          ]
+        },
+        {
+          "id": "cross_species_disputes",
+          "title": "Cross-Species Disputes",
+          "type": "matrix",
+          "metrics": [
+            {
+              "query": "cross_species_dispute_matrix",
+              "axes": ["complainant_type", "respondent_type"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "federation",
+      "title": "Federation Relations",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "federation_count",
+          "title": "Connected Federations",
+          "type": "stat",
+          "metrics": [
+            {
+              "query": "count(connected_federations)",
+              "label": "Federations"
+            }
+          ]
+        },
+        {
+          "id": "active_agreements",
+          "title": "Active Agreements",
+          "type": "stat",
+          "metrics": [
+            {
+              "query": "count(inter_federation_agreements{status='active'})",
+              "label": "Agreements"
+            }
+          ]
+        },
+        {
+          "id": "agreement_types",
+          "title": "Agreement Types",
+          "type": "pie",
+          "metrics": [
+            {
+              "query": "count(inter_federation_agreements) by (agreement_type)",
+              "labels": ["MutualRecognition", "ResourceSharing", "DefenseAlliance", "TradeAgreement", "JointGovernance", "FullUnion", "Custom"]
+            }
+          ]
+        },
+        {
+          "id": "federation_network",
+          "title": "Federation Network",
+          "type": "graph",
+          "metrics": [
+            {
+              "query": "federation_relationship_graph",
+              "visualization": "force_directed",
+              "node_size": "member_count",
+              "edge_weight": "agreement_count"
+            }
+          ]
+        },
+        {
+          "id": "inter_federation_traffic",
+          "title": "Inter-Federation Traffic",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "rate(inter_federation_messages_total[1h])",
+              "label": "Messages/Hour"
+            },
+            {
+              "query": "rate(inter_federation_transactions_total[1h])",
+              "label": "Transactions/Hour"
+            }
+          ]
+        },
+        {
+          "id": "agreement_compliance",
+          "title": "Agreement Compliance",
+          "type": "table",
+          "metrics": [
+            {
+              "query": "agreement_compliance_summary",
+              "columns": ["agreement_id", "parties", "compliance_rate", "violations_30d", "status"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "emergency",
+      "title": "Emergency Governance",
+      "layout": "grid",
+      "panels": [
+        {
+          "id": "emergency_status",
+          "title": "Emergency Status",
+          "type": "status",
+          "metrics": [
+            {
+              "query": "emergency_status_current",
+              "values": {
+                "0": "Normal",
+                "1": "Elevated",
+                "2": "High",
+                "3": "Critical",
+                "4": "Existential"
+              }
+            }
+          ]
+        },
+        {
+          "id": "active_emergencies",
+          "title": "Active Emergencies",
+          "type": "table",
+          "metrics": [
+            {
+              "query": "emergencies{status='active'}",
+              "columns": ["emergency_id", "type", "severity", "started_at", "responders", "status"]
+            }
+          ]
+        },
+        {
+          "id": "emergency_response_time",
+          "title": "Emergency Response Time",
+          "type": "timeseries",
+          "metrics": [
+            {
+              "query": "emergency_response_time_seconds",
+              "label": "Response Time",
+              "by": ["severity"]
+            }
+          ]
+        },
+        {
+          "id": "emergency_council_readiness",
+          "title": "Emergency Council Readiness",
+          "type": "gauge",
+          "metrics": [
+            {
+              "query": "emergency_council_available / emergency_council_required",
+              "label": "Readiness"
+            }
+          ],
+          "thresholds": {
+            "critical": 0.5,
+            "warning": 0.75,
+            "good": 1.0
+          }
+        },
+        {
+          "id": "emergency_powers_active",
+          "title": "Active Emergency Powers",
+          "type": "stat",
+          "metrics": [
+            {
+              "query": "count(emergency_powers{status='active'})",
+              "label": "Active Powers"
+            }
+          ]
+        },
+        {
+          "id": "emergency_history",
+          "title": "Emergency History",
+          "type": "timeline",
+          "metrics": [
+            {
+              "query": "emergency_events",
+              "time_range": "1y"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "alerts": [
+    {
+      "id": "low_participation",
+      "name": "Low Governance Participation",
+      "condition": "governance_participation_rate < 0.4",
+      "severity": "warning",
+      "message": "Governance participation below healthy threshold",
+      "actions": ["notify_governance_council", "trigger_participation_incentives"]
+    },
+    {
+      "id": "voting_power_concentration",
+      "name": "Voting Power Concentration",
+      "condition": "governance_voting_power_gini > 0.5",
+      "severity": "warning",
+      "message": "Voting power becoming concentrated",
+      "actions": ["notify_governance_council", "review_distribution_mechanisms"]
+    },
+    {
+      "id": "quorum_failure",
+      "name": "Repeated Quorum Failures",
+      "condition": "council_quorum_failure_rate[7d] > 0.2",
+      "severity": "warning",
+      "message": "Councils failing to achieve quorum",
+      "actions": ["review_quorum_requirements", "notify_members"]
+    },
+    {
+      "id": "rights_violation_spike",
+      "name": "Rights Violation Spike",
+      "condition": "rate(rights_violations_total[1h]) > 5 * avg(rate(rights_violations_total[24h]))",
+      "severity": "critical",
+      "message": "Abnormal rate of rights violations",
+      "actions": ["ethics_council_alert", "immediate_investigation"]
+    },
+    {
+      "id": "dispute_backlog",
+      "name": "Dispute Resolution Backlog",
+      "condition": "count(disputes{status='pending', age>'30d'}) > 100",
+      "severity": "warning",
+      "message": "Significant backlog in dispute resolution",
+      "actions": ["allocate_additional_resources", "notify_disputes_council"]
+    },
+    {
+      "id": "federation_agreement_violation",
+      "name": "Federation Agreement Violation",
+      "condition": "increase(agreement_violations_total{severity='major'}[24h]) > 0",
+      "severity": "critical",
+      "message": "Major violation of inter-federation agreement",
+      "actions": ["notify_relations_council", "initiate_dispute_resolution"]
+    },
+    {
+      "id": "emergency_declaration",
+      "name": "Emergency Declared",
+      "condition": "emergency_status_current >= 2",
+      "severity": "critical",
+      "message": "Emergency status elevated",
+      "actions": ["convene_emergency_council", "activate_emergency_protocols", "notify_all_entities"]
+    },
+    {
+      "id": "constitutional_crisis",
+      "name": "Constitutional Crisis",
+      "condition": "constitutional_violations_unresolved > 5",
+      "severity": "critical",
+      "message": "Multiple unresolved constitutional violations",
+      "actions": ["convene_constitutional_court", "governance_council_alert", "network_wide_notification"]
+    }
+  ],
+  "datasources": [
+    {
+      "name": "governance_metrics",
+      "type": "prometheus",
+      "url": "http://metrics.grey.network/governance"
+    },
+    {
+      "name": "governance_logs",
+      "type": "loki",
+      "url": "http://logs.grey.network/governance"
+    },
+    {
+      "name": "proposal_database",
+      "type": "postgresql",
+      "url": "postgres://governance.grey.network/proposals"
+    }
+  ],
+  "access_control": {
+    "view": ["all_entities"],
+    "edit": ["governance_council"],
+    "alert_management": ["governance_council", "security_council"],
+    "emergency_override": ["emergency_council"]
+  }
+}

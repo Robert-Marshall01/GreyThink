@@ -1,0 +1,481 @@
+# Grey Distributed - Unit & Integration Test Pipeline
+# =============================================================================
+#
+# Purpose:
+#   Execute comprehensive test suites across all subsystems, collect coverage
+#   metrics, and ensure cross-module integration works correctly.
+#
+# Why this matters:
+#   - Unit tests catch regressions in individual components
+#   - Integration tests verify subsystems work together
+#   - Coverage metrics identify untested code paths
+#   - Race detection catches concurrency bugs before production
+#
+# Tradeoffs:
+#   - Full test suite takes 10-15 minutes
+#   - Race detection adds 2-10x overhead but catches real bugs
+#   - High coverage thresholds may slow development velocity
+#   - Integration tests require cluster setup overhead
+#
+# =============================================================================
+
+name: Test Suite
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'src/**'
+      - 'pkg/**'
+      - 'tests/**'
+      - 'Cargo.toml'
+      - 'go.mod'
+      - '.github/workflows/test.yml'
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Nightly full test run at 3 AM UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      extended:
+        description: 'Run extended test suite'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  CARGO_TERM_COLOR: always
+  GO_VERSION: '1.22'
+  RUST_VERSION: '1.75.0'
+  COVERAGE_THRESHOLD_RUST: 70
+  COVERAGE_THRESHOLD_GO: 80
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================
+  # Stage 1: Rust Unit Tests
+  # ============================================================
+  rust-unit-tests:
+    name: Rust Unit Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: llvm-tools-preview
+      
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-test-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+      
+      # Run unit tests with coverage instrumentation
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov
+      
+      - name: Run Unit Tests with Coverage
+        run: |
+          cargo llvm-cov --all-features --workspace \
+            --lcov --output-path lcov.info \
+            -- --test-threads=4
+      
+      # Parse and check coverage threshold
+      - name: Check Coverage Threshold
+        run: |
+          COVERAGE=$(cargo llvm-cov --all-features --workspace --summary-only 2>&1 | \
+                     grep "Total" | awk '{print $2}' | sed 's/%//' || echo "0")
+          echo "Rust coverage: $COVERAGE%"
+          echo "RUST_COVERAGE=$COVERAGE" >> $GITHUB_ENV
+          
+          if (( $(echo "$COVERAGE < $COVERAGE_THRESHOLD_RUST" | bc -l) )); then
+            echo "::warning::Coverage $COVERAGE% is below $COVERAGE_THRESHOLD_RUST% threshold"
+          fi
+      
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-coverage
+          path: lcov.info
+          retention-days: 7
+      
+      # Upload to Codecov for PR comments
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: lcov.info
+          flags: rust
+          fail_ci_if_error: false
+
+  # ============================================================
+  # Stage 2: Rust Tests with Race Detection
+  # ============================================================
+  rust-race-tests:
+    name: Rust Race Detection
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: nightly
+          components: miri
+      
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-miri-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+      
+      # ThreadSanitizer via Miri for select tests
+      # Note: Miri is slow, so we run only critical concurrent code
+      - name: Run Miri on Concurrent Code
+        run: |
+          cargo +nightly miri test --lib -- \
+            consensus:: storage:: scheduler:: \
+            2>&1 | head -1000 || true
+        continue-on-error: true
+        timeout-minutes: 30
+
+  # ============================================================
+  # Stage 3: Go Unit Tests
+  # ============================================================
+  go-unit-tests:
+    name: Go Unit Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      
+      - name: Download Dependencies
+        run: go mod download
+      
+      # Run tests with race detector and coverage
+      - name: Run Unit Tests
+        run: |
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+      
+      # Generate coverage report
+      - name: Generate Coverage Report
+        run: |
+          go tool cover -html=coverage.out -o coverage.html
+          go tool cover -func=coverage.out | tee coverage-summary.txt
+      
+      # Check coverage threshold
+      - name: Check Coverage Threshold
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+          echo "Go coverage: $COVERAGE%"
+          echo "GO_COVERAGE=$COVERAGE" >> $GITHUB_ENV
+          
+          if (( $(echo "$COVERAGE < $COVERAGE_THRESHOLD_GO" | bc -l) )); then
+            echo "::warning::Coverage $COVERAGE% is below $COVERAGE_THRESHOLD_GO% threshold"
+          fi
+      
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-coverage
+          path: |
+            coverage.out
+            coverage.html
+            coverage-summary.txt
+          retention-days: 7
+      
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.out
+          flags: go
+          fail_ci_if_error: false
+
+  # ============================================================
+  # Stage 4: Rust Integration Tests
+  # ============================================================
+  rust-integration-tests:
+    name: Rust Integration Tests
+    runs-on: ubuntu-latest
+    needs: rust-unit-tests
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        test-suite:
+          - name: bootstrap
+            timeout: 120
+          - name: task_pipeline
+            timeout: 180
+          - name: failure_recovery
+            timeout: 240
+          - name: multi_tenant
+            timeout: 180
+          - name: network_stress
+            timeout: 300
+          - name: security
+            timeout: 180
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-integ-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+      
+      # Run integration test suite
+      - name: Run ${{ matrix.test-suite.name }} Tests
+        timeout-minutes: ${{ matrix.test-suite.timeout }}
+        run: |
+          echo "=== Running ${{ matrix.test-suite.name }} integration tests ==="
+          cargo test --test ${{ matrix.test-suite.name }} -- --test-threads=2 2>&1 | tee test-output.txt
+          
+          # Check for test failures
+          if grep -q "test result: FAILED" test-output.txt; then
+            echo "::error::Integration test ${{ matrix.test-suite.name }} failed"
+            exit 1
+          fi
+      
+      - name: Upload Test Output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-${{ matrix.test-suite.name }}
+          path: test-output.txt
+          retention-days: 7
+
+  # ============================================================
+  # Stage 5: Go Integration Tests
+  # ============================================================
+  go-integration-tests:
+    name: Go Integration Tests
+    runs-on: ubuntu-latest
+    needs: go-unit-tests
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      
+      - name: Build Binary
+        run: make build
+      
+      # Start a local cluster for integration tests
+      - name: Start Test Cluster
+        run: |
+          chmod +x ./deploy/cluster.sh
+          ./deploy/cluster.sh start 3
+          
+          # Wait for cluster to be ready
+          for i in {1..30}; do
+            if curl -sf http://localhost:8080/health; then
+              echo "Cluster is ready"
+              break
+            fi
+            echo "Waiting for cluster... ($i/30)"
+            sleep 2
+          done
+      
+      # Run integration tests against live cluster
+      - name: Run Integration Tests
+        run: |
+          go test -v -tags=integration -timeout=10m ./tests/integration/...
+        continue-on-error: true
+      
+      # Collect cluster logs on failure
+      - name: Collect Cluster Logs
+        if: failure()
+        run: |
+          mkdir -p cluster-logs
+          cp ./data/cluster/logs/*.log cluster-logs/ 2>/dev/null || true
+      
+      - name: Upload Cluster Logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cluster-logs
+          path: cluster-logs/
+          retention-days: 7
+      
+      - name: Stop Cluster
+        if: always()
+        run: ./deploy/cluster.sh stop
+
+  # ============================================================
+  # Stage 6: Property-Based Tests (Extended)
+  # ============================================================
+  property-tests:
+    name: Property-Based Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.inputs.extended == 'true'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      
+      # Rust property tests with proptest
+      - name: Rust Property Tests
+        run: |
+          cargo test --features proptest -- \
+            --test-threads=4 \
+            proptest:: \
+            2>&1 | tee rust-proptest.txt
+        timeout-minutes: 30
+      
+      # Go property tests with increased iterations
+      - name: Go Property Tests
+        run: |
+          go test -v -tags=property -count=100 ./pkg/verification/... \
+            2>&1 | tee go-proptest.txt
+        timeout-minutes: 30
+      
+      - name: Upload Property Test Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: property-tests
+          path: |
+            rust-proptest.txt
+            go-proptest.txt
+          retention-days: 7
+
+  # ============================================================
+  # Stage 7: Fuzz Testing (Nightly)
+  # ============================================================
+  fuzz-tests:
+    name: Fuzz Testing
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: nightly
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      
+      # Rust fuzzing with cargo-fuzz
+      - name: Install cargo-fuzz
+        run: cargo +nightly install cargo-fuzz
+      
+      - name: Rust Fuzz Tests
+        run: |
+          # Run each fuzz target for 60 seconds
+          for target in $(cargo +nightly fuzz list 2>/dev/null || echo ""); do
+            echo "Fuzzing: $target"
+            timeout 60 cargo +nightly fuzz run $target -- -max_total_time=60 || true
+          done
+        continue-on-error: true
+        timeout-minutes: 30
+      
+      # Go fuzzing
+      - name: Go Fuzz Tests
+        run: |
+          # Run fuzz tests for 30 seconds each
+          for pkg in $(go list ./...); do
+            go test -fuzz=. -fuzztime=30s $pkg 2>/dev/null || true
+          done
+        continue-on-error: true
+        timeout-minutes: 30
+
+  # ============================================================
+  # Summary
+  # ============================================================
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [rust-unit-tests, go-unit-tests, rust-integration-tests, go-integration-tests]
+    if: always()
+    
+    steps:
+      - name: Download Coverage Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-coverage'
+          merge-multiple: true
+        continue-on-error: true
+      
+      - name: Generate Summary
+        run: |
+          echo "## Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Suite | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Rust Unit Tests | ${{ needs.rust-unit-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Go Unit Tests | ${{ needs.go-unit-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Rust Integration | ${{ needs.rust-integration-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Go Integration | ${{ needs.go-integration-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Coverage" >> $GITHUB_STEP_SUMMARY
+          if [ -f coverage-summary.txt ]; then
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -5 coverage-summary.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Check Overall Status
+        run: |
+          if [ "${{ needs.rust-unit-tests.result }}" != "success" ] || \
+             [ "${{ needs.go-unit-tests.result }}" != "success" ] || \
+             [ "${{ needs.rust-integration-tests.result }}" != "success" ]; then
+            echo "::error::Test suite failed"
+            exit 1
+          fi

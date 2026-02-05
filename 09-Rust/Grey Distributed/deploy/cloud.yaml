@@ -1,0 +1,328 @@
+# =============================================================================
+# Grey Distributed - Kubernetes Cloud Deployment
+# =============================================================================
+#
+# This Helm values file configures a production-ready Grey cluster on Kubernetes.
+#
+# Deployment Modes:
+#   1. Single-Region: 3-5 nodes in one region
+#   2. Multi-Region: Nodes across 3 regions for disaster recovery
+#   3. Edge + Cloud: Edge nodes with cloud coordination
+#
+# Prerequisites:
+#   - Kubernetes 1.25+
+#   - Helm 3.x
+#   - PersistentVolume provisioner (for storage)
+#   - LoadBalancer or Ingress controller
+#
+# Usage:
+#   helm install grey ./charts/grey -f cloud.yaml -n grey-system
+#   helm upgrade grey ./charts/grey -f cloud.yaml -n grey-system
+#
+# =============================================================================
+
+# Cluster Configuration
+cluster:
+  name: grey-production
+  
+  # Number of nodes (odd number for consensus)
+  replicaCount: 5
+  
+  # Node distribution strategy
+  topology:
+    # Ensure nodes are spread across zones
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: grey
+            topologyKey: topology.kubernetes.io/zone
+            
+  # Node selection
+  nodeSelector: {}
+  
+  # Tolerations for dedicated nodes
+  tolerations:
+    - key: "grey.systems/dedicated"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+
+# Container Images
+image:
+  repository: ghcr.io/grey-systems/grey-distributed
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+  
+imagePullSecrets: []
+
+# Resource Allocation
+resources:
+  # Production sizing
+  requests:
+    memory: "4Gi"
+    cpu: "2"
+  limits:
+    memory: "8Gi"
+    cpu: "4"
+    
+# Storage Configuration
+storage:
+  # Persistent volume for Raft log and data
+  data:
+    enabled: true
+    storageClass: "ssd"  # Use SSD for low latency
+    size: 100Gi
+    accessMode: ReadWriteOnce
+    
+  # Separate volume for WAL (recommended for production)
+  wal:
+    enabled: true
+    storageClass: "ssd"
+    size: 20Gi
+    accessMode: ReadWriteOnce
+
+# Network Configuration
+network:
+  # Service type for client access
+  service:
+    type: LoadBalancer
+    annotations:
+      # AWS NLB
+      # service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+      # GCP Internal LB
+      # cloud.google.com/load-balancer-type: "Internal"
+      
+  # HTTP API port
+  http:
+    port: 8080
+    nodePort: null
+    
+  # gRPC API port
+  grpc:
+    port: 9090
+    nodePort: null
+    
+  # Raft consensus port (internal)
+  raft:
+    port: 7070
+    
+  # Grey Protocol port
+  greyProtocol:
+    port: 9191
+
+# Ingress Configuration
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "16m"
+  hosts:
+    - host: grey.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: grey-tls
+      hosts:
+        - grey.example.com
+
+# Security Configuration
+security:
+  # Enable TLS for all connections
+  tls:
+    enabled: true
+    # Use cert-manager for certificate management
+    certManager:
+      enabled: true
+      issuer: letsencrypt-prod
+    # Or provide existing secret
+    existingSecret: ""
+    
+  # Pod security context
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+      
+  # Container security context
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: true
+
+# Grey Configuration
+grey:
+  config:
+    # Consensus settings
+    consensus:
+      electionTimeout: "1s"
+      heartbeatInterval: "100ms"
+      snapshotThreshold: 10000
+      preVote: true
+      
+    # Storage settings
+    storage:
+      replicationFactor: 3
+      readQuorum: 2
+      writeQuorum: 2
+      compactionInterval: "1h"
+      
+    # Scheduler settings
+    scheduler:
+      workers: 8
+      queueSize: 50000
+      
+    # Governance settings
+    governance:
+      quotasEnabled: true
+      throttlingEnabled: true
+      defaultRateLimit: 1000
+      
+    # Observability settings
+    observability:
+      logLevel: info
+      logFormat: json
+      
+    # Fault tolerance
+    faultTolerance:
+      phiThreshold: 8.0
+      minSamples: 50
+      selfHealing: true
+      autoReplace: true
+
+# Monitoring
+monitoring:
+  # Prometheus metrics
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      interval: 15s
+      scrapeTimeout: 10s
+      
+  # Grafana dashboards
+  dashboards:
+    enabled: true
+    
+  # Alerting rules
+  prometheusRule:
+    enabled: true
+    rules:
+      - alert: GreyNodeDown
+        expr: up{job="grey"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Grey node is down"
+          
+      - alert: GreyLeaderChanged
+        expr: increase(grey_consensus_leader_changes_total[5m]) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Frequent leader changes detected"
+          
+      - alert: GreyHighLatency
+        expr: histogram_quantile(0.99, grey_request_duration_seconds_bucket) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High request latency"
+
+# Autoscaling (for worker nodes in hybrid deployments)
+autoscaling:
+  enabled: false
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+  # Or use: maxUnavailable: 1
+
+# Service Account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Additional environment variables
+extraEnv:
+  - name: GOMAXPROCS
+    valueFrom:
+      resourceFieldRef:
+        resource: limits.cpu
+  - name: GOMEMLIMIT
+    valueFrom:
+      resourceFieldRef:
+        resource: limits.memory
+
+# Additional volumes and mounts
+extraVolumes: []
+extraVolumeMounts: []
+
+# Init containers
+initContainers: []
+
+# Sidecar containers
+sidecars: []
+
+# Pod annotations
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+
+# Pod labels
+podLabels: {}
+
+# Lifecycle hooks
+lifecycle:
+  preStop:
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - "sleep 10"  # Allow time for deregistration
+
+# Probes
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+  
+startupProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  failureThreshold: 30  # Allow 2.5 minutes for startup

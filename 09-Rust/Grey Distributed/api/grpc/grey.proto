@@ -1,0 +1,582 @@
+// =============================================================================
+// Grey Distributed — gRPC Protocol Definitions
+// =============================================================================
+//
+// High-performance gRPC API for Grey Distributed.
+//
+// Use Cases:
+// - Internal cluster communication (preferred)
+// - High-throughput external clients
+// - Streaming task updates
+//
+// Tradeoffs vs REST:
+// - Lower latency, higher throughput
+// - Bidirectional streaming
+// - Stronger typing via protobuf
+// - Requires HTTP/2 support
+//
+// =============================================================================
+
+syntax = "proto3";
+
+package grey.v1;
+
+option go_package = "github.com/grey-io/grey/api/grpc/v1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/duration.proto";
+
+// =============================================================================
+// Task Service
+// =============================================================================
+//
+// Primary service for task submission and management.
+// Supports both unary and streaming RPCs for flexibility.
+
+service TaskService {
+  // Submit a single task for execution.
+  // Returns immediately with task ID; use GetTaskStatus to poll.
+  rpc SubmitTask(SubmitTaskRequest) returns (TaskResponse);
+  
+  // Submit multiple tasks in a single request.
+  // More efficient than individual SubmitTask calls.
+  rpc SubmitBatch(SubmitBatchRequest) returns (BatchResponse);
+  
+  // Submit a pipeline of dependent tasks.
+  // Grey automatically handles DAG scheduling.
+  rpc SubmitPipeline(SubmitPipelineRequest) returns (PipelineResponse);
+  
+  // Get current status of a task.
+  rpc GetTaskStatus(GetTaskStatusRequest) returns (TaskResponse);
+  
+  // Cancel a pending or running task.
+  rpc CancelTask(CancelTaskRequest) returns (CancelTaskResponse);
+  
+  // List tasks with optional filtering.
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse);
+  
+  // Get proof artifact for a TEE task.
+  rpc GetTaskProof(GetTaskProofRequest) returns (TaskProofResponse);
+  
+  // Stream task status updates.
+  // Preferred over polling for real-time updates.
+  // Server pushes updates as task state changes.
+  rpc StreamTaskUpdates(StreamTasksRequest) returns (stream TaskUpdate);
+  
+  // Bidirectional streaming for high-throughput submission.
+  // Submit many tasks and receive results as they complete.
+  rpc StreamSubmit(stream SubmitTaskRequest) returns (stream TaskResponse);
+  
+  // Replay a previously executed task.
+  rpc ReplayTask(ReplayTaskRequest) returns (TaskResponse);
+}
+
+// =============================================================================
+// Cluster Service
+// =============================================================================
+//
+// Cluster health and resource monitoring.
+
+service ClusterService {
+  // Get overall cluster health.
+  rpc GetHealth(GetHealthRequest) returns (ClusterHealthResponse);
+  
+  // Get detailed information about all nodes.
+  rpc ListNodes(ListNodesRequest) returns (ListNodesResponse);
+  
+  // Get tenant resource usage and quotas.
+  rpc GetTenantUsage(GetTenantUsageRequest) returns (TenantUsageResponse);
+  
+  // Stream cluster events (node joins, failures, etc).
+  rpc StreamClusterEvents(StreamEventsRequest) returns (stream ClusterEvent);
+}
+
+// =============================================================================
+// Security Service
+// =============================================================================
+//
+// Attestation and tenant isolation.
+
+service SecurityService {
+  // Request fresh attestation from cluster.
+  rpc RequestAttestation(AttestationRequest) returns (AttestationResponse);
+  
+  // Verify attestation for a specific node.
+  rpc VerifyNode(VerifyNodeRequest) returns (AttestationResponse);
+  
+  // Get isolation status for current tenant.
+  rpc GetIsolationStatus(GetIsolationRequest) returns (IsolationStatusResponse);
+}
+
+// =============================================================================
+// Enums
+// =============================================================================
+
+enum TaskType {
+  TASK_TYPE_UNSPECIFIED = 0;
+  TASK_TYPE_STATELESS = 1;
+  TASK_TYPE_STATEFUL = 2;
+  TASK_TYPE_PIPELINE = 3;
+  TASK_TYPE_BATCH = 4;
+}
+
+enum TaskStatus {
+  TASK_STATUS_UNSPECIFIED = 0;
+  TASK_STATUS_PENDING = 1;
+  TASK_STATUS_QUEUED = 2;
+  TASK_STATUS_RUNNING = 3;
+  TASK_STATUS_COMPLETED = 4;
+  TASK_STATUS_FAILED = 5;
+  TASK_STATUS_CANCELLED = 6;
+  TASK_STATUS_TIMEOUT = 7;
+}
+
+enum Priority {
+  PRIORITY_UNSPECIFIED = 0;
+  PRIORITY_LOW = 1;
+  PRIORITY_NORMAL = 5;
+  PRIORITY_HIGH = 8;
+  PRIORITY_CRITICAL = 10;
+}
+
+enum NodeRole {
+  NODE_ROLE_UNSPECIFIED = 0;
+  NODE_ROLE_COORDINATOR = 1;
+  NODE_ROLE_WORKER = 2;
+  NODE_ROLE_OBSERVER = 3;
+}
+
+enum NodeStatus {
+  NODE_STATUS_UNSPECIFIED = 0;
+  NODE_STATUS_ACTIVE = 1;
+  NODE_STATUS_DRAINING = 2;
+  NODE_STATUS_QUARANTINED = 3;
+  NODE_STATUS_OFFLINE = 4;
+}
+
+enum TEEPlatform {
+  TEE_PLATFORM_UNSPECIFIED = 0;
+  TEE_PLATFORM_NONE = 1;
+  TEE_PLATFORM_SGX = 2;
+  TEE_PLATFORM_SEV = 3;
+  TEE_PLATFORM_TDX = 4;
+}
+
+enum IsolationLevel {
+  ISOLATION_LEVEL_UNSPECIFIED = 0;
+  ISOLATION_LEVEL_NAMESPACE = 1;
+  ISOLATION_LEVEL_ENCLAVE = 2;
+  ISOLATION_LEVEL_VM = 3;
+}
+
+enum ClusterEventType {
+  CLUSTER_EVENT_UNSPECIFIED = 0;
+  CLUSTER_EVENT_NODE_JOINED = 1;
+  CLUSTER_EVENT_NODE_LEFT = 2;
+  CLUSTER_EVENT_NODE_QUARANTINED = 3;
+  CLUSTER_EVENT_LEADER_CHANGED = 4;
+  CLUSTER_EVENT_SCALE_UP = 5;
+  CLUSTER_EVENT_SCALE_DOWN = 6;
+}
+
+// =============================================================================
+// Task Messages
+// =============================================================================
+
+message SubmitTaskRequest {
+  TaskType type = 1;
+  
+  // Task payload - using Struct for flexibility.
+  // In production, prefer typed messages for schema enforcement.
+  google.protobuf.Struct payload = 2;
+  
+  Priority priority = 3;
+  
+  // Maximum execution time.
+  google.protobuf.Duration timeout = 4;
+  
+  // Unique key for request deduplication.
+  // If provided, duplicate requests return existing task.
+  string idempotency_key = 5;
+  
+  // Task IDs that must complete before this task runs.
+  repeated string dependencies = 6;
+  
+  // Key-value labels for organization and filtering.
+  map<string, string> labels = 7;
+  
+  // Require TEE (enclave) execution.
+  bool tee_required = 8;
+  
+  // Tenant ID (set by gateway, not client).
+  string tenant_id = 100;
+}
+
+message TaskResponse {
+  string task_id = 1;
+  TaskStatus status = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp updated_at = 4;
+  
+  // Result data (populated when completed).
+  google.protobuf.Struct result = 5;
+  
+  // Error message (populated when failed).
+  string error = 6;
+  
+  // Hex-encoded proof bytes (TEE tasks only).
+  bytes proof_artifact = 7;
+  
+  // Node that executed/is executing the task.
+  string execution_node = 8;
+  
+  // Number of retry attempts.
+  int32 retry_count = 9;
+  
+  // Progress percentage (0-100) for long-running tasks.
+  int32 progress_percent = 10;
+}
+
+message SubmitBatchRequest {
+  repeated SubmitTaskRequest tasks = 1;
+  
+  // Wait for all tasks to complete before returning.
+  bool wait = 2;
+  
+  // Maximum time to wait (only if wait=true).
+  google.protobuf.Duration wait_timeout = 3;
+}
+
+message BatchResponse {
+  string batch_id = 1;
+  repeated TaskResponse results = 2;
+  int32 total = 3;
+  int32 succeeded = 4;
+  int32 failed = 5;
+}
+
+message PipelineStage {
+  // Stage ID (unique within pipeline).
+  string id = 1;
+  TaskType type = 2;
+  google.protobuf.Struct payload = 3;
+  
+  // Stage IDs this stage depends on.
+  repeated string depends_on = 4;
+  
+  // Retry configuration for this stage.
+  RetryConfig retry_config = 5;
+}
+
+message RetryConfig {
+  int32 max_attempts = 1;
+  google.protobuf.Duration initial_backoff = 2;
+  google.protobuf.Duration max_backoff = 3;
+  float backoff_multiplier = 4;
+  
+  // Only retry on these error codes (empty = retry all).
+  repeated string retryable_errors = 5;
+}
+
+message SubmitPipelineRequest {
+  string name = 1;
+  repeated PipelineStage stages = 2;
+  
+  // Pipeline-level labels.
+  map<string, string> labels = 3;
+  
+  // Fail entire pipeline on first stage failure.
+  bool fail_fast = 4;
+}
+
+message PipelineResponse {
+  string pipeline_id = 1;
+  repeated TaskResponse stage_results = 2;
+  TaskStatus overall_status = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp completed_at = 5;
+}
+
+message GetTaskStatusRequest {
+  string task_id = 1;
+  
+  // Include full result in response (may be large).
+  bool include_result = 2;
+}
+
+message CancelTaskRequest {
+  string task_id = 1;
+  
+  // Reason for cancellation (logged).
+  string reason = 2;
+}
+
+message CancelTaskResponse {
+  bool cancelled = 1;
+  string message = 2;
+  TaskStatus final_status = 3;
+}
+
+message ListTasksRequest {
+  // Filter by status.
+  repeated TaskStatus status_filter = 1;
+  
+  // Filter by labels (all must match).
+  map<string, string> label_filter = 2;
+  
+  // Only tasks created after this time.
+  google.protobuf.Timestamp since = 3;
+  
+  // Only tasks created before this time.
+  google.protobuf.Timestamp until = 4;
+  
+  int32 limit = 5;
+  int32 offset = 6;
+}
+
+message ListTasksResponse {
+  repeated TaskResponse tasks = 1;
+  int32 total = 2;
+  int32 limit = 3;
+  int32 offset = 4;
+}
+
+message GetTaskProofRequest {
+  string task_id = 1;
+}
+
+message TaskProofResponse {
+  string task_id = 1;
+  bytes proof = 2;
+  string algorithm = 3;
+  bool verified = 4;
+  TEEPlatform platform = 5;
+  string mrenclave = 6;
+  google.protobuf.Timestamp generated_at = 7;
+}
+
+message StreamTasksRequest {
+  // Task IDs to watch. Empty = watch all for tenant.
+  repeated string task_ids = 1;
+  
+  // Only stream updates for these statuses.
+  repeated TaskStatus status_filter = 2;
+  
+  // Include initial status for each task.
+  bool send_initial_status = 3;
+}
+
+message TaskUpdate {
+  string task_id = 1;
+  TaskStatus previous_status = 2;
+  TaskStatus current_status = 3;
+  google.protobuf.Timestamp timestamp = 4;
+  
+  // Full task response (when completed/failed).
+  TaskResponse task = 5;
+}
+
+message ReplayTaskRequest {
+  // Original task to replay.
+  string original_task_id = 1;
+  
+  // Point-in-time state reconstruction.
+  google.protobuf.Timestamp at_timestamp = 2;
+  
+  // Override original payload.
+  google.protobuf.Struct payload_override = 3;
+}
+
+// =============================================================================
+// Cluster Messages
+// =============================================================================
+
+message GetHealthRequest {}
+
+message ClusterHealthResponse {
+  bool healthy = 1;
+  
+  NodeCounts nodes = 2;
+  ResourceUtilization utilization = 3;
+  QueueMetrics queue = 4;
+  ThroughputMetrics throughput = 5;
+  ConsensusInfo consensus = 6;
+}
+
+message NodeCounts {
+  int32 total = 1;
+  int32 active = 2;
+  int32 draining = 3;
+  int32 quarantined = 4;
+  int32 offline = 5;
+}
+
+message ResourceUtilization {
+  float cpu_percent = 1;
+  float memory_percent = 2;
+  float disk_percent = 3;
+  float network_percent = 4;
+}
+
+message QueueMetrics {
+  int64 depth = 1;
+  google.protobuf.Duration oldest_task_age = 2;
+  int64 pending_by_priority_low = 3;
+  int64 pending_by_priority_normal = 4;
+  int64 pending_by_priority_high = 5;
+  int64 pending_by_priority_critical = 6;
+}
+
+message ThroughputMetrics {
+  double tasks_per_second = 1;
+  int64 tasks_completed_1h = 2;
+  int64 tasks_failed_1h = 3;
+  google.protobuf.Duration avg_latency_1h = 4;
+  google.protobuf.Duration p99_latency_1h = 5;
+}
+
+message ConsensusInfo {
+  string leader = 1;
+  int64 term = 2;
+  bool quorum_satisfied = 3;
+  int32 quorum_size = 4;
+  int32 members = 5;
+}
+
+message ListNodesRequest {}
+
+message ListNodesResponse {
+  repeated ClusterNode nodes = 1;
+}
+
+message ClusterNode {
+  string node_id = 1;
+  NodeRole role = 2;
+  NodeStatus status = 3;
+  string address = 4;
+  
+  // Resource capacity.
+  int32 cpu_cores = 5;
+  double memory_gb = 6;
+  double disk_gb = 7;
+  
+  // Current load.
+  int32 tasks_running = 8;
+  int32 tasks_queued = 9;
+  float cpu_usage = 10;
+  float memory_usage = 11;
+  
+  google.protobuf.Duration uptime = 12;
+  bool tee_enabled = 13;
+  TEEPlatform tee_platform = 14;
+  
+  map<string, string> labels = 15;
+}
+
+message GetTenantUsageRequest {}
+
+message TenantUsageResponse {
+  string tenant_id = 1;
+  
+  QuotaStatus cpu_cores = 2;
+  QuotaStatus memory_gb = 3;
+  QuotaStatus max_concurrent_tasks = 4;
+  QuotaStatus storage_gb = 5;
+  
+  bool throttled = 6;
+  google.protobuf.Timestamp throttle_expires = 7;
+  
+  int64 tasks_submitted_24h = 8;
+  int64 tasks_completed_24h = 9;
+  int64 tasks_failed_24h = 10;
+}
+
+message QuotaStatus {
+  double limit = 1;
+  double used = 2;
+  double reserved = 3;
+}
+
+message StreamEventsRequest {
+  // Event types to receive. Empty = all events.
+  repeated ClusterEventType event_types = 1;
+}
+
+message ClusterEvent {
+  ClusterEventType type = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  
+  // Affected node (for node events).
+  string node_id = 3;
+  
+  // Event-specific details.
+  map<string, string> details = 4;
+}
+
+// =============================================================================
+// Security Messages
+// =============================================================================
+
+message AttestationRequest {
+  // Request attestation from specific node (optional).
+  string node_id = 1;
+  
+  // Nonce for replay protection.
+  bytes nonce = 2;
+}
+
+message AttestationResponse {
+  bool valid = 1;
+  string node_id = 2;
+  TEEPlatform platform = 3;
+  
+  // SGX measurements.
+  string mrenclave = 4;
+  string mrsigner = 5;
+  
+  // Raw attestation quote.
+  bytes quote = 6;
+  
+  google.protobuf.Timestamp verified_at = 7;
+  
+  // Certificate chain for verification.
+  repeated bytes certificate_chain = 8;
+}
+
+message VerifyNodeRequest {
+  string node_id = 1;
+  
+  // Expected measurements (optional).
+  string expected_mrenclave = 2;
+  string expected_mrsigner = 3;
+}
+
+message GetIsolationRequest {}
+
+message IsolationStatusResponse {
+  string tenant_id = 1;
+  IsolationLevel level = 2;
+  
+  IsolationBoundaries boundaries = 3;
+  
+  // Recent violations (if any).
+  repeated IsolationViolation violations = 4;
+  
+  google.protobuf.Timestamp last_verified = 5;
+}
+
+message IsolationBoundaries {
+  bool network = 1;
+  bool storage = 2;
+  bool compute = 3;
+  bool memory = 4;
+}
+
+message IsolationViolation {
+  google.protobuf.Timestamp timestamp = 1;
+  string type = 2;
+  string severity = 3;
+  string description = 4;
+  string remediation = 5;
+}

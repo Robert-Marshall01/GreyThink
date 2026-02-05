@@ -1,0 +1,492 @@
+# Grey Distributed — Global Resource Sharing
+# Cross-sovereign resource allocation and sharing protocols
+
+version: "1.0.0"
+
+# =============================================================================
+# OVERVIEW
+# =============================================================================
+# This configuration defines how computational, storage, and network resources
+# are shared across sovereign regions for civilization-scale operations.
+# 
+# Key Principles:
+# - Sovereignty First: Regions control their resources
+# - Fair Exchange: Market-based pricing with public good subsidies
+# - Resilience: No single region dependency for critical functions
+# - Transparency: All allocations are auditable
+
+metadata:
+  name: "Grey Distributed Global Resource Sharing"
+  description: "Resource sharing framework for civilization-scale deployment"
+  effective_date: "2026-01-01"
+  review_cycle: "quarterly"
+  governance_authority: "Grey Foundation Council"
+
+# =============================================================================
+# RESOURCE CATEGORIES
+# =============================================================================
+
+resource_categories:
+  compute:
+    description: "Processing capacity for consensus, validation, and applications"
+    units: "vcpu-hours"
+    minimum_contribution: 1000  # Per region per day
+    pricing_model: "dynamic_auction"
+    
+  storage:
+    description: "Persistent data storage capacity"
+    units: "TB-months"
+    minimum_contribution: 100
+    pricing_model: "tiered_pricing"
+    tiers:
+      - name: "hot"
+        access_time_ms: 10
+        price_multiplier: 3.0
+      - name: "warm"
+        access_time_ms: 100
+        price_multiplier: 1.0
+      - name: "cold"
+        access_time_ms: 3600000  # 1 hour
+        price_multiplier: 0.2
+        
+  bandwidth:
+    description: "Network capacity for cross-region communication"
+    units: "GB-transferred"
+    minimum_contribution: 10000
+    pricing_model: "usage_based"
+    
+  consensus_slots:
+    description: "Validator positions in global consensus"
+    units: "slots"
+    minimum_contribution: 3
+    pricing_model: "stake_weighted"
+    
+  oracle_feeds:
+    description: "Real-world data feeds (energy prices, FX rates, etc.)"
+    units: "feeds"
+    minimum_contribution: 5
+    pricing_model: "subscription"
+
+# =============================================================================
+# SOVEREIGN REGIONS
+# =============================================================================
+
+regions:
+  north_america:
+    name: "North American Federation"
+    member_nations: ["US", "CA", "MX"]
+    geo_zone: "north_america"
+    sovereignty_level: "bloc"
+    timezone_range: ["UTC-10", "UTC-4"]
+    
+    resource_commitments:
+      compute:
+        guaranteed: 50000
+        burstable: 200000
+        priority_sectors: ["energy", "finance"]
+        
+      storage:
+        guaranteed: 5000
+        data_residency: "strict"  # Data stays in region
+        replication_allowed_to: ["western_europe"]
+        
+      bandwidth:
+        guaranteed: 100000
+        peering_agreements: ["western_europe", "east_asia"]
+        
+      consensus_slots:
+        guaranteed: 15
+        reserve: 5  # For emergency activation
+        
+    resource_pricing:
+      currency: "GREY"  # Native token
+      compute_base_rate: 0.01  # per vcpu-hour
+      storage_base_rate: 0.001  # per TB-month
+      bandwidth_base_rate: 0.0001  # per GB
+      
+    data_sovereignty:
+      export_allowed: ["anonymized", "aggregated"]
+      export_prohibited: ["pii", "financial_raw", "health"]
+      cross_border_processing: "with_consent"
+      
+  western_europe:
+    name: "European Digital Zone"
+    member_nations: ["EU", "UK", "CH", "NO"]
+    geo_zone: "western_europe"
+    sovereignty_level: "bloc"
+    timezone_range: ["UTC-1", "UTC+2"]
+    
+    resource_commitments:
+      compute:
+        guaranteed: 45000
+        burstable: 180000
+        priority_sectors: ["finance", "communications"]
+        
+      storage:
+        guaranteed: 4500
+        data_residency: "gdpr_compliant"
+        replication_allowed_to: ["north_america"]
+        
+      bandwidth:
+        guaranteed: 120000
+        peering_agreements: ["north_america", "middle_east", "africa"]
+        
+      consensus_slots:
+        guaranteed: 12
+        reserve: 4
+        
+    resource_pricing:
+      currency: "GREY"
+      compute_base_rate: 0.012
+      storage_base_rate: 0.0012
+      bandwidth_base_rate: 0.00012
+      
+    data_sovereignty:
+      export_allowed: ["anonymized", "with_dpa"]
+      export_prohibited: ["pii_without_consent"]
+      cross_border_processing: "adequacy_decision_required"
+      right_to_deletion: true
+      data_portability: true
+      
+  east_asia:
+    name: "East Asian Cooperation Zone"
+    member_nations: ["JP", "KR", "TW", "SG"]
+    geo_zone: "east_asia"
+    sovereignty_level: "bloc"
+    timezone_range: ["UTC+8", "UTC+9"]
+    
+    resource_commitments:
+      compute:
+        guaranteed: 60000
+        burstable: 250000
+        priority_sectors: ["logistics", "communications"]
+        
+      storage:
+        guaranteed: 6000
+        data_residency: "strict"
+        replication_allowed_to: ["southeast_asia"]
+        
+      bandwidth:
+        guaranteed: 150000
+        peering_agreements: ["north_america", "southeast_asia", "oceania"]
+        
+      consensus_slots:
+        guaranteed: 18
+        reserve: 6
+        
+    resource_pricing:
+      currency: "GREY"
+      compute_base_rate: 0.009
+      storage_base_rate: 0.0009
+      bandwidth_base_rate: 0.00009
+      
+  south_asia:
+    name: "South Asian Grid"
+    member_nations: ["IN", "BD", "LK", "NP"]
+    geo_zone: "south_asia"
+    sovereignty_level: "national_varied"
+    timezone_range: ["UTC+5", "UTC+6"]
+    
+    resource_commitments:
+      compute:
+        guaranteed: 40000
+        burstable: 150000
+        priority_sectors: ["energy", "logistics"]
+        
+      storage:
+        guaranteed: 3500
+        data_residency: "national_preference"
+        replication_allowed_to: ["middle_east", "southeast_asia"]
+        
+      bandwidth:
+        guaranteed: 80000
+        peering_agreements: ["east_asia", "middle_east"]
+        
+      consensus_slots:
+        guaranteed: 10
+        reserve: 3
+        
+  middle_east:
+    name: "Middle East Digital Hub"
+    member_nations: ["AE", "SA", "QA", "IL"]
+    geo_zone: "middle_east"
+    sovereignty_level: "national_varied"
+    timezone_range: ["UTC+2", "UTC+4"]
+    
+    resource_commitments:
+      compute:
+        guaranteed: 30000
+        burstable: 120000
+        priority_sectors: ["energy", "finance"]
+        
+      storage:
+        guaranteed: 2500
+        data_residency: "strict"
+        replication_allowed_to: ["western_europe"]
+        
+      bandwidth:
+        guaranteed: 60000
+        peering_agreements: ["western_europe", "south_asia", "africa"]
+        
+      consensus_slots:
+        guaranteed: 8
+        reserve: 2
+        
+  africa:
+    name: "African Digital Union"
+    member_nations: ["ZA", "NG", "KE", "EG", "MA"]
+    geo_zone: "africa"
+    sovereignty_level: "national_varied"
+    timezone_range: ["UTC-1", "UTC+3"]
+    
+    resource_commitments:
+      compute:
+        guaranteed: 25000
+        burstable: 100000
+        priority_sectors: ["communications", "logistics"]
+        
+      storage:
+        guaranteed: 2000
+        data_residency: "national_preference"
+        replication_allowed_to: ["western_europe", "middle_east"]
+        
+      bandwidth:
+        guaranteed: 50000
+        peering_agreements: ["western_europe", "middle_east"]
+        
+      consensus_slots:
+        guaranteed: 8
+        reserve: 2
+        
+    # Special provisions for developing regions
+    subsidies:
+      compute_discount: 0.4  # 40% discount
+      bandwidth_discount: 0.5  # 50% discount
+      capacity_building: true
+
+# =============================================================================
+# RESOURCE ALLOCATION RULES
+# =============================================================================
+
+allocation_rules:
+  # Fairness constraints
+  fairness:
+    max_single_region_share: 0.25  # No region uses >25% of global resources
+    min_region_access: 0.05  # Every region guaranteed 5% access
+    priority_emergency: true  # Emergency requests bypass normal allocation
+    
+  # Sector-specific allocation
+  sector_priorities:
+    energy:
+      reserve_percentage: 20
+      min_regions: 5
+      latency_requirement_ms: 100
+      description: "Grid coordination requires guaranteed low-latency access"
+      
+    finance:
+      reserve_percentage: 15
+      min_regions: 5
+      latency_requirement_ms: 50
+      description: "Financial settlement requires sub-50ms latency"
+      
+    communications:
+      reserve_percentage: 15
+      min_regions: 8
+      latency_requirement_ms: 20
+      description: "Internet backbone requires lowest latency"
+      
+    logistics:
+      reserve_percentage: 10
+      min_regions: 6
+      latency_requirement_ms: 500
+      description: "Supply chain can tolerate higher latency"
+      
+  # Emergency allocation
+  emergency:
+    trigger_conditions:
+      - "natural_disaster"
+      - "cyber_attack"
+      - "infrastructure_failure"
+      - "pandemic_response"
+    resource_multiplier: 3.0  # 3x normal allocation
+    cost_model: "deferred_payment"  # Pay after crisis
+    approval_required: false  # Automatic for qualifying events
+
+# =============================================================================
+# PRICING AND SETTLEMENT
+# =============================================================================
+
+pricing:
+  base_currency: "GREY"
+  
+  # Dynamic pricing based on utilization
+  dynamic_pricing:
+    enabled: true
+    min_price_multiplier: 0.5
+    max_price_multiplier: 5.0
+    
+    utilization_tiers:
+      - utilization_range: [0, 0.3]
+        multiplier: 0.5
+      - utilization_range: [0.3, 0.6]
+        multiplier: 1.0
+      - utilization_range: [0.6, 0.8]
+        multiplier: 2.0
+      - utilization_range: [0.8, 0.95]
+        multiplier: 3.5
+      - utilization_range: [0.95, 1.0]
+        multiplier: 5.0
+        
+  # Cross-region pricing adjustments
+  cross_region_fees:
+    same_geo_zone: 1.0
+    adjacent_zone: 1.3
+    distant_zone: 1.8
+    
+  # Settlement
+  settlement:
+    frequency: "hourly"
+    netting: true  # Net cross-region payments
+    dispute_resolution: "arbitration_council"
+    payment_delay_tolerance_hours: 24
+    
+  # Public goods subsidy
+  public_goods:
+    enabled: true
+    fund_percentage: 5  # 5% of all transactions
+    eligible_uses:
+      - "disaster_response"
+      - "research_commons"
+      - "developing_region_access"
+      - "security_updates"
+
+# =============================================================================
+# SHARING PROTOCOLS
+# =============================================================================
+
+sharing_protocols:
+  # Request-Grant protocol
+  request_grant:
+    description: "Standard protocol for resource requests"
+    steps:
+      - "requester_submits_request"
+      - "local_region_preapproval"
+      - "target_region_evaluation"
+      - "price_negotiation"
+      - "allocation_confirmed"
+      - "resources_provisioned"
+      - "usage_metering"
+      - "settlement"
+    timeout_seconds: 60
+    
+  # Spot market
+  spot_market:
+    description: "Real-time bidding for excess capacity"
+    enabled: true
+    auction_interval_seconds: 10
+    min_bid_increment: 0.001
+    max_allocation_percentage: 30  # Max 30% via spot
+    
+  # Reserved capacity
+  reservation:
+    description: "Long-term capacity reservations"
+    min_duration_days: 30
+    max_duration_days: 365
+    discount_tiers:
+      - duration_months: 1
+        discount: 0.0
+      - duration_months: 3
+        discount: 0.1
+      - duration_months: 6
+        discount: 0.2
+      - duration_months: 12
+        discount: 0.35
+        
+  # Mutual aid
+  mutual_aid:
+    description: "Emergency resource sharing without immediate payment"
+    enabled: true
+    max_duration_hours: 72
+    repayment_deadline_days: 30
+    interest_rate: 0.0  # Interest-free for emergencies
+
+# =============================================================================
+# MONITORING AND COMPLIANCE
+# =============================================================================
+
+monitoring:
+  metrics:
+    - name: "resource_utilization"
+      description: "Current utilization by region and type"
+      granularity: "1m"
+      retention_days: 90
+      
+    - name: "cross_region_latency"
+      description: "Latency between regions"
+      granularity: "10s"
+      retention_days: 30
+      
+    - name: "allocation_fairness"
+      description: "Gini coefficient of resource distribution"
+      granularity: "1h"
+      retention_days: 365
+      
+    - name: "settlement_balance"
+      description: "Outstanding balances between regions"
+      granularity: "1h"
+      retention_days: 365
+      
+  alerts:
+    - name: "capacity_exhaustion"
+      condition: "utilization > 0.95"
+      severity: "critical"
+      notification: ["ops_team", "region_admin"]
+      
+    - name: "settlement_delay"
+      condition: "outstanding_balance_hours > 48"
+      severity: "warning"
+      notification: ["finance_council"]
+      
+    - name: "fairness_violation"
+      condition: "region_share > max_single_region_share"
+      severity: "warning"
+      notification: ["governance_council"]
+
+compliance:
+  audit:
+    frequency: "monthly"
+    auditor: "independent_council"
+    public_report: true
+    
+  sovereignty_verification:
+    enabled: true
+    verification_method: "attestation_chain"
+    violation_penalty: "temporary_suspension"
+    
+  dispute_resolution:
+    first_tier: "automated_arbitration"
+    second_tier: "regional_council"
+    final_tier: "foundation_council"
+    max_resolution_days: 30
+
+# =============================================================================
+# VERSIONING AND GOVERNANCE
+# =============================================================================
+
+governance:
+  amendment_process:
+    proposal_required_signers: 3  # From different regions
+    voting_period_days: 14
+    approval_threshold: 0.67
+    implementation_delay_days: 30
+    
+  emergency_amendments:
+    enabled: true
+    approval_threshold: 0.80
+    implementation_delay_days: 7
+    scope: "security_only"
+    
+  review_cycle:
+    frequency: "quarterly"
+    participants: ["all_region_representatives"]
+    required_quorum: 0.60

@@ -1,0 +1,503 @@
+{
+  "__metadata": {
+    "title": "Grey Distributed — Cost Economics Dashboard",
+    "description": "Cloud cost monitoring, spot instance economics, and resource utilization efficiency",
+    "version": "1.0.0",
+    "refresh_interval": "5m"
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": "Prometheus",
+        "enable": true,
+        "expr": "grey_scaling_event_total",
+        "iconColor": "#F2495C",
+        "name": "Scaling Events",
+        "tagKeys": "event_type",
+        "titleFormat": "Scaling: {{ event_type }}"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "icon": "external link",
+      "tags": ["grey", "costs"],
+      "title": "AWS Cost Explorer",
+      "type": "link",
+      "url": "https://console.aws.amazon.com/cost-management/home"
+    }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "Cost Overview",
+      "type": "row"
+    },
+    {
+      "id": 1,
+      "title": "Estimated Hourly Cost",
+      "description": "Real-time cost estimation based on running instances",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(grey_node_cost_per_hour)",
+          "legendFormat": "Hourly Cost"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 100 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "justifyMode": "auto",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 2,
+      "title": "Daily Projected Cost",
+      "description": "24-hour cost projection based on current usage",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(grey_node_cost_per_hour) * 24",
+          "legendFormat": "Daily Cost"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1000 },
+              { "color": "red", "value": 2000 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Monthly Projected Cost",
+      "description": "30-day projection at current usage levels",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(grey_node_cost_per_hour) * 24 * 30",
+          "legendFormat": "Monthly Cost"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 30000 },
+              { "color": "red", "value": 60000 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Cost Savings from Spot",
+      "description": "Savings achieved by using spot instances",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "(sum(grey_node_ondemand_price) - sum(grey_node_cost_per_hour)) / sum(grey_node_ondemand_price) * 100",
+          "legendFormat": "Savings %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 30 },
+              { "color": "green", "value": 50 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 101,
+      "title": "Instance Economics",
+      "type": "row"
+    },
+    {
+      "id": 5,
+      "title": "Instance Type Distribution",
+      "description": "Breakdown of running instances by type",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 6 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "count by (instance_type) (grey_node_info)",
+          "legendFormat": "{{ instance_type }}"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right" },
+        "pieType": "pie",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Spot vs On-Demand Distribution",
+      "description": "Capacity type breakdown",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 6 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "count by (capacity_type) (grey_node_info)",
+          "legendFormat": "{{ capacity_type }}"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right" },
+        "pieType": "donut"
+      },
+      "fieldConfig": {
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "spot" }, "properties": [{ "id": "color", "value": "#73BF69" }] },
+          { "matcher": { "id": "byName", "options": "on-demand" }, "properties": [{ "id": "color", "value": "#F2495C" }] }
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "title": "Cost by Component",
+      "description": "Cost breakdown by system component",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 6 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum by (component) (grey_node_cost_per_hour)",
+          "legendFormat": "{{ component }}"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right" },
+        "pieType": "pie"
+      }
+    },
+    {
+      "id": 8,
+      "title": "Cost Over Time",
+      "description": "Historical cost tracking",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 14 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(grey_node_cost_per_hour)",
+          "legendFormat": "Actual Cost"
+        },
+        {
+          "expr": "sum(grey_node_ondemand_price)",
+          "legendFormat": "On-Demand Equivalent"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": { "fillOpacity": 10, "lineWidth": 2 }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
+      "id": 102,
+      "title": "Spot Instance Health",
+      "type": "row"
+    },
+    {
+      "id": 9,
+      "title": "Spot Interruption Rate",
+      "description": "Rolling 24h spot termination rate",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 23 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(grey_spot_interruption_total[24h]) * 3600",
+          "legendFormat": "Interruptions/hr"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 10,
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 2 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Spot Availability Score",
+      "description": "Current spot capacity availability",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 23 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "grey_spot_availability_score",
+          "legendFormat": "Availability"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "green", "value": 80 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 11,
+      "title": "Warm Pool Utilization",
+      "description": "Pre-warmed instances available for fast scale-out",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 23 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "grey_warm_pool_instances_available",
+          "legendFormat": "Available"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "green", "value": 10 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 12,
+      "title": "Time to Recover from Interruption",
+      "description": "Average time to replace interrupted instances",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 23 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, grey_spot_recovery_duration_seconds_bucket)",
+          "legendFormat": "P95 Recovery"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 120 },
+              { "color": "red", "value": 300 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 29 },
+      "id": 103,
+      "title": "Resource Efficiency",
+      "type": "row"
+    },
+    {
+      "id": 13,
+      "title": "CPU Utilization Efficiency",
+      "description": "Actual CPU usage vs allocated",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 30 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "avg(grey_cpu_utilization_percent) by (component)",
+          "legendFormat": "{{ component }}"
+        },
+        {
+          "expr": "70",
+          "legendFormat": "Target (70%)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "Memory Utilization Efficiency",
+      "description": "Actual memory usage vs allocated",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "avg(grey_memory_utilization_percent) by (component)",
+          "legendFormat": "{{ component }}"
+        },
+        {
+          "expr": "80",
+          "legendFormat": "Target (80%)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        }
+      }
+    },
+    {
+      "id": 15,
+      "title": "Cost per Task Completed",
+      "description": "Economic efficiency metric: dollars per 1000 tasks",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 38 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(grey_node_cost_per_hour) / (rate(grey_tasks_completed_total[1h]) * 1000 + 0.001) * 1000",
+          "legendFormat": "$/1000 tasks"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.10 },
+              { "color": "red", "value": 0.50 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 16,
+      "title": "Storage Cost Breakdown",
+      "description": "EBS and storage costs",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 38 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum by (storage_class) (grey_storage_cost_per_hour)",
+          "legendFormat": "{{ storage_class }}"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["grey", "costs", "economics", "production"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "grey-production", "value": "grey-production" },
+        "datasource": "Prometheus",
+        "definition": "label_values(grey_node_info, namespace)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Namespace",
+        "multi": false,
+        "name": "namespace",
+        "query": "label_values(grey_node_info, namespace)",
+        "refresh": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-24h", "to": "now" },
+  "timezone": "browser",
+  "title": "Grey — Cost Economics",
+  "uid": "grey-cost-economics",
+  "version": 1,
+  "weekStart": ""
+}

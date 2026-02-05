@@ -1,0 +1,336 @@
+{
+  "dashboard": {
+    "title": "Grey Distributed — Mars Colony Operations",
+    "description": "Real-time monitoring of Mars colony clusters, Earth-Mars synchronization, and autonomous operations",
+    "refresh_interval_seconds": 300,
+    "tags": ["cosmic", "mars", "interplanetary"]
+  },
+  
+  "sections": [
+    {
+      "title": "Colony Overview",
+      "layout": "grid-4",
+      "panels": [
+        {
+          "title": "Active Colonies",
+          "type": "stat",
+          "metric": "mars.colonies.active.count",
+          "format": "integer",
+          "thresholds": {
+            "critical": 0,
+            "warning": 1,
+            "normal": 2
+          }
+        },
+        {
+          "title": "Total Nodes",
+          "type": "stat",
+          "metric": "mars.nodes.total.count",
+          "format": "integer"
+        },
+        {
+          "title": "Healthy Nodes",
+          "type": "gauge",
+          "metric": "mars.nodes.healthy.percentage",
+          "format": "percent",
+          "thresholds": {
+            "critical": 0.5,
+            "warning": 0.8,
+            "normal": 0.95
+          }
+        },
+        {
+          "title": "Current Orbital Position",
+          "type": "text",
+          "metric": "mars.orbital.position",
+          "display_values": {
+            "opposition": "Opposition (4 min)",
+            "quadrature": "Quadrature (12 min)",
+            "far_side": "Far Side (24 min)",
+            "conjunction": "CONJUNCTION (NO COMMS)"
+          }
+        }
+      ]
+    },
+    
+    {
+      "title": "Earth-Mars Communication",
+      "layout": "grid-2",
+      "panels": [
+        {
+          "title": "Current Earth Latency",
+          "type": "timeseries",
+          "metric": "mars.earth.latency.one_way.seconds",
+          "unit": "seconds",
+          "time_range": "30d",
+          "annotations": [
+            { "value": 240, "label": "Opposition (best)" },
+            { "value": 1440, "label": "Conjunction (worst)" }
+          ]
+        },
+        {
+          "title": "Communication Status",
+          "type": "status-map",
+          "metrics": [
+            { "name": "Primary Relay", "metric": "mars.relay.primary.status" },
+            { "name": "Backup Relay", "metric": "mars.relay.backup.status" },
+            { "name": "DSN Connection", "metric": "mars.dsn.connection.status" }
+          ],
+          "status_values": {
+            "0": { "label": "Offline", "color": "red" },
+            "1": { "label": "Degraded", "color": "yellow" },
+            "2": { "label": "Online", "color": "green" }
+          }
+        },
+        {
+          "title": "Pending Earth Sync",
+          "type": "stat-trend",
+          "metric": "mars.earth.sync.pending.count",
+          "format": "integer",
+          "trend_window": "1d"
+        },
+        {
+          "title": "Days Since Earth Contact",
+          "type": "stat",
+          "metric": "mars.earth.contact.days_since",
+          "format": "decimal-1",
+          "thresholds": {
+            "critical": 30,
+            "warning": 7,
+            "normal": 1
+          }
+        }
+      ]
+    },
+    
+    {
+      "title": "Colony Details",
+      "layout": "repeating",
+      "repeat_variable": "colony_id",
+      "panels": [
+        {
+          "title": "${colony_name} - Consensus Health",
+          "type": "gauge",
+          "metric": "mars.colony.${colony_id}.consensus.health",
+          "format": "percent",
+          "thresholds": {
+            "critical": 0.5,
+            "warning": 0.8,
+            "normal": 0.95
+          }
+        },
+        {
+          "title": "${colony_name} - Node Status",
+          "type": "bar-horizontal",
+          "metrics": [
+            { "name": "Primary", "metric": "mars.colony.${colony_id}.nodes.primary.count", "color": "blue" },
+            { "name": "Backup", "metric": "mars.colony.${colony_id}.nodes.backup.count", "color": "green" },
+            { "name": "Gateway", "metric": "mars.colony.${colony_id}.nodes.gateway.count", "color": "purple" },
+            { "name": "Failed", "metric": "mars.colony.${colony_id}.nodes.failed.count", "color": "red" }
+          ]
+        },
+        {
+          "title": "${colony_name} - Resource Usage",
+          "type": "multi-gauge",
+          "metrics": [
+            { "name": "Power", "metric": "mars.colony.${colony_id}.power.usage.percent" },
+            { "name": "Storage", "metric": "mars.colony.${colony_id}.storage.usage.percent" },
+            { "name": "Compute", "metric": "mars.colony.${colony_id}.compute.usage.percent" },
+            { "name": "Bandwidth", "metric": "mars.colony.${colony_id}.bandwidth.usage.percent" }
+          ],
+          "thresholds": {
+            "critical": 0.95,
+            "warning": 0.8,
+            "normal": 0.6
+          }
+        }
+      ]
+    },
+    
+    {
+      "title": "Surface Conditions",
+      "layout": "grid-4",
+      "panels": [
+        {
+          "title": "Dust Storm Status",
+          "type": "status",
+          "metric": "mars.surface.dust_storm.status",
+          "status_values": {
+            "0": { "label": "Clear", "color": "green" },
+            "1": { "label": "Local Dust", "color": "yellow" },
+            "2": { "label": "Regional Storm", "color": "orange" },
+            "3": { "label": "GLOBAL STORM", "color": "red" }
+          }
+        },
+        {
+          "title": "Radiation Level",
+          "type": "status",
+          "metric": "mars.surface.radiation.level",
+          "status_values": {
+            "0": { "label": "Normal", "color": "green" },
+            "1": { "label": "Elevated", "color": "yellow" },
+            "2": { "label": "Solar Event", "color": "orange" },
+            "3": { "label": "CRITICAL", "color": "red" }
+          }
+        },
+        {
+          "title": "Solar Power Available",
+          "type": "gauge",
+          "metric": "mars.surface.solar_power.percent",
+          "format": "percent",
+          "thresholds": {
+            "critical": 0.2,
+            "warning": 0.5,
+            "normal": 0.8
+          }
+        },
+        {
+          "title": "Surface Temperature",
+          "type": "stat",
+          "metric": "mars.surface.temperature.celsius",
+          "format": "decimal-0",
+          "unit": "°C"
+        }
+      ]
+    },
+    
+    {
+      "title": "Inter-Colony Federation",
+      "layout": "grid-2",
+      "panels": [
+        {
+          "title": "Colony Connectivity Map",
+          "type": "network-graph",
+          "metric": "mars.inter_colony.connectivity",
+          "nodes": "mars.colonies.list",
+          "edges": "mars.inter_colony.links",
+          "edge_health": "mars.inter_colony.link.${from}.${to}.health"
+        },
+        {
+          "title": "Inter-Colony Sync Status",
+          "type": "table",
+          "metric": "mars.inter_colony.sync.status",
+          "columns": [
+            { "name": "Colony", "field": "colony_id" },
+            { "name": "Status", "field": "sync_status" },
+            { "name": "Latency (s)", "field": "latency_seconds" },
+            { "name": "Last Sync", "field": "last_sync_timestamp" }
+          ]
+        }
+      ]
+    },
+    
+    {
+      "title": "Autonomous Operations",
+      "layout": "grid-3",
+      "panels": [
+        {
+          "title": "Autonomy Mode",
+          "type": "status",
+          "metric": "mars.autonomy.mode",
+          "status_values": {
+            "0": { "label": "Earth Coordinated", "color": "green" },
+            "1": { "label": "Mars Autonomous", "color": "blue" },
+            "2": { "label": "Colony Autonomous", "color": "yellow" },
+            "3": { "label": "EMERGENCY AUTONOMOUS", "color": "red" }
+          }
+        },
+        {
+          "title": "Decisions Pending Earth Approval",
+          "type": "stat",
+          "metric": "mars.autonomy.pending_earth.count",
+          "format": "integer"
+        },
+        {
+          "title": "Auto-Approved (Last 24h)",
+          "type": "stat",
+          "metric": "mars.autonomy.auto_approved.24h.count",
+          "format": "integer"
+        }
+      ]
+    }
+  ],
+  
+  "alerts": [
+    {
+      "name": "mars_colony_offline",
+      "description": "Mars colony has gone offline",
+      "condition": "mars.colony.*.online == 0",
+      "severity": "critical",
+      "duration": "10m",
+      "actions": ["page_oncall", "notify_mission_control", "activate_backup"]
+    },
+    {
+      "name": "mars_earth_blackout",
+      "description": "Earth communication lost (not during conjunction)",
+      "condition": "mars.earth.contact.minutes_since > 720 AND mars.orbital.position != 'conjunction'",
+      "severity": "critical",
+      "duration": "1h",
+      "actions": ["page_oncall", "activate_autonomous_mode"]
+    },
+    {
+      "name": "mars_dust_storm_global",
+      "description": "Global dust storm detected",
+      "condition": "mars.surface.dust_storm.status == 3",
+      "severity": "warning",
+      "duration": "0",
+      "actions": ["notify_all_colonies", "reduce_solar_dependence"]
+    },
+    {
+      "name": "mars_radiation_event",
+      "description": "Dangerous radiation levels detected",
+      "condition": "mars.surface.radiation.level >= 2",
+      "severity": "critical",
+      "duration": "0",
+      "actions": ["radiation_shelter_alert", "pause_outdoor_operations"]
+    },
+    {
+      "name": "mars_consensus_degraded",
+      "description": "Colony consensus health degraded",
+      "condition": "mars.colony.*.consensus.health < 0.7",
+      "severity": "warning",
+      "duration": "30m",
+      "actions": ["notify_ops", "prepare_failover"]
+    },
+    {
+      "name": "mars_node_failure_cascade",
+      "description": "Multiple node failures in colony",
+      "condition": "mars.colony.*.nodes.failed.count > 2",
+      "severity": "critical",
+      "duration": "5m",
+      "actions": ["page_oncall", "activate_emergency_protocols"]
+    },
+    {
+      "name": "mars_conjunction_approaching",
+      "description": "Solar conjunction approaching, prepare for blackout",
+      "condition": "mars.orbital.conjunction.days_until < 30",
+      "severity": "info",
+      "duration": "0",
+      "actions": ["sync_all_pending", "expand_local_authority", "notify_crews"]
+    },
+    {
+      "name": "mars_power_critical",
+      "description": "Colony power reserves critical",
+      "condition": "mars.colony.*.power.reserve.percent < 0.2",
+      "severity": "critical",
+      "duration": "0",
+      "actions": ["reduce_non_essential", "page_oncall"]
+    }
+  ],
+  
+  "variables": [
+    {
+      "name": "colony_id",
+      "type": "query",
+      "query": "mars.colonies.list",
+      "multi": true,
+      "include_all": true
+    },
+    {
+      "name": "time_range",
+      "type": "interval",
+      "options": ["1h", "6h", "24h", "7d", "30d", "1y"],
+      "default": "24h"
+    }
+  ]
+}

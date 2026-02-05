@@ -1,0 +1,593 @@
+# =============================================================================
+# Grey Distributed — Scaling Policies Configuration
+# =============================================================================
+#
+# This file defines comprehensive scaling policies for Grey Distributed:
+#   1. Horizontal scaling of worker nodes (add/remove pods)
+#   2. Vertical scaling of coordinators (resize resources)
+#   3. Predictive scaling based on workload patterns
+#   4. Emergency scaling during incidents
+#
+# Design Philosophy:
+#   - Scale up aggressively, scale down conservatively
+#   - Use multiple signals for scaling decisions
+#   - Maintain safety margins for burst capacity
+#   - Respect consensus quorum requirements
+#
+# Integration Points:
+#   - Kubernetes HPA/VPA
+#   - Prometheus metrics
+#   - Grey Optimizer (governance)
+#   - Cluster autoscaler
+#
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grey-scaling-policies
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: scaling
+data:
+  # ============================================================
+  # SCALING POLICY CONFIGURATION
+  # ============================================================
+  scaling-policies.yaml: |
+    # Global scaling settings
+    global:
+      # Minimum cooldown between scaling actions
+      cooldownPeriod: 60s
+      
+      # Maximum scaling actions per hour (circuit breaker)
+      maxActionsPerHour: 10
+      
+      # Enable/disable scaling (for maintenance)
+      enabled: true
+      
+      # Dry-run mode (log decisions without acting)
+      dryRun: false
+
+    # ============================================================
+    # HORIZONTAL SCALING - WORKERS
+    # ============================================================
+    #
+    # Workers are stateless and can scale freely based on load.
+    # Primary signals: CPU, memory, queue depth, task latency.
+    #
+    # Tradeoffs:
+    #   - More workers = higher cost, better latency
+    #   - Fewer workers = lower cost, risk of backlog
+    #   - Scale-up is fast, scale-down risks in-flight tasks
+    #
+    workers:
+      horizontal:
+        enabled: true
+        
+        # Replica bounds
+        minReplicas: 3      # Minimum for replication
+        maxReplicas: 100    # Cost ceiling
+        desiredReplicas: 5  # Default when no load
+        
+        # Scale-up configuration
+        scaleUp:
+          # Stabilization window before scaling up
+          stabilizationWindowSeconds: 60
+          
+          # Policies (evaluated in parallel, max wins)
+          policies:
+            # Scale based on CPU
+            - type: Percent
+              value: 100     # Double current replicas
+              periodSeconds: 60
+            # Or add fixed number
+            - type: Pods
+              value: 5
+              periodSeconds: 60
+          
+          # Which policy to use
+          selectPolicy: Max
+        
+        # Scale-down configuration (conservative)
+        scaleDown:
+          # Wait 5 minutes before scaling down
+          stabilizationWindowSeconds: 300
+          
+          policies:
+            # Scale down slowly
+            - type: Percent
+              value: 10      # Remove 10% of replicas
+              periodSeconds: 120
+            - type: Pods
+              value: 2
+              periodSeconds: 120
+          
+          selectPolicy: Min  # Most conservative
+        
+        # Metrics for scaling decisions
+        metrics:
+          # Primary: CPU utilization
+          - type: Resource
+            resource:
+              name: cpu
+              target:
+                type: Utilization
+                averageUtilization: 70  # Target 70% CPU
+            weight: 40  # 40% of decision weight
+            
+          # Secondary: Memory utilization
+          - type: Resource
+            resource:
+              name: memory
+              target:
+                type: Utilization
+                averageUtilization: 75
+            weight: 20
+            
+          # Business metric: Queue depth
+          - type: Pods
+            pods:
+              metric:
+                name: grey_scheduler_queue_depth
+              target:
+                type: AverageValue
+                averageValue: "100"  # 100 tasks per pod
+            weight: 30
+            
+          # Business metric: Task latency
+          - type: Pods
+            pods:
+              metric:
+                name: grey_scheduler_task_latency_p99
+              target:
+                type: Value
+                value: "100m"  # 100ms target
+            weight: 10
+
+    # ============================================================
+    # HORIZONTAL SCALING - GATEWAYS
+    # ============================================================
+    #
+    # Gateways handle external traffic and can scale on request rate.
+    #
+    gateways:
+      horizontal:
+        enabled: true
+        minReplicas: 2
+        maxReplicas: 20
+        
+        scaleUp:
+          stabilizationWindowSeconds: 30  # Fast scale-up
+          policies:
+            - type: Percent
+              value: 100
+              periodSeconds: 30
+        
+        scaleDown:
+          stabilizationWindowSeconds: 180
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 60
+        
+        metrics:
+          - type: Pods
+            pods:
+              metric:
+                name: grey_gateway_requests_per_second
+              target:
+                type: AverageValue
+                averageValue: "1000"  # 1000 rps per pod
+            weight: 70
+            
+          - type: Resource
+            resource:
+              name: cpu
+              target:
+                type: Utilization
+                averageUtilization: 80
+            weight: 30
+
+    # ============================================================
+    # VERTICAL SCALING - COORDINATORS
+    # ============================================================
+    #
+    # Coordinators run consensus and cannot easily scale horizontally
+    # (adding a node requires Raft membership change).
+    # Use VPA for vertical scaling within bounds.
+    #
+    # CAUTION: Vertical scaling may restart pods. Ensure PDB is set.
+    #
+    coordinators:
+      vertical:
+        enabled: true
+        
+        # Update mode:
+        #   - Off: Only recommendations, no action
+        #   - Initial: Apply on pod creation only
+        #   - Auto: Apply during pod lifecycle (with restarts)
+        updateMode: Initial  # Conservative for stateful
+        
+        # Resource bounds
+        resourcePolicy:
+          containerPolicies:
+            - containerName: coordinator
+              minAllowed:
+                cpu: "1"
+                memory: "2Gi"
+              maxAllowed:
+                cpu: "8"
+                memory: "32Gi"
+              controlledResources:
+                - cpu
+                - memory
+              controlledValues: RequestsAndLimits
+        
+        # Recommendation thresholds
+        recommendation:
+          # Don't recommend if change is < 15%
+          minChangeThreshold: 15
+          
+          # Check recommendations every 5 minutes
+          interval: 300s
+
+    # ============================================================
+    # PREDICTIVE SCALING
+    # ============================================================
+    #
+    # Use historical patterns to pre-scale before load arrives.
+    # Reduces latency spikes during predictable traffic increases.
+    #
+    # Implementation:
+    #   - Analyze 7-day rolling window
+    #   - Identify hourly/daily/weekly patterns
+    #   - Scale 15 minutes before predicted load
+    #
+    predictive:
+      enabled: true
+      
+      # Historical analysis
+      analysis:
+        # Rolling window for pattern detection
+        windowDays: 7
+        
+        # Granularity of predictions
+        granularity: 15m
+        
+        # Minimum confidence for action
+        confidenceThreshold: 0.8
+        
+        # Metric to predict
+        targetMetric: grey_scheduler_queue_depth
+      
+      # Pre-scaling behavior
+      preScale:
+        # Scale this many minutes before predicted load
+        leadTimeMinutes: 15
+        
+        # Add safety margin to prediction
+        marginPercent: 20
+        
+        # Maximum pre-scale (don't over-provision)
+        maxPreScaleReplicas: 50
+      
+      # Schedules for known events
+      schedules:
+        # Monday morning rush
+        - name: monday-morning
+          cron: "0 8 * * 1"  # 8 AM every Monday
+          timezone: "America/New_York"
+          duration: 2h
+          minReplicas: 20
+          
+        # End of month processing
+        - name: month-end
+          cron: "0 0 L * *"  # Last day of month
+          timezone: "UTC"
+          duration: 24h
+          minReplicas: 30
+
+    # ============================================================
+    # EMERGENCY SCALING
+    # ============================================================
+    #
+    # Triggered during incidents or unusual load spikes.
+    # Overrides normal policies for rapid response.
+    #
+    # Triggers:
+    #   - Circuit breaker activation
+    #   - Queue depth explosion
+    #   - Error rate spike
+    #   - Manual operator trigger
+    #
+    emergency:
+      enabled: true
+      
+      # Triggers for emergency mode
+      triggers:
+        # Queue depth critical
+        - name: queue-overflow
+          condition: grey_scheduler_queue_depth > 50000
+          action: scaleToMax
+          
+        # Error rate critical
+        - name: error-spike
+          condition: |
+            sum(rate(grey_scheduler_tasks_failed_total[5m])) / 
+            sum(rate(grey_scheduler_tasks_completed_total[5m])) > 0.20
+          action: scaleUp
+          scalePercent: 200
+          
+        # Latency critical
+        - name: latency-spike
+          condition: |
+            histogram_quantile(0.99, 
+              sum(rate(grey_scheduler_task_duration_seconds_bucket[5m])) by (le)
+            ) > 1.0
+          action: scaleUp
+          scalePercent: 150
+          
+        # Node failures
+        - name: node-failures
+          condition: |
+            (count(up{job="grey-distributed"} == 0) >= 2) or
+            (grey_fault_quarantined_nodes > 0)
+          action: compensate
+      
+      # Emergency mode behavior
+      behavior:
+        # Skip stabilization window
+        skipStabilization: true
+        
+        # Override max replicas temporarily
+        emergencyMaxReplicas: 200
+        
+        # Duration before returning to normal
+        emergencyDuration: 30m
+        
+        # Alert on emergency activation
+        alertOnActivation: true
+      
+      # Manual trigger endpoint
+      manualTrigger:
+        enabled: true
+        # Require confirmation for manual emergency
+        requireConfirmation: true
+        # Maximum duration for manual emergency
+        maxDuration: 1h
+
+    # ============================================================
+    # CLUSTER AUTOSCALER INTEGRATION
+    # ============================================================
+    #
+    # For cloud environments, coordinate with cluster autoscaler
+    # to provision/deprovision nodes as pods scale.
+    #
+    clusterAutoscaler:
+      enabled: true
+      
+      # Node group configurations
+      nodeGroups:
+        # Worker nodes
+        - name: grey-workers
+          minNodes: 3
+          maxNodes: 100
+          instanceTypes:
+            - m6i.2xlarge
+            - m6i.4xlarge
+          labels:
+            grey.io/role: worker
+          taints: []
+          
+        # Coordinator nodes (more constrained)
+        - name: grey-coordinators
+          minNodes: 3
+          maxNodes: 5
+          instanceTypes:
+            - r6i.2xlarge
+          labels:
+            grey.io/role: coordinator
+          taints:
+            - key: grey.io/coordinator
+              value: "true"
+              effect: NoSchedule
+      
+      # Scale-down settings
+      scaleDown:
+        # Empty node threshold before removal
+        utilizationThreshold: 0.5
+        
+        # Wait before removing empty node
+        unneededTime: 10m
+        
+        # Delay after scale-up
+        delayAfterAdd: 10m
+        
+        # Don't scale down if recent failure
+        delayAfterFailure: 3m
+      
+      # Expanders (how to choose node type)
+      expander: priority  # Or: least-waste, random
+
+    # ============================================================
+    # COST CONTROLS
+    # ============================================================
+    #
+    # Budget and cost awareness for scaling decisions.
+    #
+    costControls:
+      enabled: true
+      
+      # Maximum hourly spend (triggers alerts, not hard limits)
+      maxHourlyCost:
+        enabled: true
+        alertThreshold: 100  # USD per hour
+        
+      # Prefer spot instances where safe
+      spotInstances:
+        enabled: true
+        # Only for workers (stateless)
+        components:
+          - workers
+          - gateways
+        # Maximum spot percentage
+        maxSpotPercent: 70
+        
+      # Reserved instance awareness
+      reservations:
+        enabled: true
+        # Prioritize reserved capacity before scaling to on-demand
+        prioritizeReserved: true
+
+    # ============================================================
+    # INTEGRATION WITH GREY OPTIMIZER
+    # ============================================================
+    #
+    # Coordinate scaling with Grey Optimizer governance.
+    #
+    greyOptimizer:
+      enabled: true
+      
+      # Check quota before scaling
+      checkQuotas: true
+      
+      # Respect tenant allocations
+      tenantAwareness: true
+      
+      # Report scaling events
+      reportEvents: true
+      
+      # Endpoint for governance checks
+      endpoint: "http://grey-coordinator-headless:8080/v1/governance/scaling"
+
+---
+# ============================================================
+# Kubernetes HPA for Workers
+# ============================================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: grey-worker-hpa
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: worker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: grey-worker
+  minReplicas: 3
+  maxReplicas: 100
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 75
+    - type: Pods
+      pods:
+        metric:
+          name: grey_scheduler_queue_depth
+        target:
+          type: AverageValue
+          averageValue: "100"
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+        - type: Pods
+          value: 5
+          periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 120
+      selectPolicy: Min
+
+---
+# ============================================================
+# Kubernetes HPA for Gateways
+# ============================================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: grey-gateway-hpa
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: gateway
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: grey-gateway
+  minReplicas: 2
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 30
+    scaleDown:
+      stabilizationWindowSeconds: 180
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+
+---
+# ============================================================
+# Kubernetes VPA for Coordinators
+# ============================================================
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: grey-coordinator-vpa
+  namespace: grey-system
+  labels:
+    app.kubernetes.io/name: grey
+    app.kubernetes.io/component: coordinator
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: grey-coordinator
+  updatePolicy:
+    # Initial: Apply on pod creation only (safe for stateful)
+    updateMode: "Initial"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: coordinator
+        minAllowed:
+          cpu: "1"
+          memory: "2Gi"
+        maxAllowed:
+          cpu: "8"
+          memory: "32Gi"
+        controlledResources:
+          - cpu
+          - memory

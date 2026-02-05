@@ -1,0 +1,628 @@
+{
+  "title": "Grey Distributed — Succession Dashboard",
+  "description": "Visualization of stewardship roles, transitions, and community health",
+  "version": "1.0.0",
+  "refreshInterval": "1h",
+  "timeRange": {
+    "default": "90d",
+    "options": ["30d", "90d", "1y", "3y", "5y"]
+  },
+  "variables": [
+    {
+      "name": "role_level",
+      "label": "Role Level",
+      "type": "select",
+      "options": ["all", "steward", "core_maintainer", "maintainer", "reviewer", "contributor"],
+      "default": "all"
+    },
+    {
+      "name": "organization",
+      "label": "Organization",
+      "type": "multiselect",
+      "query": "label_values(grey_contributor_info, organization)",
+      "default": "all"
+    }
+  ],
+  "sections": [
+    {
+      "title": "Leadership Overview",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Foundation Council",
+              "type": "stat",
+              "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+              "query": "count(grey_role_info{role='foundation_council'})",
+              "subtitle": "Target: 5-7",
+              "thresholds": {
+                "critical": [0, 3],
+                "warning": [3, 5],
+                "ok": [5, 7]
+              }
+            },
+            {
+              "title": "Project Stewards",
+              "type": "stat",
+              "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+              "query": "count(grey_role_info{role='project_steward'})",
+              "subtitle": "Target: 3",
+              "thresholds": {
+                "critical": [0, 2],
+                "warning": [2, 3],
+                "ok": [3, 4]
+              }
+            },
+            {
+              "title": "Technical Stewards",
+              "type": "stat",
+              "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+              "query": "count(grey_role_info{role='technical_steward'})",
+              "subtitle": "Target: 3-5"
+            },
+            {
+              "title": "Core Maintainers",
+              "type": "stat",
+              "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+              "query": "count(grey_role_info{role='core_maintainer'})",
+              "subtitle": "Target: 9-15"
+            },
+            {
+              "title": "Maintainers",
+              "type": "stat",
+              "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+              "query": "count(grey_role_info{role='maintainer'})",
+              "subtitle": "Target: 30-50"
+            },
+            {
+              "title": "Total Contributors",
+              "type": "stat",
+              "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+              "query": "count(grey_contributor_info{status='active'})",
+              "color": "#3b82f6"
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Role Distribution",
+              "type": "sunburst",
+              "gridPos": { "x": 0, "y": 4, "w": 8, "h": 10 },
+              "query": "count by (role, domain) (grey_role_info)",
+              "levels": ["role", "domain"],
+              "colors": {
+                "foundation_council": "#8b5cf6",
+                "project_steward": "#3b82f6",
+                "technical_steward": "#22c55e",
+                "core_maintainer": "#f59e0b",
+                "maintainer": "#6b7280"
+              }
+            },
+            {
+              "title": "Organizational Diversity",
+              "type": "piechart",
+              "gridPos": { "x": 8, "y": 4, "w": 8, "h": 10 },
+              "query": "count by (organization) (grey_role_info{role=~'steward|core_maintainer'})",
+              "legend": { "show": true, "position": "right" },
+              "maxSlices": 10
+            },
+            {
+              "title": "Geographic Distribution",
+              "type": "geomap",
+              "gridPos": { "x": 16, "y": 4, "w": 8, "h": 10 },
+              "query": "count by (country) (grey_role_info)",
+              "colorScale": {
+                "min": 1,
+                "max": 20,
+                "colors": ["#dbeafe", "#3b82f6", "#1e40af"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Term Status",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Terms Expiring Soon",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 10 },
+              "query": "grey_role_term_remaining_days < 180",
+              "columns": [
+                { "field": "name", "label": "Name", "width": "20%" },
+                { "field": "role", "label": "Role", "width": "18%" },
+                { "field": "term_end", "label": "Term Ends", "width": "15%", "format": "date" },
+                { "field": "days_remaining", "label": "Days Left", "width": "12%" },
+                { "field": "eligible_for_renewal", "label": "Can Renew", "width": "10%" },
+                { "field": "successor_status", "label": "Successor", "width": "15%" },
+                { "field": "action_needed", "label": "Action", "width": "10%" }
+              ],
+              "rowStyles": {
+                "days_remaining": {
+                  "<30": "bg-red-100",
+                  "<90": "bg-yellow-100",
+                  ">=90": "bg-green-100"
+                }
+              },
+              "sorting": { "field": "days_remaining", "order": "asc" }
+            },
+            {
+              "title": "Term Timeline",
+              "type": "gantt",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 10 },
+              "query": "grey_role_term_info",
+              "fields": {
+                "start": "term_start",
+                "end": "term_end",
+                "label": "name",
+                "group": "role"
+              },
+              "timeRange": {
+                "start": "-1y",
+                "end": "+3y"
+              },
+              "colors": {
+                "foundation_council": "#8b5cf6",
+                "project_steward": "#3b82f6",
+                "technical_steward": "#22c55e",
+                "core_maintainer": "#f59e0b"
+              }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Recent Transitions",
+              "type": "timeline",
+              "gridPos": { "x": 0, "y": 10, "w": 24, "h": 6 },
+              "query": "grey_role_transitions",
+              "fields": {
+                "time": "transition_date",
+                "title": "description",
+                "type": "transition_type"
+              },
+              "colors": {
+                "appointment": "#22c55e",
+                "departure": "#ef4444",
+                "renewal": "#3b82f6",
+                "promotion": "#8b5cf6"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Succession Pipeline",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Pipeline Health",
+              "type": "gauge",
+              "gridPos": { "x": 0, "y": 0, "w": 6, "h": 8 },
+              "query": "grey_succession_pipeline_health_score",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "critical": [0, 50],
+                "warning": [50, 75],
+                "ok": [75, 100]
+              },
+              "unit": "%"
+            },
+            {
+              "title": "Pipeline Funnel",
+              "type": "funnel",
+              "gridPos": { "x": 6, "y": 0, "w": 10, "h": 8 },
+              "query": "grey_contributor_level_count",
+              "levels": [
+                { "level": "newcomer", "label": "Newcomers" },
+                { "level": "contributor", "label": "Contributors" },
+                { "level": "reviewer", "label": "Reviewers" },
+                { "level": "maintainer", "label": "Maintainers" },
+                { "level": "core_maintainer", "label": "Core Maintainers" },
+                { "level": "steward", "label": "Stewards" }
+              ],
+              "colors": ["#dbeafe", "#93c5fd", "#60a5fa", "#3b82f6", "#2563eb", "#1d4ed8"]
+            },
+            {
+              "title": "Successor Readiness",
+              "type": "table",
+              "gridPos": { "x": 16, "y": 0, "w": 8, "h": 8 },
+              "query": "grey_successor_readiness",
+              "columns": [
+                { "field": "role", "label": "Role", "width": "40%" },
+                { "field": "successors_identified", "label": "Ready", "width": "20%" },
+                { "field": "target", "label": "Target", "width": "20%" },
+                { "field": "status", "label": "Status", "width": "20%" }
+              ],
+              "rowStyles": {
+                "status": {
+                  "healthy": "bg-green-100",
+                  "warning": "bg-yellow-100",
+                  "critical": "bg-red-100"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Conversion Rates",
+              "type": "barchart",
+              "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+              "query": "grey_contributor_conversion_rate",
+              "xAxis": { "label": "Transition" },
+              "yAxis": { "label": "Conversion Rate %", "max": 100 },
+              "thresholds": [
+                { "value": 10, "color": "#ef4444", "label": "Below target" },
+                { "value": 20, "color": "#22c55e", "label": "On target" }
+              ]
+            },
+            {
+              "title": "Time to Advancement",
+              "type": "boxplot",
+              "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+              "query": "grey_contributor_advancement_time_days",
+              "xAxis": { "label": "Level Transition" },
+              "yAxis": { "label": "Days" },
+              "groupBy": "transition"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Mentorship Program",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Active Mentorships",
+              "type": "stat",
+              "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+              "query": "count(grey_mentorship_info{status='active'})",
+              "subtitle": "Target: 50+",
+              "color": "#22c55e"
+            },
+            {
+              "title": "Avg Duration",
+              "type": "stat",
+              "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+              "query": "avg(grey_mentorship_duration_days)",
+              "format": "duration",
+              "subtitle": "Target: 4 months"
+            },
+            {
+              "title": "Success Rate",
+              "type": "stat",
+              "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+              "query": "sum(grey_mentorship_completed{outcome='advanced'}) / sum(grey_mentorship_completed) * 100",
+              "unit": "%",
+              "subtitle": "Mentees who advanced"
+            },
+            {
+              "title": "Mentorship NPS",
+              "type": "gauge",
+              "gridPos": { "x": 12, "y": 0, "w": 6, "h": 8 },
+              "query": "grey_mentorship_nps",
+              "min": -100,
+              "max": 100,
+              "thresholds": {
+                "critical": [-100, 0],
+                "warning": [0, 50],
+                "ok": [50, 100]
+              }
+            },
+            {
+              "title": "Mentor Availability",
+              "type": "piechart",
+              "gridPos": { "x": 18, "y": 0, "w": 6, "h": 8 },
+              "query": "grey_mentor_status",
+              "colors": {
+                "available": "#22c55e",
+                "active": "#3b82f6",
+                "full": "#f59e0b",
+                "unavailable": "#6b7280"
+              }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Mentorship Activity Over Time",
+              "type": "timeseries",
+              "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "count(grey_mentorship_info{status='active'})",
+                  "legendFormat": "Active"
+                },
+                {
+                  "expr": "rate(grey_mentorship_started_total[30d]) * 30",
+                  "legendFormat": "New (monthly)"
+                },
+                {
+                  "expr": "rate(grey_mentorship_completed_total[30d]) * 30",
+                  "legendFormat": "Completed (monthly)"
+                }
+              ]
+            },
+            {
+              "title": "Mentorship Pairings",
+              "type": "table",
+              "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+              "query": "grey_mentorship_info{status='active'}",
+              "columns": [
+                { "field": "mentor", "label": "Mentor", "width": "20%" },
+                { "field": "mentee", "label": "Mentee", "width": "20%" },
+                { "field": "started", "label": "Started", "width": "15%", "format": "date" },
+                { "field": "duration_weeks", "label": "Duration", "width": "10%" },
+                { "field": "goal", "label": "Goal", "width": "20%" },
+                { "field": "progress", "label": "Progress", "width": "15%", "format": "progressbar" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Community Health",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Bus Factor",
+              "type": "gauge",
+              "gridPos": { "x": 0, "y": 0, "w": 6, "h": 8 },
+              "query": "grey_bus_factor",
+              "min": 1,
+              "max": 10,
+              "thresholds": {
+                "critical": [1, 3],
+                "warning": [3, 5],
+                "ok": [5, 10]
+              },
+              "description": "Minimum people who could leave before project stops"
+            },
+            {
+              "title": "New Contributors (30d)",
+              "type": "stat",
+              "gridPos": { "x": 6, "y": 0, "w": 4, "h": 4 },
+              "query": "sum(increase(grey_new_contributors_total[30d]))",
+              "sparkline": true,
+              "color": "#22c55e"
+            },
+            {
+              "title": "Contributor Retention (90d)",
+              "type": "stat",
+              "gridPos": { "x": 10, "y": 0, "w": 4, "h": 4 },
+              "query": "grey_contributor_retention_rate_90d * 100",
+              "unit": "%",
+              "sparkline": true
+            },
+            {
+              "title": "First Response Time",
+              "type": "stat",
+              "gridPos": { "x": 14, "y": 0, "w": 4, "h": 4 },
+              "query": "avg(grey_first_response_time_hours)",
+              "unit": "hours",
+              "thresholds": {
+                "ok": [0, 24],
+                "warning": [24, 72],
+                "critical": [72, null]
+              }
+            },
+            {
+              "title": "Community NPS",
+              "type": "gauge",
+              "gridPos": { "x": 18, "y": 0, "w": 6, "h": 8 },
+              "query": "grey_community_nps",
+              "min": -100,
+              "max": 100,
+              "thresholds": {
+                "critical": [-100, 0],
+                "warning": [0, 50],
+                "ok": [50, 100]
+              }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Contributor Growth",
+              "type": "timeseries",
+              "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+              "queries": [
+                {
+                  "expr": "count(grey_contributor_info{status='active'})",
+                  "legendFormat": "Active contributors"
+                },
+                {
+                  "expr": "sum(increase(grey_new_contributors_total[7d]))",
+                  "legendFormat": "New (weekly)"
+                }
+              ],
+              "yAxis": { "label": "Contributors" }
+            },
+            {
+              "title": "Activity Distribution",
+              "type": "heatmap",
+              "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+              "query": "grey_contributor_activity_heatmap",
+              "xAxis": "hour_of_day",
+              "yAxis": "day_of_week",
+              "colorScale": {
+                "min": 0,
+                "colors": ["#dbeafe", "#3b82f6", "#1e3a8a"]
+              }
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Burnout Risk Indicators",
+              "type": "table",
+              "gridPos": { "x": 0, "y": 16, "w": 24, "h": 8 },
+              "query": "grey_burnout_risk_score > 0.5",
+              "columns": [
+                { "field": "name", "label": "Contributor", "width": "15%" },
+                { "field": "role", "label": "Role", "width": "12%" },
+                { "field": "activity_change", "label": "Activity Δ", "width": "12%", "format": "percent" },
+                { "field": "response_time_change", "label": "Response Δ", "width": "12%", "format": "percent" },
+                { "field": "sentiment_score", "label": "Sentiment", "width": "12%", "format": "progressbar" },
+                { "field": "risk_score", "label": "Risk Level", "width": "12%" },
+                { "field": "last_vacation", "label": "Last Break", "width": "12%", "format": "relative" },
+                { "field": "recommended_action", "label": "Action", "width": "13%" }
+              ],
+              "rowStyles": {
+                "risk_score": {
+                  "high": "bg-red-100",
+                  "medium": "bg-yellow-100",
+                  "low": "bg-green-100"
+                }
+              },
+              "description": "Contributors showing potential burnout indicators"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Diversity Metrics",
+      "rows": [
+        {
+          "panels": [
+            {
+              "title": "Organizational Concentration",
+              "type": "barchart",
+              "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+              "query": "topk(10, count by (organization) (grey_role_info{role=~'maintainer|core_maintainer|steward'}))",
+              "orientation": "horizontal",
+              "thresholds": [
+                { "value": 40, "color": "#ef4444", "label": "Concentration risk" }
+              ]
+            },
+            {
+              "title": "Timezone Coverage",
+              "type": "worldclock",
+              "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+              "query": "grey_maintainer_timezone_coverage",
+              "highlights": ["maintainer_locations"],
+              "goal": "24-hour coverage"
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "title": "Diversity Trends",
+              "type": "timeseries",
+              "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 },
+              "queries": [
+                {
+                  "expr": "grey_diversity_org_hhi",
+                  "legendFormat": "Org HHI (lower = more diverse)"
+                },
+                {
+                  "expr": "count(distinct grey_role_info{role=~'maintainer|core_maintainer'}, 'timezone') / 24",
+                  "legendFormat": "Timezone coverage %"
+                },
+                {
+                  "expr": "count(distinct grey_role_info{role=~'maintainer|core_maintainer'}, 'country')",
+                  "legendFormat": "Countries represented"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "alerts": [
+    {
+      "name": "term_expiring_soon",
+      "description": "Leadership term expiring within 60 days",
+      "query": "grey_role_term_remaining_days < 60 and grey_role_term_remaining_days > 0",
+      "severity": "warning",
+      "annotations": {
+        "summary": "{{$labels.name}}'s {{$labels.role}} term expires in {{$value}} days",
+        "runbook": "/docs/succession/transition-protocol"
+      }
+    },
+    {
+      "name": "no_successor_identified",
+      "description": "Role has no identified successor with term ending soon",
+      "query": "grey_role_term_remaining_days < 90 and grey_successor_count == 0",
+      "severity": "critical",
+      "annotations": {
+        "summary": "{{$labels.role}} has no identified successor and term ends in {{$value}} days"
+      }
+    },
+    {
+      "name": "low_bus_factor",
+      "description": "Bus factor below safe threshold",
+      "query": "grey_bus_factor < 3",
+      "severity": "critical",
+      "annotations": {
+        "summary": "Bus factor is {{$value}} - project at risk if key people leave"
+      }
+    },
+    {
+      "name": "pipeline_bottleneck",
+      "description": "Succession pipeline has bottleneck",
+      "query": "grey_pipeline_conversion_rate < 0.1",
+      "severity": "warning",
+      "annotations": {
+        "summary": "Low conversion rate at {{$labels.level}} level: {{$value | percent}}"
+      }
+    },
+    {
+      "name": "burnout_risk_high",
+      "description": "Contributor showing high burnout risk",
+      "query": "grey_burnout_risk_score > 0.8",
+      "severity": "warning",
+      "annotations": {
+        "summary": "{{$labels.name}} showing potential burnout indicators",
+        "runbook": "/docs/community/burnout-prevention"
+      }
+    },
+    {
+      "name": "organizational_concentration",
+      "description": "Single organization has too many maintainers",
+      "query": "count by (organization) (grey_role_info{role=~'maintainer|core_maintainer'}) / count(grey_role_info{role=~'maintainer|core_maintainer'}) > 0.4",
+      "severity": "warning",
+      "annotations": {
+        "summary": "{{$labels.organization}} has {{$value | percent}} of maintainers"
+      }
+    },
+    {
+      "name": "mentorship_capacity_low",
+      "description": "Not enough available mentors",
+      "query": "count(grey_mentor_status{status='available'}) < 5",
+      "severity": "warning",
+      "annotations": {
+        "summary": "Only {{$value}} mentors available for new mentorships"
+      }
+    },
+    {
+      "name": "new_contributor_drop",
+      "description": "New contributor rate dropping",
+      "query": "rate(grey_new_contributors_total[30d]) < rate(grey_new_contributors_total[90d]) * 0.5",
+      "severity": "warning",
+      "annotations": {
+        "summary": "New contributor rate dropped significantly"
+      }
+    }
+  ]
+}

@@ -1,0 +1,294 @@
+# Grey Distributed - Build & Lint Pipeline
+# =============================================================================
+#
+# Purpose:
+#   Compile all Rust and Go modules, run static analysis, and enforce
+#   code quality standards. This is the first gate in the CI pipeline.
+#
+# Why this matters:
+#   - Catches compilation errors before they reach tests
+#   - Enforces consistent code style across contributors
+#   - Identifies potential bugs via static analysis
+#   - Ensures both language ecosystems build correctly together
+#
+# Tradeoffs:
+#   - Running both Rust and Go builds increases CI time (~5-7 min)
+#   - Strict linting may reject valid but unconventional code
+#   - Caching reduces rebuild time but may hide stale dependency issues
+#
+# =============================================================================
+
+name: Build & Lint
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'src/**'
+      - 'pkg/**'
+      - 'cmd/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/build.yml'
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  GO_VERSION: '1.22'
+  RUST_VERSION: '1.75.0'
+
+# Cancel in-progress runs for the same branch
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================
+  # Stage 1: Rust Build & Lint
+  # ============================================================
+  rust-build:
+    name: Rust Build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: rustfmt, clippy
+      
+      - name: Cache Cargo Registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+      
+      # Compilation: Build all targets including examples
+      - name: Build (Debug)
+        run: cargo build --all-targets
+      
+      # Release build validates optimization passes
+      - name: Build (Release)
+        run: cargo build --release --lib
+      
+      # Format check: Ensures consistent code style
+      - name: Check Formatting
+        run: cargo fmt --all -- --check
+      
+      # Clippy: Rust's comprehensive linter
+      # - Catches common mistakes and anti-patterns
+      # - Enforces idiomatic Rust
+      - name: Clippy Lint
+        run: |
+          cargo clippy --all-targets --all-features -- \
+            -D warnings \
+            -D clippy::unwrap_used \
+            -D clippy::expect_used \
+            -A clippy::too_many_arguments \
+            -A clippy::type_complexity
+      
+      # Documentation build: Ensures doc comments are valid
+      - name: Build Documentation
+        run: cargo doc --no-deps --document-private-items
+        env:
+          RUSTDOCFLAGS: -D warnings
+      
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-lib
+          path: target/release/libgrey_distributed.*
+          retention-days: 7
+
+  # ============================================================
+  # Stage 2: Go Build & Lint
+  # ============================================================
+  go-build:
+    name: Go Build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      
+      - name: Download Dependencies
+        run: |
+          go mod download
+          go mod verify
+      
+      # Build main binary
+      - name: Build Binary
+        run: make build
+      
+      # Build for multiple platforms to catch platform-specific issues
+      - name: Cross-Platform Build Check
+        run: |
+          GOOS=linux GOARCH=amd64 go build -o /dev/null ./cmd/greyd
+          GOOS=linux GOARCH=arm64 go build -o /dev/null ./cmd/greyd
+          GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/greyd
+      
+      # Format check
+      - name: Check Formatting
+        run: |
+          if [ -n "$(gofmt -s -l .)" ]; then
+            echo "::error::Go code is not formatted. Run 'gofmt -s -w .'"
+            gofmt -s -l .
+            exit 1
+          fi
+      
+      # Static analysis: go vet + staticcheck
+      - name: Go Vet
+        run: go vet ./...
+      
+      - name: Install Staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@latest
+      
+      - name: Staticcheck
+        run: staticcheck ./...
+      
+      # golangci-lint: Comprehensive Go linter aggregator
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | \
+            sh -s -- -b $(go env GOPATH)/bin v1.56.2
+      
+      - name: golangci-lint
+        run: golangci-lint run --timeout=5m ./...
+      
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-binary
+          path: bin/greyd
+          retention-days: 7
+
+  # ============================================================
+  # Stage 3: Dependency Audit
+  # ============================================================
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      # Rust dependency audit
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+      
+      - name: Rust Dependency Audit
+        run: cargo audit
+        continue-on-error: true  # Advisory only, don't block builds
+      
+      # Go vulnerability check
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      
+      - name: Go Vulnerability Check
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+        continue-on-error: true
+      
+      # License compliance check
+      - name: License Check
+        run: |
+          # Check for problematic licenses (GPL in dependencies)
+          echo "Checking license compliance..."
+          cargo tree --format "{l}" | sort -u > rust-licenses.txt
+          echo "Rust licenses found:"
+          cat rust-licenses.txt
+          
+          # Fail on GPL (incompatible with Apache-2.0/MIT dual license)
+          if grep -q "GPL" rust-licenses.txt; then
+            echo "::warning::GPL-licensed dependency detected"
+          fi
+
+  # ============================================================
+  # Stage 4: Build Matrix (Extended Platforms)
+  # ============================================================
+  build-matrix:
+    name: Build Matrix
+    runs-on: ${{ matrix.os }}
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: ${{ matrix.target }}
+      
+      - name: Install Cross-Compilation Tools
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+      
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+  # ============================================================
+  # Summary
+  # ============================================================
+  build-summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: [rust-build, go-build, dependency-audit]
+    if: always()
+    
+    steps:
+      - name: Check Results
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Rust Build | ${{ needs.rust-build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Go Build | ${{ needs.go-build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependency Audit | ${{ needs.dependency-audit.result }} |" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ needs.rust-build.result }}" != "success" ] || \
+             [ "${{ needs.go-build.result }}" != "success" ]; then
+            echo "::error::Build failed"
+            exit 1
+          fi

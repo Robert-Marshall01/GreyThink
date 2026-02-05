@@ -1,0 +1,605 @@
+{
+  "dashboard": {
+    "id": "grey-temporal-present",
+    "title": "Grey Distributed — Present Era Coordination",
+    "description": "Real-time monitoring of current era operations, cross-temporal bridges, and active governance participation",
+    "version": "1.0.0",
+    "refresh_interval": "30s",
+    "time_range": {
+      "default": "last_24h",
+      "options": ["last_1h", "last_24h", "last_7d", "last_30d", "last_year"]
+    }
+  },
+
+  "sections": [
+    {
+      "id": "system-overview",
+      "title": "Current Era System Status",
+      "layout": "grid",
+      "columns": 5,
+      "panels": [
+        {
+          "id": "system-health",
+          "type": "gauge",
+          "title": "Overall Health",
+          "description": "Aggregate health of present-era Grey Distributed operations",
+          "query": "system_health_score",
+          "unit": "percent",
+          "thresholds": {
+            "good": 95,
+            "warning": 85,
+            "critical": 70
+          }
+        },
+        {
+          "id": "active-nodes",
+          "type": "stat",
+          "title": "Active Nodes",
+          "description": "Currently participating nodes across all regions",
+          "query": "count(active_nodes)",
+          "unit": "nodes",
+          "sparkline": true
+        },
+        {
+          "id": "current-epoch",
+          "type": "stat",
+          "title": "Current Epoch",
+          "description": "Present temporal epoch identifier",
+          "query": "current_temporal_epoch",
+          "format": "epoch_id"
+        },
+        {
+          "id": "active-participants",
+          "type": "stat",
+          "title": "Active Participants",
+          "description": "Entities actively participating in governance",
+          "query": "count(active_participants)",
+          "unit": "participants",
+          "breakdown": [
+            {"field": "human", "label": "Human"},
+            {"field": "ai", "label": "AI"},
+            {"field": "collective", "label": "Collective"}
+          ]
+        },
+        {
+          "id": "temporal-bridges",
+          "type": "stat",
+          "title": "Temporal Bridges",
+          "description": "Active bridges to past and future eras",
+          "query": "count(active_temporal_bridges)",
+          "unit": "bridges",
+          "breakdown": [
+            {"field": "to_past", "label": "To Past"},
+            {"field": "to_future", "label": "To Future"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "real-time-operations",
+      "title": "Real-Time Operations",
+      "layout": "grid",
+      "columns": 3,
+      "panels": [
+        {
+          "id": "transaction-rate",
+          "type": "timeseries",
+          "title": "Transaction Rate",
+          "description": "Governance transactions per second",
+          "query": "time_series(transaction_rate, '1m')",
+          "visualization": {
+            "type": "line",
+            "series": [
+              {"field": "proposals", "color": "blue"},
+              {"field": "votes", "color": "green"},
+              {"field": "executions", "color": "purple"}
+            ]
+          }
+        },
+        {
+          "id": "consensus-latency",
+          "type": "timeseries",
+          "title": "Consensus Latency",
+          "description": "Time to reach consensus on governance decisions",
+          "query": "time_series(consensus_latency_p99, '5m')",
+          "unit": "ms",
+          "thresholds": {
+            "good": 100,
+            "warning": 500,
+            "critical": 1000
+          }
+        },
+        {
+          "id": "resource-utilization",
+          "type": "gauge",
+          "title": "Resource Utilization",
+          "description": "Current utilization of allocated resources",
+          "query": "avg(resource_utilization)",
+          "unit": "percent",
+          "thresholds": {
+            "good": 70,
+            "warning": 85,
+            "critical": 95
+          }
+        }
+      ]
+    },
+    {
+      "id": "governance-activity",
+      "title": "Active Governance",
+      "layout": "grid",
+      "columns": 2,
+      "panels": [
+        {
+          "id": "active-proposals",
+          "type": "table",
+          "title": "Active Proposals",
+          "description": "Currently open governance proposals",
+          "query": "active_proposals ORDER BY urgency DESC, deadline ASC LIMIT 15",
+          "columns": [
+            {"field": "proposal_id", "label": "ID"},
+            {"field": "title", "label": "Title"},
+            {"field": "category", "label": "Category"},
+            {"field": "temporal_scope", "label": "Temporal Scope"},
+            {"field": "votes_for", "label": "For"},
+            {"field": "votes_against", "label": "Against"},
+            {"field": "deadline", "label": "Deadline"}
+          ],
+          "row_actions": ["view_details", "cast_vote"]
+        },
+        {
+          "id": "voting-activity",
+          "type": "timeseries",
+          "title": "Voting Activity",
+          "description": "Vote casting over time",
+          "query": "time_series(votes_cast, '1h')",
+          "visualization": {
+            "type": "area",
+            "stacked": true,
+            "series": [
+              {"field": "present_era", "color": "blue", "label": "Present Era"},
+              {"field": "past_proxy", "color": "gray", "label": "Past Proxy"},
+              {"field": "future_proxy", "color": "teal", "label": "Future Proxy"}
+            ]
+          }
+        },
+        {
+          "id": "participation-rate",
+          "type": "gauge",
+          "title": "Participation Rate",
+          "description": "Percentage of eligible participants voting",
+          "query": "participation_rate",
+          "unit": "percent",
+          "thresholds": {
+            "good": 75,
+            "warning": 50,
+            "critical": 25
+          }
+        },
+        {
+          "id": "recent-decisions",
+          "type": "table",
+          "title": "Recent Decisions",
+          "description": "Recently concluded governance decisions",
+          "query": "recent_decisions ORDER BY completed_at DESC LIMIT 10",
+          "columns": [
+            {"field": "decision_id", "label": "ID"},
+            {"field": "title", "label": "Title"},
+            {"field": "outcome", "label": "Outcome"},
+            {"field": "margin", "label": "Margin"},
+            {"field": "temporal_impact", "label": "Temporal Impact"},
+            {"field": "completed_at", "label": "Completed"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "temporal-coordination",
+      "title": "Cross-Temporal Coordination",
+      "layout": "grid",
+      "columns": 3,
+      "panels": [
+        {
+          "id": "bridge-status",
+          "type": "status_grid",
+          "title": "Temporal Bridge Status",
+          "description": "Health of bridges to other temporal eras",
+          "query": "temporal_bridges.status",
+          "visualization": {
+            "group_by": "target_era",
+            "status_field": "health",
+            "latency_field": "sync_latency"
+          }
+        },
+        {
+          "id": "cross-temporal-sync",
+          "type": "timeseries",
+          "title": "Cross-Temporal Sync Events",
+          "description": "Synchronization events across temporal boundaries",
+          "query": "time_series(temporal_sync_events, '1h')",
+          "visualization": {
+            "type": "bar",
+            "series": [
+              {"field": "past_sync", "color": "gray"},
+              {"field": "future_sync", "color": "teal"}
+            ]
+          }
+        },
+        {
+          "id": "temporal-conflicts",
+          "type": "stat",
+          "title": "Active Temporal Conflicts",
+          "description": "Unresolved conflicts between temporal positions",
+          "query": "count(temporal_conflicts WHERE status = 'active')",
+          "unit": "conflicts",
+          "thresholds": {
+            "good": 0,
+            "warning": 5,
+            "critical": 20
+          }
+        },
+        {
+          "id": "future-consideration",
+          "type": "gauge",
+          "title": "Future Consideration Score",
+          "description": "How well current decisions account for future impact",
+          "query": "avg(future_consideration_score)",
+          "unit": "percent",
+          "thresholds": {
+            "good": 80,
+            "warning": 60,
+            "critical": 40
+          }
+        },
+        {
+          "id": "past-respect",
+          "type": "gauge",
+          "title": "Past Respect Score",
+          "description": "How well current decisions honor past intentions",
+          "query": "avg(past_respect_score)",
+          "unit": "percent",
+          "thresholds": {
+            "good": 85,
+            "warning": 70,
+            "critical": 50
+          }
+        },
+        {
+          "id": "temporal-equity",
+          "type": "radar",
+          "title": "Temporal Equity Balance",
+          "description": "Balance of influence across temporal positions",
+          "query": "temporal_equity.current_balance",
+          "axes": [
+            {"field": "past_weight", "label": "Past"},
+            {"field": "present_weight", "label": "Present"},
+            {"field": "near_future_weight", "label": "Near Future"},
+            {"field": "far_future_weight", "label": "Far Future"},
+            {"field": "eternal_weight", "label": "Eternal"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "resource-management",
+      "title": "Resource Management",
+      "layout": "grid",
+      "columns": 3,
+      "panels": [
+        {
+          "id": "resource-allocation",
+          "type": "pie",
+          "title": "Resource Allocation by Purpose",
+          "description": "How current resources are allocated",
+          "query": "resource_allocation.by_purpose",
+          "segments": [
+            {"value": "current_operations", "label": "Current Operations"},
+            {"value": "future_reserve", "label": "Future Reserve"},
+            {"value": "past_preservation", "label": "Past Preservation"},
+            {"value": "contingency", "label": "Contingency"},
+            {"value": "research", "label": "Research"}
+          ]
+        },
+        {
+          "id": "sustainability-score",
+          "type": "gauge",
+          "title": "Sustainability Score",
+          "description": "Long-term sustainability of current resource usage",
+          "query": "sustainability_score",
+          "unit": "percent",
+          "thresholds": {
+            "good": 90,
+            "warning": 70,
+            "critical": 50
+          }
+        },
+        {
+          "id": "resource-trends",
+          "type": "timeseries",
+          "title": "Resource Trends",
+          "description": "Resource consumption and regeneration over time",
+          "query": "time_series(resource_metrics, '1d')",
+          "visualization": {
+            "type": "line",
+            "series": [
+              {"field": "consumption", "color": "red"},
+              {"field": "regeneration", "color": "green"},
+              {"field": "net_change", "color": "blue"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "dispute-resolution",
+      "title": "Dispute Resolution",
+      "layout": "grid",
+      "columns": 2,
+      "panels": [
+        {
+          "id": "active-disputes",
+          "type": "table",
+          "title": "Active Disputes",
+          "description": "Currently unresolved disputes",
+          "query": "active_disputes ORDER BY priority DESC LIMIT 10",
+          "columns": [
+            {"field": "dispute_id", "label": "ID"},
+            {"field": "type", "label": "Type"},
+            {"field": "parties", "label": "Parties"},
+            {"field": "temporal_scope", "label": "Temporal Scope"},
+            {"field": "status", "label": "Status"},
+            {"field": "age", "label": "Age"}
+          ]
+        },
+        {
+          "id": "resolution-metrics",
+          "type": "stat",
+          "title": "Resolution Metrics",
+          "description": "Key dispute resolution statistics",
+          "metrics": [
+            {
+              "query": "avg(dispute_resolution_time)",
+              "label": "Avg Resolution Time",
+              "unit": "days"
+            },
+            {
+              "query": "sum(resolved_disputes_30d)",
+              "label": "Resolved (30d)",
+              "unit": "disputes"
+            },
+            {
+              "query": "satisfaction_rate",
+              "label": "Satisfaction Rate",
+              "unit": "percent"
+            }
+          ]
+        },
+        {
+          "id": "dispute-trends",
+          "type": "timeseries",
+          "title": "Dispute Trends",
+          "description": "Disputes filed and resolved over time",
+          "query": "time_series(dispute_metrics, '1w')",
+          "visualization": {
+            "type": "bar",
+            "series": [
+              {"field": "filed", "color": "orange"},
+              {"field": "resolved", "color": "green"}
+            ]
+          }
+        },
+        {
+          "id": "dispute-categories",
+          "type": "pie",
+          "title": "Dispute Categories",
+          "description": "Distribution of dispute types",
+          "query": "dispute_categories",
+          "segments": [
+            {"value": "resource", "label": "Resource"},
+            {"value": "precedent", "label": "Precedent"},
+            {"value": "succession", "label": "Succession"},
+            {"value": "interpretation", "label": "Interpretation"},
+            {"value": "temporal_conflict", "label": "Temporal Conflict"},
+            {"value": "other", "label": "Other"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "knowledge-flow",
+      "title": "Knowledge Flow",
+      "layout": "grid",
+      "columns": 2,
+      "panels": [
+        {
+          "id": "knowledge-archival",
+          "type": "timeseries",
+          "title": "Knowledge Archival Rate",
+          "description": "Rate of current knowledge being preserved for future",
+          "query": "time_series(knowledge_archival_rate, '1d')",
+          "unit": "items/day",
+          "visualization": {
+            "type": "area",
+            "series": [
+              {"field": "decisions", "color": "blue"},
+              {"field": "context", "color": "green"},
+              {"field": "rationale", "color": "purple"}
+            ]
+          }
+        },
+        {
+          "id": "knowledge-retrieval",
+          "type": "timeseries",
+          "title": "Historical Knowledge Retrieval",
+          "description": "Rate of accessing preserved past knowledge",
+          "query": "time_series(knowledge_retrieval_rate, '1d')",
+          "unit": "queries/day"
+        },
+        {
+          "id": "documentation-debt",
+          "type": "gauge",
+          "title": "Documentation Debt",
+          "description": "Undocumented decisions and rationale",
+          "query": "documentation_debt_score",
+          "unit": "debt_units",
+          "thresholds": {
+            "good": 100,
+            "warning": 500,
+            "critical": 1000
+          },
+          "lower_is_better": true
+        },
+        {
+          "id": "knowledge-quality",
+          "type": "gauge",
+          "title": "Knowledge Quality Score",
+          "description": "Quality of currently archived knowledge",
+          "query": "knowledge_quality_score",
+          "unit": "percent",
+          "thresholds": {
+            "good": 90,
+            "warning": 75,
+            "critical": 60
+          }
+        }
+      ]
+    },
+    {
+      "id": "emergency-status",
+      "title": "Emergency & Continuity Status",
+      "layout": "grid",
+      "columns": 4,
+      "panels": [
+        {
+          "id": "alert-level",
+          "type": "stat",
+          "title": "Current Alert Level",
+          "description": "System-wide alert status",
+          "query": "current_alert_level",
+          "format": "alert_level",
+          "color_map": {
+            "GREEN": "green",
+            "YELLOW": "yellow",
+            "ORANGE": "orange",
+            "RED": "red"
+          }
+        },
+        {
+          "id": "continuity-readiness",
+          "type": "gauge",
+          "title": "Continuity Readiness",
+          "description": "Readiness for temporal continuity events",
+          "query": "continuity_readiness_score",
+          "unit": "percent",
+          "thresholds": {
+            "good": 95,
+            "warning": 80,
+            "critical": 60
+          }
+        },
+        {
+          "id": "failover-status",
+          "type": "status_grid",
+          "title": "Failover Systems",
+          "description": "Status of temporal failover mechanisms",
+          "query": "failover_systems.status",
+          "items": [
+            {"id": "primary", "label": "Primary"},
+            {"id": "secondary", "label": "Secondary"},
+            {"id": "temporal_archive", "label": "Temporal Archive"},
+            {"id": "emergency", "label": "Emergency"}
+          ]
+        },
+        {
+          "id": "recovery-time",
+          "type": "stat",
+          "title": "Est. Recovery Time",
+          "description": "Estimated time to recover from total failure",
+          "query": "estimated_recovery_time",
+          "unit": "hours"
+        }
+      ]
+    }
+  ],
+
+  "alerts": [
+    {
+      "id": "consensus-failure",
+      "name": "Consensus Failure",
+      "severity": "critical",
+      "condition": "consensus_success_rate < 0.9 FOR 5m",
+      "message": "Consensus mechanism experiencing failures",
+      "actions": ["page_oncall", "activate_fallback_consensus"]
+    },
+    {
+      "id": "temporal-bridge-down",
+      "name": "Temporal Bridge Offline",
+      "severity": "critical",
+      "condition": "temporal_bridge_health = 0",
+      "message": "{{bridge_id}} temporal bridge has gone offline",
+      "actions": ["alert_temporal_coordination", "initiate_bridge_recovery"]
+    },
+    {
+      "id": "low-participation",
+      "name": "Low Governance Participation",
+      "severity": "warning",
+      "condition": "participation_rate < 0.5 FOR 24h",
+      "message": "Governance participation has dropped significantly",
+      "actions": ["notify_participation_committee"]
+    },
+    {
+      "id": "resource-constraint",
+      "name": "Resource Constraint Approaching",
+      "severity": "warning",
+      "condition": "resource_utilization > 0.85",
+      "message": "System approaching resource limits",
+      "actions": ["scale_resources", "notify_capacity_team"]
+    },
+    {
+      "id": "temporal-conflict-escalation",
+      "name": "Temporal Conflict Escalating",
+      "severity": "warning",
+      "condition": "temporal_conflict_severity = 'high' AND resolution_progress < 0.25",
+      "message": "High-severity temporal conflict not making resolution progress",
+      "actions": ["escalate_to_arbitration"]
+    }
+  ],
+
+  "filters": [
+    {
+      "id": "region-filter",
+      "type": "multi-select",
+      "label": "Region",
+      "options_query": "SELECT DISTINCT region FROM nodes ORDER BY region",
+      "default": "all"
+    },
+    {
+      "id": "governance-category",
+      "type": "multi-select",
+      "label": "Governance Category",
+      "options": ["resource", "protocol", "membership", "dispute", "policy"],
+      "default": "all"
+    },
+    {
+      "id": "temporal-position",
+      "type": "multi-select",
+      "label": "Temporal Position",
+      "options": ["past_proxy", "present", "future_proxy"],
+      "default": "all"
+    }
+  ],
+
+  "metadata": {
+    "created": "temporal_monitoring_team",
+    "purpose": "Real-time monitoring of present-era Grey Distributed operations and cross-temporal coordination",
+    "update_frequency": "30 seconds",
+    "data_sources": [
+      "governance_system",
+      "temporal_bridge_network",
+      "resource_manager",
+      "dispute_resolution_system",
+      "knowledge_archive",
+      "continuity_monitor"
+    ]
+  }
+}
