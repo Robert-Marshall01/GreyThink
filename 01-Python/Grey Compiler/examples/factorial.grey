@@ -1,0 +1,49 @@
+// Factorial in Grey
+// Demonstrates recursion, iteration, and structs
+
+// Recursive factorial
+fn factorial(n: int) -> int {
+    if n <= 1 {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+// Iterative factorial
+fn factorial_iter(n: int) -> int {
+    let mut result = 1;
+    let mut i = 2;
+    while i <= n {
+        result = result * i;
+        i = i + 1;
+    }
+    return result;
+}
+
+// Print factorials 0..12
+println("Factorials:");
+let mut i = 0;
+while i <= 12 {
+    let r = factorial(i);
+    println(r);
+    i = i + 1;
+}
+
+// Struct example
+struct MathResult {
+    input: int,
+    output: int,
+    method: string,
+}
+
+fn compute(n: int) -> MathResult {
+    return MathResult {
+        input: n,
+        output: factorial(n),
+        method: "recursive",
+    };
+}
+
+let res = compute(10);
+println("Factorial of 10:");
+println(res.output);

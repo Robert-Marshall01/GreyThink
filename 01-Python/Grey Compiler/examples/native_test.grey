@@ -1,0 +1,56 @@
+// Grey native compilation test
+// Tests: variables, arithmetic, functions, control flow, print
+
+fn add(a: int, b: int) -> int {
+    return a + b
+}
+
+fn factorial(n: int) -> int {
+    if n <= 1 {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+fn fibonacci(n: int) -> int {
+    if n <= 0 {
+        return 0
+    }
+    if n == 1 {
+        return 1
+    }
+    let mut a = 0;
+    let mut b = 1;
+    let mut i = 2;
+    while i <= n {
+        let temp = a + b;
+        a = b
+        b = temp
+        i = i + 1
+    }
+    return b
+}
+
+// Main program
+println("=== Grey Native Compilation Test ===")
+
+let x = 10;
+let y = 20;
+let sum = add(x, y);
+println(sum)
+
+println("Factorial of 10:")
+let fact = factorial(10);
+println(fact)
+
+println("Fibonacci of 15:")
+let fib = fibonacci(15);
+println(fib)
+
+let result = 2 * 3 + 4;
+println(result)
+
+let power = 2 ** 10;
+println(power)
+
+println("=== All tests passed ===")

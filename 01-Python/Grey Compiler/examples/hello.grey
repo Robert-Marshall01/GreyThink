@@ -1,0 +1,9 @@
+// Hello World in Grey
+// The simplest Grey program
+
+fn main() {
+    println("Hello, World!");
+    println("Welcome to the Grey programming language!");
+}
+
+main();

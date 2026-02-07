@@ -1,0 +1,45 @@
+// Fibonacci Sequence in Grey
+// Demonstrates recursion and iteration
+
+// Recursive Fibonacci
+fn fib_recursive(n: int) -> int {
+    if n <= 1 {
+        return n;
+    }
+    return fib_recursive(n - 1) + fib_recursive(n - 2);
+}
+
+// Iterative Fibonacci
+fn fib_iterative(n: int) -> int {
+    if n <= 1 {
+        return n;
+    }
+    let mut a = 0;
+    let mut b = 1;
+    let mut i = 2;
+    while i <= n {
+        let temp = a + b;
+        a = b;
+        b = temp;
+        i = i + 1;
+    }
+    return b;
+}
+
+// Print first 15 Fibonacci numbers
+println("Fibonacci Sequence (recursive):");
+let mut i = 0;
+while i < 15 {
+    let result = fib_recursive(i);
+    println(result);
+    i = i + 1;
+}
+
+println("");
+println("Fibonacci Sequence (iterative):");
+let mut j = 0;
+while j < 15 {
+    let result = fib_iterative(j);
+    println(result);
+    j = j + 1;
+}
