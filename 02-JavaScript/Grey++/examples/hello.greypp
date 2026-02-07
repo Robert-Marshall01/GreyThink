@@ -1,0 +1,6 @@
+// ─── Hello World in Grey++ ──────────────────────────────────────────────────
+// File extension: .greypp
+// Run:  grey run examples/hello.greypp
+
+print("Hello from Grey++!")
+print("The universal programming language.")

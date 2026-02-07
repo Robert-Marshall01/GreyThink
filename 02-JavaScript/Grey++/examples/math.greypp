@@ -1,0 +1,28 @@
+// ─── Grey++ Math Functions ──────────────────────────────────────────────────
+// Demonstrates function declarations, composition, and expressions.
+
+fn square(x) { x * x }
+fn cube(x) { x * x * x }
+fn add(a, b) { a + b }
+
+fn hypotenuse_sq(a, b) {
+    add(square(a), square(b))
+}
+
+print("square(5)     =")
+print(square(5))
+print("cube(3)       =")
+print(cube(3))
+print("hypotenuse²(3,4) =")
+print(hypotenuse_sq(3, 4))
+
+// factorial(5) = 5*4*3*2*1 = 120
+fn factorial5() { 5 * 4 * 3 * 2 * 1 }
+print("factorial(5)  =")
+print(factorial5())
+
+// Composition
+fn double(x) { x + x }
+fn quadruple(x) { double(double(x)) }
+print("quadruple(7)  =")
+print(quadruple(7))

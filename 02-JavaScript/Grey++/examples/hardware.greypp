@@ -1,0 +1,303 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// Grey++ Hardware Control — Embedded Systems & IoT
+// Replaces: C, C++, Rust (embedded), Arduino, MicroPython, VHDL concepts
+// Demonstrates: GPIO, Sensors, Actuators, Protocols, State Machines
+// ═══════════════════════════════════════════════════════════════════════════
+
+section("GREY++ HARDWARE CONTROL")
+
+// ── 1. GPIO Abstraction Layer ───────────────────────────────────────────────
+section("1. GPIO Pin Management")
+
+fn Pin(number, mode, initial_state) {
+    {
+        pin: number,
+        mode: mode,
+        state: initial_state,
+        set_high: fn() {
+            log(str("GPIO", number, " → HIGH"))
+            Pin(number, mode, 1)
+        },
+        set_low: fn() {
+            log(str("GPIO", number, " → LOW"))
+            Pin(number, mode, 0)
+        },
+        read: fn() { initial_state },
+        toggle: fn() {
+            fn new_state() { if_then(initial_state == 0, 1, 0) }
+            log(str("GPIO", number, " toggled → ", if_then(new_state() == 1, "HIGH", "LOW")))
+            Pin(number, mode, new_state())
+        },
+        describe: fn() { str("GPIO", number, " mode=", mode, " state=", if_then(initial_state == 1, "HIGH", "LOW")) }
+    }
+}
+
+fn demo_gpio() {
+    fn led_red() { Pin(17, "OUTPUT", 0) }
+    fn led_green() { Pin(27, "OUTPUT", 0) }
+    fn button() { Pin(22, "INPUT", 0) }
+    fn buzzer() { Pin(23, "OUTPUT", 0) }
+
+    // Turn on LEDs
+    fn red_on() { get(led_red(), "set_high")() }
+    fn green_on() { get(led_green(), "set_high")() }
+    fn buzzer_on() { get(buzzer(), "set_high")() }
+
+    forEach([red_on(), green_on(), buzzer_on()], fn(p) {
+        print(str("  ", get(p, "describe")()))
+    })
+    print(str("  Button state: ", get(button(), "describe")()))
+}
+
+demo_gpio()
+
+// ── 2. Sensor System ────────────────────────────────────────────────────────
+section("2. IoT Sensor Array")
+
+fn Sensor(name, type, unit, read_fn) {
+    {
+        name: name,
+        type: type,
+        unit: unit,
+        read: read_fn,
+        read_avg: fn(samples) {
+            fn readings() { repeat(samples, fn(i) { read_fn() }) }
+            round(avg(readings()) * 100) / 100
+        }
+    }
+}
+
+fn TemperatureSensor(name, pin) {
+    Sensor(name, "temperature", "°C", fn() {
+        // Simulate DHT22 reading: 20-30°C range
+        round((20 + random() * 10) * 100) / 100
+    })
+}
+
+fn HumiditySensor(name, pin) {
+    Sensor(name, "humidity", "%", fn() {
+        round((40 + random() * 30) * 100) / 100
+    })
+}
+
+fn PressureSensor(name, pin) {
+    Sensor(name, "pressure", "hPa", fn() {
+        round((1000 + random() * 30) * 100) / 100
+    })
+}
+
+fn LightSensor(name, pin) {
+    Sensor(name, "light", "lux", fn() {
+        round(random() * 1000)
+    })
+}
+
+fn GasSensor(name, pin) {
+    Sensor(name, "gas", "ppm", fn() {
+        round(random() * 500)
+    })
+}
+
+fn demo_sensors() {
+    fn sensors() {
+        [
+            TemperatureSensor("DHT22-1", 4),
+            HumiditySensor("DHT22-2", 4),
+            PressureSensor("BMP280", 5),
+            LightSensor("BH1750", 6),
+            GasSensor("MQ-2", 7)
+        ]
+    }
+
+    forEach(sensors(), fn(s) {
+        fn reading() { get(s, "read")() }
+        fn avg_reading() { get(s, "read_avg")(5) }
+        print(str("  ", get(s, "name"), " (", get(s, "type"), "): ",
+            reading(), " ", get(s, "unit"), " | 5-sample avg: ", avg_reading(), " ", get(s, "unit")))
+    })
+}
+
+demo_sensors()
+
+// ── 3. Actuator Control ─────────────────────────────────────────────────────
+section("3. Actuator Control System")
+
+fn Motor(name, max_rpm) {
+    fn make_motor(speed, direction, running) {
+        {
+            name: name,
+            speed: speed,
+            direction: direction,
+            running: running,
+            start: fn(spd, dir) {
+                fn clamped() { clamp(spd, 0, max_rpm) }
+                log(str(name, " started: ", clamped(), " RPM ", dir))
+                make_motor(clamped(), dir, true)
+            },
+            stop: fn() {
+                log(str(name, " stopped"))
+                make_motor(0, direction, false)
+            },
+            set_speed: fn(spd) {
+                fn clamped() { clamp(spd, 0, max_rpm) }
+                log(str(name, " speed → ", clamped(), " RPM"))
+                make_motor(clamped(), direction, running)
+            },
+            status: fn() {
+                str(name, ": ", if_then(running, str(speed, " RPM ", direction), "STOPPED"))
+            }
+        }
+    }
+    make_motor(0, "CW", false)
+}
+
+fn Servo(name, pin, min_angle, max_angle) {
+    fn make_servo(angle) {
+        {
+            name: name,
+            angle: angle,
+            move_to: fn(target) {
+                fn clamped() { clamp(target, min_angle, max_angle) }
+                log(str(name, " → ", clamped(), "°"))
+                make_servo(clamped())
+            },
+            center: fn() {
+                fn mid() { (min_angle + max_angle) / 2 }
+                log(str(name, " → center (", mid(), "°)"))
+                make_servo(mid())
+            },
+            status: fn() { str(name, ": ", angle, "° (range ", min_angle, "-", max_angle, ")") }
+        }
+    }
+    make_servo((min_angle + max_angle) / 2)
+}
+
+fn demo_actuators() {
+    fn dc_motor() { Motor("DC-Motor-1", 3000) }
+    fn stepper() { Motor("Stepper-1", 200) }
+    fn arm_servo() { Servo("Arm-Servo", 9, 0, 180) }
+    fn grip_servo() { Servo("Grip-Servo", 10, 30, 150) }
+
+    // Control sequence
+    fn m1() { get(dc_motor(), "start")(1500, "CW") }
+    fn m2() { get(stepper(), "start")(100, "CCW") }
+    fn s1() { get(arm_servo(), "move_to")(45) }
+    fn s2() { get(grip_servo(), "move_to")(120) }
+
+    print(str("  ", get(m1(), "status")()))
+    print(str("  ", get(m2(), "status")()))
+    print(str("  ", get(s1(), "status")()))
+    print(str("  ", get(s2(), "status")()))
+}
+
+demo_actuators()
+
+// ── 4. Communication Protocols ──────────────────────────────────────────────
+section("4. Communication Protocols")
+
+fn I2CDevice(address, name) {
+    {
+        address: address,
+        name: name,
+        write: fn(register, data) {
+            log(str("I2C[0x", pad_start(to_string(address), 2, "0"), "] WRITE reg=0x", pad_start(to_string(register), 2, "0"), " data=", data))
+            true
+        },
+        read: fn(register) {
+            fn value() { random_int(0, 255) }
+            log(str("I2C[0x", pad_start(to_string(address), 2, "0"), "] READ reg=0x", pad_start(to_string(register), 2, "0"), " → ", value()))
+            value()
+        }
+    }
+}
+
+fn SPIDevice(cs_pin, name, clock_speed) {
+    {
+        name: name,
+        cs_pin: cs_pin,
+        transfer: fn(tx_data) {
+            fn rx() { map(tx_data, fn(b) { random_int(0, 255) }) }
+            log(str("SPI[CS=", cs_pin, "] TX:", json_stringify(tx_data), " RX:", json_stringify(rx())))
+            rx()
+        }
+    }
+}
+
+fn demo_protocols() {
+    fn accel() { I2CDevice(104, "MPU6050") }
+    fn adc() { SPIDevice(8, "MCP3008", 1000000) }
+
+    // I2C accelerometer read
+    get(accel(), "write")(107, 0)
+    get(accel(), "read")(59)
+    get(accel(), "read")(61)
+    get(accel(), "read")(63)
+
+    // SPI ADC read
+    get(adc(), "transfer")([1, 128, 0])
+}
+
+demo_protocols()
+
+// ── 5. Hardware State Machine — Traffic Light ───────────────────────────────
+section("5. State Machine: Traffic Light Controller")
+
+fn TrafficLight(initial_state) {
+    fn make_light(state, timer) {
+        {
+            state: state,
+            timer: timer,
+            tick: fn() {
+                fn next() {
+                    cond(
+                        state == "RED",     fn() { make_light("GREEN", 30) },
+                        state == "GREEN",   fn() { make_light("YELLOW", 5) },
+                        state == "YELLOW",  fn() { make_light("RED", 45) },
+                        fn() { make_light("RED", 45) }
+                    )
+                }
+                if_then(timer <= 0, next(), make_light(state, timer - 1))
+            },
+            display: fn() {
+                fn indicator() {
+                    cond(
+                        state == "RED",    "🔴",
+                        state == "GREEN",  "🟢",
+                        state == "YELLOW", "🟡",
+                        "⚫"
+                    )
+                }
+                str(indicator(), " ", state, " (", timer, "s remaining)")
+            }
+        }
+    }
+    make_light(initial_state, if_then(initial_state == "RED", 45, if_then(initial_state == "GREEN", 30, 5)))
+}
+
+fn demo_traffic() {
+    fn light0() { TrafficLight("RED") }
+    fn light1() { get(light0(), "tick")() }
+    fn light2() { get(light1(), "tick")() }
+
+    // Simulate state transitions
+    fn simulate(light, steps) {
+        if_then(steps <= 0,
+            light,
+            fn() {
+                print(str("  ", get(light, "display")()))
+                // Fast-forward to transition
+                fn skip_to_transition(l, count) {
+                    if_then(count <= 0, l, fn() { skip_to_transition(get(l, "tick")(), count - 1) })
+                }
+                simulate(skip_to_transition(light, get(light, "timer")), steps - 1)
+            }
+        )
+    }
+
+    simulate(TrafficLight("RED"), 4)
+}
+
+demo_traffic()
+
+divider()
+print("Hardware control demo complete — GPIO, Sensors, Actuators, Protocols, State Machines all working.")

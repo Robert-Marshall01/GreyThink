@@ -1,0 +1,202 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// Grey++ Advanced Query System — Real-World Database Application
+// Replaces: SQL, PostgreSQL, MongoDB, GraphQL, Prisma, Sequelize
+// ═══════════════════════════════════════════════════════════════════════════
+
+section("GREY++ ADVANCED QUERY ENGINE")
+
+// ── Schema: E-Commerce Database ─────────────────────────────────────────────
+
+// Products table
+createTable("products", [
+    { id: 1,  name: "MacBook Pro 16",     category: "electronics", price: 2499, stock: 45,  rating: 4.8 },
+    { id: 2,  name: "iPhone 15 Pro",      category: "electronics", price: 1199, stock: 120, rating: 4.7 },
+    { id: 3,  name: "AirPods Pro",        category: "electronics", price: 249,  stock: 300, rating: 4.6 },
+    { id: 4,  name: "Standing Desk",      category: "furniture",   price: 599,  stock: 25,  rating: 4.3 },
+    { id: 5,  name: "Ergonomic Chair",    category: "furniture",   price: 899,  stock: 18,  rating: 4.5 },
+    { id: 6,  name: "4K Monitor",         category: "electronics", price: 699,  stock: 60,  rating: 4.4 },
+    { id: 7,  name: "Mechanical Keyboard", category: "peripherals", price: 179, stock: 200, rating: 4.9 },
+    { id: 8,  name: "Wireless Mouse",     category: "peripherals", price: 79,   stock: 350, rating: 4.2 }
+])
+
+// Customers table
+createTable("customers", [
+    { id: 1, name: "Alice Chen",     email: "alice@tech.io",    tier: "premium",  total_spent: 15400 },
+    { id: 2, name: "Bob Martinez",   email: "bob@startup.co",   tier: "standard", total_spent: 3200 },
+    { id: 3, name: "Carol Johnson",  email: "carol@corp.com",   tier: "premium",  total_spent: 28900 },
+    { id: 4, name: "Dave Kim",       email: "dave@indie.dev",   tier: "standard", total_spent: 1800 },
+    { id: 5, name: "Eve Williams",   email: "eve@enterprise.io", tier: "premium", total_spent: 42000 }
+])
+
+// Orders table
+createTable("orders", [
+    { id: 101, customer_id: 1, product_id: 1, qty: 1, total: 2499,  status: "shipped",   date: "2026-01-15" },
+    { id: 102, customer_id: 1, product_id: 3, qty: 2, total: 498,   status: "delivered",  date: "2026-01-10" },
+    { id: 103, customer_id: 2, product_id: 7, qty: 1, total: 179,   status: "processing", date: "2026-02-01" },
+    { id: 104, customer_id: 3, product_id: 1, qty: 2, total: 4998,  status: "delivered",  date: "2026-01-20" },
+    { id: 105, customer_id: 3, product_id: 5, qty: 1, total: 899,   status: "shipped",    date: "2026-01-25" },
+    { id: 106, customer_id: 4, product_id: 8, qty: 3, total: 237,   status: "delivered",  date: "2026-01-05" },
+    { id: 107, customer_id: 5, product_id: 2, qty: 1, total: 1199,  status: "shipped",    date: "2026-02-03" },
+    { id: 108, customer_id: 5, product_id: 6, qty: 4, total: 2796,  status: "processing", date: "2026-02-05" }
+])
+
+// ── Query 1: Product Search ─────────────────────────────────────────────────
+section("Query 1: Premium Electronics (price > $500)")
+
+fn premium_electronics() {
+    query {
+        select name, price, rating
+        from products
+        where price > 500
+    }
+}
+
+print(premium_electronics())
+
+// ── Query 2: Inventory Analysis ─────────────────────────────────────────────
+section("Query 2: Low Stock Alert (stock < 30)")
+
+fn low_stock_alert() {
+    query {
+        select name, stock, category
+        from products
+        where stock < 30
+    }
+}
+
+print(low_stock_alert())
+
+// ── Query 3: Customer Segmentation ──────────────────────────────────────────
+section("Query 3: Premium Customers")
+
+fn premium_customers() {
+    query {
+        select name, email, total_spent
+        from customers
+        where tier == "premium"
+    }
+}
+
+print(premium_customers())
+
+// ── Query 4: Revenue Analysis ───────────────────────────────────────────────
+section("Query 4: High-Value Orders (total > $1000)")
+
+fn high_value_orders() {
+    query {
+        select *
+        from orders
+        where total > 1000
+    }
+}
+
+fn analyze_revenue() {
+    fn get_totals(orders) {
+        map(orders, fn(o) { get(o, "total") })
+    }
+    fn calc_revenue(totals) {
+        reduce(totals, fn(acc, v) { acc + v }, 0)
+    }
+    fn calc_avg(totals) {
+        calc_revenue(totals) / len(totals)
+    }
+
+    print(high_value_orders())
+    print(str("  Total revenue from high-value orders: $", calc_revenue(get_totals(high_value_orders()))))
+    print(str("  Average order value: $", round(calc_avg(get_totals(high_value_orders())))))
+    print(str("  Count: ", len(high_value_orders()), " orders"))
+}
+
+analyze_revenue()
+
+// ── Query 5: Dynamic Aggregation Pipeline ───────────────────────────────────
+section("Query 5: Category Analytics")
+
+fn category_analytics() {
+    // Simulate GROUP BY with aggregation
+    fn all_products() {
+        query { select * from products }
+    }
+
+    fn by_category(products) {
+        group_by(products, fn(p) { get(p, "category") })
+    }
+
+    fn summarize_category(name, items) {
+        fn total_value() { reduce(items, fn(acc, p) { acc + get(p, "price") * get(p, "stock") }, 0) }
+        fn avg_price() { round(avg(map(items, fn(p) { get(p, "price") }))) }
+        fn avg_rating() { round(avg(map(items, fn(p) { get(p, "rating") })) * 100) / 100 }
+        {
+            category: name,
+            product_count: len(items),
+            avg_price: avg_price(),
+            avg_rating: avg_rating(),
+            total_inventory_value: total_value()
+        }
+    }
+
+    fn run_analytics() {
+        fn process_groups(groups) {
+            map(keys(groups), fn(k) {
+                summarize_category(k, get(groups, k))
+            })
+        }
+        process_groups(by_category(all_products()))
+    }
+
+    print(run_analytics())
+}
+
+category_analytics()
+
+// ── Query 6: Simulated JOIN — Order Enrichment ──────────────────────────────
+section("Query 6: Enriched Order Report (simulated JOIN)")
+
+fn enriched_orders() {
+    fn all_orders() { query { select * from orders } }
+    fn all_customers() { query { select * from customers } }
+    fn all_products() { query { select * from products } }
+
+    fn find_by_id(items, id) {
+        find(items, fn(item) { get(item, "id") == id })
+    }
+
+    fn enrich(order) {
+        fn customer() { find_by_id(all_customers(), get(order, "customer_id")) }
+        fn product() { find_by_id(all_products(), get(order, "product_id")) }
+        {
+            order_id:      get(order, "id"),
+            customer_name: get(customer(), "name"),
+            product_name:  get(product(), "name"),
+            quantity:       get(order, "qty"),
+            total:          get(order, "total"),
+            status:         get(order, "status"),
+            date:           get(order, "date")
+        }
+    }
+
+    map(all_orders(), fn(o) { enrich(o) })
+}
+
+print(enriched_orders())
+
+// ── Query 7: Real-Time Insert + Query ───────────────────────────────────────
+section("Query 7: Live Data Insertion + Query")
+
+// Simulate live order stream
+insertRow("orders", { id: 109, customer_id: 2, product_id: 6, qty: 1, total: 699, status: "processing", date: "2026-02-06" })
+insertRow("orders", { id: 110, customer_id: 1, product_id: 7, qty: 2, total: 358, status: "processing", date: "2026-02-06" })
+
+fn processing_orders() {
+    query {
+        select *
+        from orders
+        where status == "processing"
+    }
+}
+
+print(str("Processing orders after live inserts: ", len(processing_orders())))
+print(processing_orders())
+
+divider()
+print("Query engine demo complete — 7 queries executed successfully.")

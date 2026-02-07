@@ -1,0 +1,325 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// Grey++ Game Development — Entities, Physics, State Machines, Game Loop
+// Replaces: Unity (C#), Unreal (C++), Godot (GDScript), Pygame
+// ═══════════════════════════════════════════════════════════════════════════
+
+section("GREY++ GAME DEVELOPMENT")
+
+// ── 1. Vector2D Math ────────────────────────────────────────────────────────
+section("1. Vector2D Math Library")
+
+fn Vec2(x, y) { { x: x, y: y } }
+
+fn vec2_add(a, b) { Vec2(get(a, "x") + get(b, "x"), get(a, "y") + get(b, "y")) }
+fn vec2_sub(a, b) { Vec2(get(a, "x") - get(b, "x"), get(a, "y") - get(b, "y")) }
+fn vec2_scale(v, s) { Vec2(get(v, "x") * s, get(v, "y") * s) }
+fn vec2_mag(v) { sqrt(get(v, "x") * get(v, "x") + get(v, "y") * get(v, "y")) }
+fn vec2_normalize(v) {
+    fn m() { vec2_mag(v) }
+    if_then(m() == 0, Vec2(0, 0), Vec2(get(v, "x") / m(), get(v, "y") / m()))
+}
+fn vec2_dot(a, b) { get(a, "x") * get(b, "x") + get(a, "y") * get(b, "y") }
+fn vec2_dist(a, b) { vec2_mag(vec2_sub(a, b)) }
+fn vec2_lerp(a, b, t) { vec2_add(a, vec2_scale(vec2_sub(b, a), t)) }
+fn vec2_str(v) { str("(", round(get(v, "x") * 100) / 100, ", ", round(get(v, "y") * 100) / 100, ")") }
+
+fn demo_vectors() {
+    fn a() { Vec2(3, 4) }
+    fn b() { Vec2(7, 1) }
+
+    print(str("  a = ", vec2_str(a()), "  b = ", vec2_str(b())))
+    print(str("  a + b    = ", vec2_str(vec2_add(a(), b()))))
+    print(str("  a - b    = ", vec2_str(vec2_sub(a(), b()))))
+    print(str("  |a|      = ", round(vec2_mag(a()) * 100) / 100))
+    print(str("  norm(a)  = ", vec2_str(vec2_normalize(a()))))
+    print(str("  a · b    = ", vec2_dot(a(), b())))
+    print(str("  dist     = ", round(vec2_dist(a(), b()) * 100) / 100))
+    print(str("  lerp 50% = ", vec2_str(vec2_lerp(a(), b(), 0.5))))
+}
+
+demo_vectors()
+
+// ── 2. Entity Component System ──────────────────────────────────────────────
+section("2. Entity Component System")
+
+fn Transform(x, y, rotation) { { type: "Transform", x: x, y: y, rotation: rotation } }
+fn Sprite(name, width, height) { { type: "Sprite", name: name, width: width, height: height } }
+fn RigidBody(vx, vy, mass, friction) { { type: "RigidBody", vx: vx, vy: vy, mass: mass, friction: friction } }
+fn Collider(width, height, is_trigger) { { type: "Collider", width: width, height: height, is_trigger: is_trigger } }
+fn Health(hp, max_hp, armor) { { type: "Health", hp: hp, max_hp: max_hp, armor: armor } }
+fn Weapon(name, damage, fire_rate, ammo) { { type: "Weapon", name: name, damage: damage, fire_rate: fire_rate, ammo: ammo } }
+fn AIController(behavior, detection_range) { { type: "AIController", behavior: behavior, detection_range: detection_range } }
+
+fn Entity(name, components) {
+    {
+        name: name,
+        get_component: fn(comp_type) {
+            find(components, fn(c) { get(c, "type") == comp_type })
+        },
+        has_component: fn(comp_type) {
+            some(components, fn(c) { get(c, "type") == comp_type })
+        },
+        add_component: fn(comp) { Entity(name, push(components, comp)) },
+        remove_component: fn(comp_type) {
+            Entity(name, filter(components, fn(c) { not(get(c, "type") == comp_type) }))
+        },
+        components: fn() { components },
+        describe: fn() {
+            fn comp_names() { join(map(components, fn(c) { get(c, "type") }), ", ") }
+            str(name, " [", comp_names(), "]")
+        }
+    }
+}
+
+fn demo_ecs() {
+    fn player() {
+        Entity("Hero", [
+            Transform(100, 200, 0),
+            Sprite("hero_idle", 32, 48),
+            RigidBody(0, 0, 1, 0.8),
+            Collider(32, 48, false),
+            Health(100, 100, 10),
+            Weapon("Sword", 25, 1.5, 999)
+        ])
+    }
+
+    fn enemy() {
+        Entity("Goblin", [
+            Transform(400, 200, 0),
+            Sprite("goblin_walk", 24, 32),
+            RigidBody(0, 0, 0.8, 0.6),
+            Collider(24, 32, false),
+            Health(50, 50, 5),
+            Weapon("Club", 10, 0.8, 999),
+            AIController("chase", 150)
+        ])
+    }
+
+    fn chest() {
+        Entity("Treasure", [
+            Transform(300, 150, 0),
+            Sprite("chest_closed", 24, 24),
+            Collider(24, 24, true)
+        ])
+    }
+
+    forEach([player(), enemy(), chest()], fn(e) {
+        print(str("  ", get(e, "describe")()))
+    })
+
+    // Combat simulation
+    fn player_weapon() { get(player(), "get_component")("Weapon") }
+    fn enemy_health() { get(enemy(), "get_component")("Health") }
+    fn enemy_armor() { get(enemy_health(), "armor") }
+    fn damage() { max(0, get(player_weapon(), "damage") - enemy_armor()) }
+    fn remaining_hp() { get(enemy_health(), "hp") - damage() }
+
+    print(str("\n  Combat: Hero attacks Goblin"))
+    print(str("  Weapon: ", get(player_weapon(), "name"), " (", get(player_weapon(), "damage"), " dmg)"))
+    print(str("  Armor absorbs: ", enemy_armor()))
+    print(str("  Damage dealt: ", damage()))
+    print(str("  Goblin HP: ", get(enemy_health(), "hp"), " → ", remaining_hp()))
+}
+
+demo_ecs()
+
+// ── 3. Physics Engine ───────────────────────────────────────────────────────
+section("3. Physics Simulation")
+
+fn PhysicsWorld(gravity, entities) {
+    {
+        step: fn(dt) {
+            fn updated() {
+                map(entities, fn(e) {
+                    fn has_rb() { get(e, "has_component")("RigidBody") }
+                    fn has_tf() { get(e, "has_component")("Transform") }
+
+                    if_then(and(has_rb(), has_tf()),
+                        fn() {
+                            fn rb() { get(e, "get_component")("RigidBody") }
+                            fn tf() { get(e, "get_component")("Transform") }
+
+                            // Apply gravity
+                            fn new_vy() { get(rb(), "vy") + gravity * dt }
+                            // Apply friction
+                            fn new_vx() { get(rb(), "vx") * get(rb(), "friction") }
+                            // Update position
+                            fn new_x() { get(tf(), "x") + new_vx() * dt }
+                            fn new_y() { max(0, get(tf(), "y") + new_vy() * dt) }
+                            // Clamp to ground
+                            fn on_ground() { new_y() <= 0 }
+
+                            {
+                                name: get(e, "name"),
+                                pos: Vec2(round(new_x() * 10) / 10, round(if_then(on_ground(), 0, new_y()) * 10) / 10),
+                                vel: Vec2(round(new_vx() * 10) / 10, round(if_then(on_ground(), 0, new_vy()) * 10) / 10)
+                            }
+                        },
+                        { name: get(e, "name"), pos: Vec2(0, 0), vel: Vec2(0, 0) }
+                    )
+                })
+            }
+            updated()
+        }
+    }
+}
+
+fn demo_physics() {
+    fn ball() {
+        Entity("Ball", [
+            Transform(0, 100, 0),
+            RigidBody(10, 0, 1, 0.95)
+        ])
+    }
+
+    fn world() { PhysicsWorld(9.8, [ball()]) }
+
+    // Simulate 5 steps
+    fn steps() { [0.1, 0.1, 0.1, 0.1, 0.1] }
+    fn states() {
+        map(range(0, 5), fn(step) {
+            fn result() { get(world(), "step")(get(steps(), step)) }
+            fn state() { head(result()) }
+            print(str("  t=", (step + 1) * 0.1, "s  pos=", vec2_str(get(state(), "pos")), "  vel=", vec2_str(get(state(), "vel"))))
+            state()
+        })
+    }
+    states()
+}
+
+demo_physics()
+
+// ── 4. Finite State Machine ─────────────────────────────────────────────────
+section("4. AI State Machine")
+
+fn StateMachine(initial_state, transitions) {
+    fn make_sm(current, history) {
+        {
+            current: fn() { current },
+            trigger: fn(event) {
+                fn rule() { find(transitions, fn(t) {
+                    and(get(t, "from") == current, get(t, "event") == event)
+                })}
+                if_then(is_nil(rule()),
+                    fn() {
+                        warn(str("No transition: ", current, " + ", event))
+                        make_sm(current, history)
+                    },
+                    fn() {
+                        fn next() { get(rule(), "to") }
+                        fn action() { get(rule(), "action") }
+                        if_then(not(is_nil(action())), action(), nil)
+                        log(str("State: ", current, " → ", next(), " (", event, ")"))
+                        make_sm(next(), push(history, { from: current, to: next(), event: event }))
+                    }
+                )
+            },
+            history: fn() { history }
+        }
+    }
+    make_sm(initial_state, [])
+}
+
+fn demo_state_machine() {
+    fn enemy_ai() {
+        StateMachine("idle", [
+            { from: "idle",    event: "spot_player",    to: "alert",    action: fn() { print("    ! Enemy spots player") } },
+            { from: "alert",   event: "player_close",   to: "chase",    action: fn() { print("    ! Enemy starts chasing") } },
+            { from: "alert",   event: "lost_player",    to: "idle",     action: fn() { print("    . Enemy returns to idle") } },
+            { from: "chase",   event: "in_range",       to: "attack",   action: fn() { print("    ⚔ Enemy attacks!") } },
+            { from: "chase",   event: "lost_player",    to: "search",   action: fn() { print("    ? Enemy lost player, searching") } },
+            { from: "attack",  event: "player_fled",    to: "chase",    action: fn() { print("    ! Player escaped, resume chase") } },
+            { from: "attack",  event: "player_dead",    to: "idle",     action: fn() { print("    ✓ Target eliminated") } },
+            { from: "search",  event: "timeout",        to: "idle",     action: fn() { print("    . Search timed out, back to idle") } },
+            { from: "search",  event: "spot_player",    to: "chase",    action: fn() { print("    ! Found player again!") } }
+        ])
+    }
+
+    fn ai0() { enemy_ai() }
+    print(str("  Initial: ", get(ai0(), "current")()))
+
+    fn ai1() { get(ai0(), "trigger")("spot_player") }
+    fn ai2() { get(ai1(), "trigger")("player_close") }
+    fn ai3() { get(ai2(), "trigger")("in_range") }
+    fn ai4() { get(ai3(), "trigger")("player_fled") }
+    fn ai5() { get(ai4(), "trigger")("lost_player") }
+    fn ai6() { get(ai5(), "trigger")("timeout") }
+
+    print(str("  Final: ", get(ai6(), "current")()))
+    print(str("  Transitions: ", len(get(ai6(), "history")())))
+}
+
+demo_state_machine()
+
+// ── 5. Inventory System ─────────────────────────────────────────────────────
+section("5. Inventory System")
+
+fn Inventory(max_slots) {
+    fn make_inv(slots) {
+        {
+            add_item: fn(item_name, count, max_stack) {
+                fn existing() { find(slots, fn(s) { get(s, "name") == item_name }) }
+                if_then(is_nil(existing()),
+                    fn() {
+                        if_then(len(slots) >= max_slots,
+                            { success: false, error: "Inventory full", inv: make_inv(slots) },
+                            { success: true, inv: make_inv(push(slots, { name: item_name, count: count, max: max_stack })) }
+                        )
+                    },
+                    fn() {
+                        fn new_count() { min(get(existing(), "count") + count, max_stack) }
+                        fn updated() { map(slots, fn(s) {
+                            if_then(get(s, "name") == item_name, merge(s, { count: new_count() }), s)
+                        })}
+                        { success: true, inv: make_inv(updated()) }
+                    }
+                )
+            },
+            use_item: fn(item_name) {
+                fn item() { find(slots, fn(s) { get(s, "name") == item_name }) }
+                if_then(is_nil(item()),
+                    { success: false, error: "Item not found" },
+                    fn() {
+                        fn remaining() { get(item(), "count") - 1 }
+                        fn new_slots() {
+                            if_then(remaining() <= 0,
+                                filter(slots, fn(s) { not(get(s, "name") == item_name) }),
+                                map(slots, fn(s) { if_then(get(s, "name") == item_name, merge(s, { count: remaining() }), s) })
+                            )
+                        }
+                        { success: true, used: item_name, inv: make_inv(new_slots()) }
+                    }
+                )
+            },
+            list: fn() { slots },
+            space: fn() { str(len(slots), "/", max_slots) }
+        }
+    }
+    make_inv([])
+}
+
+fn demo_inventory() {
+    fn inv0() { Inventory(6) }
+    fn inv1() { get(get(inv0(), "add_item")("Health Potion", 3, 10), "inv") }
+    fn inv2() { get(get(inv1(), "add_item")("Iron Sword", 1, 1), "inv") }
+    fn inv3() { get(get(inv2(), "add_item")("Gold Coin", 50, 999), "inv") }
+    fn inv4() { get(get(inv3(), "add_item")("Health Potion", 2, 10), "inv") }
+    fn inv5() { get(get(inv4(), "add_item")("Arrow", 20, 64), "inv") }
+
+    print(str("  Inventory (", get(inv5(), "space")(), "):"))
+    forEach(get(inv5(), "list")(), fn(item) {
+        print(str("    [", get(item, "count"), "/", get(item, "max"), "] ", get(item, "name")))
+    })
+
+    // Use an item
+    fn result() { get(inv5(), "use_item")("Health Potion") }
+    fn inv6() { get(result(), "inv") }
+    print(str("\n  Used: ", get(result(), "used")))
+    fn hp_slot() { find(get(inv6(), "list")(), fn(s) { get(s, "name") == "Health Potion" }) }
+    print(str("  Health Potions remaining: ", get(hp_slot(), "count")))
+}
+
+demo_inventory()
+
+divider()
+print("Game dev demo complete — Vectors, ECS, Physics, State Machines, Inventory all working.")

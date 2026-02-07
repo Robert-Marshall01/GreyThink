@@ -1,0 +1,229 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// Grey++ Rapid Prototyping — Build Fast, Iterate Faster
+// Replaces: Python scripts, Ruby, Lua, JavaScript prototypes
+// Demonstrates: Quick data modeling, API mock, pipeline, validation
+// ═══════════════════════════════════════════════════════════════════════════
+
+section("GREY++ RAPID PROTOTYPING")
+
+// ── 1. Data Modeling in Minutes ─────────────────────────────────────────────
+section("1. Instant Data Models")
+
+fn User(name, email, role) {
+    { name: name, email: email, role: role, created_at: now(), id: uuid() }
+}
+
+fn Product(name, price, category) {
+    { name: name, price: price, category: category, sku: str("SKU-", hash(name)), active: true }
+}
+
+fn Order(user, items) {
+    fn calc_total() { reduce(items, fn(acc, i) { acc + get(i, "price") * get(i, "qty") }, 0) }
+    { id: uuid(), user_id: get(user, "id"), items: items, total: calc_total(), status: "pending", created: now() }
+}
+
+fn OrderItem(product, qty) {
+    { product_id: get(product, "sku"), name: get(product, "name"), price: get(product, "price"), qty: qty }
+}
+
+// Quick prototyping — define and use in seconds
+fn demo_data() {
+    fn alice() { User("Alice", "alice@startup.io", "admin") }
+    fn laptop() { Product("Dev Laptop", 1999, "hardware") }
+    fn monitor() { Product("4K Monitor", 699, "hardware") }
+    fn keyboard() { Product("Mech KB", 179, "peripherals") }
+
+    fn order() {
+        Order(alice(), [
+            OrderItem(laptop(), 1),
+            OrderItem(monitor(), 2),
+            OrderItem(keyboard(), 3)
+        ])
+    }
+
+    print(str("  User: ", get(alice(), "name"), " (", get(alice(), "role"), ")"))
+    print(str("  Order total: $", get(order(), "total")))
+    print(str("  Items: ", len(get(order(), "items"))))
+    order()
+}
+
+demo_data()
+
+// ── 2. Validation Pipeline ──────────────────────────────────────────────────
+section("2. Input Validation Pipeline")
+
+fn Validator(name, check_fn, error_msg) {
+    { name: name, check: check_fn, error: error_msg }
+}
+
+fn validate(value, validators) {
+    fn run_checks() {
+        filter(validators, fn(v) { not(get(v, "check")(value)) })
+    }
+    fn failed() { run_checks() }
+    fn errors() { map(failed(), fn(v) { get(v, "error") }) }
+
+    if_then(len(errors()) == 0,
+        { valid: true, value: value, errors: [] },
+        { valid: false, value: value, errors: errors() }
+    )
+}
+
+fn demo_validation() {
+    fn email_validators() {
+        [
+            Validator("not_empty", fn(v) { len(v) > 0 }, "Email cannot be empty"),
+            Validator("has_at", fn(v) { includes(v, "@") }, "Email must contain @"),
+            Validator("has_dot", fn(v) { includes(v, ".") }, "Email must contain a domain"),
+            Validator("min_length", fn(v) { len(v) >= 5 }, "Email too short")
+        ]
+    }
+
+    fn test_emails() { ["alice@dev.io", "invalid", "", "a@b.cc", "no-at-sign.com"] }
+
+    forEach(test_emails(), fn(email) {
+        fn result() { validate(email, email_validators()) }
+        if_then(get(result(), "valid"),
+            fn() { print(str("  ✓ '", email, "' — valid")) },
+            fn() { print(str("  ✗ '", email, "' — ", join(get(result(), "errors"), "; "))) }
+        )
+    })
+}
+
+demo_validation()
+
+// ── 3. Mock API Builder ─────────────────────────────────────────────────────
+section("3. Mock REST API")
+
+fn Route(method, path, handler) {
+    { method: upper(method), path: path, handler: handler }
+}
+
+fn Response(status, body) {
+    { status: status, body: body, headers: { content_type: "application/json" } }
+}
+
+fn MockAPI(name, routes) {
+    {
+        name: name,
+        routes: routes,
+        handle: fn(method, path, body) {
+            fn match_route() {
+                find(routes, fn(r) { and(get(r, "method") == upper(method), get(r, "path") == path) })
+            }
+            fn route() { match_route() }
+            if_then(is_nil(route()),
+                fn() { Response(404, { error: "Not Found" }) },
+                fn() { get(route(), "handler")(body) }
+            )
+        }
+    }
+}
+
+fn demo_api() {
+    // In-memory store
+    fn users_db() {
+        [
+            { id: 1, name: "Alice", email: "alice@dev.io" },
+            { id: 2, name: "Bob", email: "bob@dev.io" }
+        ]
+    }
+
+    fn api() {
+        MockAPI("UserService", [
+            Route("GET", "/users", fn(body) {
+                Response(200, users_db())
+            }),
+            Route("GET", "/users/1", fn(body) {
+                Response(200, head(users_db()))
+            }),
+            Route("POST", "/users", fn(body) {
+                Response(201, merge(body, { id: 3 }))
+            }),
+            Route("DELETE", "/users/1", fn(body) {
+                Response(204, { deleted: true })
+            })
+        ])
+    }
+
+    // Simulate API calls
+    fn test_requests() {
+        [
+            ["GET", "/users", {}],
+            ["GET", "/users/1", {}],
+            ["POST", "/users", { name: "Carol", email: "carol@dev.io" }],
+            ["DELETE", "/users/1", {}],
+            ["GET", "/unknown", {}]
+        ]
+    }
+
+    forEach(test_requests(), fn(req) {
+        fn method() { get(req, 0) }
+        fn path() { get(req, 1) }
+        fn body() { get(req, 2) }
+        fn result() { get(api(), "handle")(method(), path(), body()) }
+        print(str("  ", method(), " ", path(), " → ", get(result(), "status"), " ", json_stringify(get(result(), "body"))))
+    })
+}
+
+demo_api()
+
+// ── 4. Data Pipeline Prototype ──────────────────────────────────────────────
+section("4. ETL Data Pipeline")
+
+fn pipeline_stage(name, transform_fn) {
+    { name: name, transform: transform_fn }
+}
+
+fn Pipeline(stages) {
+    {
+        run: fn(data) {
+            fn execute(input, remaining_stages, step) {
+                if_then(len(remaining_stages) == 0,
+                    input,
+                    fn() {
+                        fn stage() { head(remaining_stages) }
+                        fn result() { get(stage(), "transform")(input) }
+                        log(str("Stage ", step, ": ", get(stage(), "name"), " — ", len(result()), " records"))
+                        execute(result(), tail(remaining_stages), step + 1)
+                    }
+                )
+            }
+            execute(data, stages, 1)
+        }
+    }
+}
+
+fn demo_pipeline() {
+    fn raw_data() {
+        [
+            { name: "Alice",   age: 30, dept: "eng",   salary: 120000, active: true },
+            { name: "Bob",     age: 25, dept: "eng",   salary: 95000,  active: true },
+            { name: "Carol",   age: 35, dept: "sales", salary: 85000,  active: false },
+            { name: "Dave",    age: 28, dept: "eng",   salary: 110000, active: true },
+            { name: "Eve",     age: 40, dept: "hr",    salary: 78000,  active: true },
+            { name: "Frank",   age: 22, dept: "eng",   salary: 72000,  active: false },
+            { name: "Grace",   age: 33, dept: "sales", salary: 92000,  active: true }
+        ]
+    }
+
+    fn etl() {
+        Pipeline([
+            pipeline_stage("Filter Active", fn(data) { filter(data, fn(r) { get(r, "active") }) }),
+            pipeline_stage("Enrich",        fn(data) { map(data, fn(r) { merge(r, { tax: round(get(r, "salary") * 0.22), seniority: if_then(get(r, "age") > 30, "senior", "junior") }) }) }),
+            pipeline_stage("Sort by Salary", fn(data) { sort(data, fn(a, b) { get(b, "salary") - get(a, "salary") }) }),
+            pipeline_stage("Top 3",          fn(data) { take(data, 3) })
+        ])
+    }
+
+    fn result() { get(etl(), "run")(raw_data()) }
+    print("  Final pipeline output:")
+    forEach(result(), fn(r) {
+        print(str("    ", get(r, "name"), " — $", get(r, "salary"), " (", get(r, "seniority"), ", tax: $", get(r, "tax"), ")"))
+    })
+}
+
+demo_pipeline()
+
+divider()
+print("Rapid prototyping demo complete — data models, validation, API, pipeline all working.")

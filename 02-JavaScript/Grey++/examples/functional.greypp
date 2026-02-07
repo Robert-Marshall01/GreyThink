@@ -1,0 +1,340 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// Grey++ Functional Programming — Composition, Monads, Immutable Data
+// Replaces: Haskell, OCaml, Clojure, Elm, F#, Scala
+// ═══════════════════════════════════════════════════════════════════════════
+
+section("GREY++ FUNCTIONAL PROGRAMMING")
+
+// ── 1. Function Composition & Pipelines ─────────────────────────────────────
+section("1. Advanced Composition & Pipelines")
+
+fn demo_composition() {
+    // Build a data processing pipeline
+    fn add_tax(rate) { fn(price) { round(price * (1 + rate / 100)) } }
+    fn apply_discount(percent) { fn(price) { round(price * (100 - percent) / 100) } }
+    fn format_currency(amount) { str("$", to_string(amount)) }
+    fn clamp_min(min_val) { fn(val) { max(val, min_val) } }
+
+    // Compose: price → discount → tax → clamp → format
+    fn pricing_pipeline() {
+        compose(format_currency,
+            compose(clamp_min(10),
+                compose(add_tax(8),
+                    apply_discount(15))))
+    }
+
+    fn prices() { [100, 250, 50, 999, 15] }
+    fn processed() { map(prices(), fn(p) { pricing_pipeline()(p) }) }
+
+    print(str("  Original:  ", json_stringify(prices())))
+    print(str("  Processed: ", json_stringify(processed())))
+
+    // pipe is left-to-right composition
+    fn data_pipe() {
+        fn process(items) {
+            pipe(
+                fn(x) { filter(x, fn(n) { n > 20 }) },
+                fn(x) { map(x, fn(n) { n * 2 }) },
+                fn(x) { sort(x, fn(a, b) { b - a }) }
+            )(items)
+        }
+        process([5, 30, 15, 80, 25, 10, 60, 45])
+    }
+
+    print(str("  Pipe result: ", json_stringify(data_pipe())))
+}
+
+demo_composition()
+
+// ── 2. Maybe/Option Monad ───────────────────────────────────────────────────
+section("2. Maybe Monad (Null Safety)")
+
+fn Just(value) { { type: "Just", value: value } }
+fn Nothing() { { type: "Nothing" } }
+
+fn is_just(m) { get(m, "type") == "Just" }
+fn is_nothing(m) { get(m, "type") == "Nothing" }
+fn from_maybe(m, default_val) { if_then(is_just(m), get(m, "value"), default_val) }
+
+fn maybe_map(m, f) {
+    if_then(is_nothing(m), Nothing(), Just(f(get(m, "value"))))
+}
+
+fn maybe_flatmap(m, f) {
+    if_then(is_nothing(m), Nothing(), f(get(m, "value")))
+}
+
+fn maybe_filter(m, pred) {
+    if_then(is_nothing(m), Nothing(),
+        if_then(pred(get(m, "value")), m, Nothing())
+    )
+}
+
+fn maybe_of(value) { if_then(is_nil(value), Nothing(), Just(value)) }
+
+fn demo_maybe() {
+    // Safe nested property access
+    fn safe_get(obj, key) {
+        maybe_of(get(obj, key))
+    }
+
+    fn user() { { name: "Alice", address: { city: "Portland", zip: "97201" }, age: 30 } }
+
+    // Chained safe access: user → address → city → uppercase
+    fn city() {
+        from_maybe(
+            maybe_map(
+                safe_get(get(user(), "address"), "city"),
+                fn(c) { upper(c) }
+            ),
+            "UNKNOWN"
+        )
+    }
+
+    fn missing() {
+        from_maybe(
+            safe_get(user(), "phone"),
+            "No phone"
+        )
+    }
+
+    print(str("  City: ", city()))
+    print(str("  Phone: ", missing()))
+
+    // Maybe pipeline
+    fn parse_age(input) { maybe_of(parse_int(input)) }
+    fn validate_age(age) { maybe_filter(Just(age), fn(a) { and(a >= 0, a <= 150) }) }
+    fn categorize(age) {
+        cond(
+            age < 13, "child",
+            age < 18, "teen",
+            age < 65, "adult",
+            "senior"
+        )
+    }
+
+    fn process_age(input) {
+        from_maybe(
+            maybe_map(
+                maybe_flatmap(parse_age(input), fn(a) { validate_age(a) }),
+                fn(a) { str(input, " → ", categorize(a)) }
+            ),
+            str(input, " → invalid")
+        )
+    }
+
+    forEach(["25", "8", "72", "abc", "200"], fn(input) {
+        print(str("  ", process_age(input)))
+    })
+}
+
+demo_maybe()
+
+// ── 3. Either Monad (Error Handling) ────────────────────────────────────────
+section("3. Either Monad (Error Handling)")
+
+fn Left(error) { { type: "Left", value: error } }
+fn Right(value) { { type: "Right", value: value } }
+
+fn is_right(e) { get(e, "type") == "Right" }
+fn is_left(e) { get(e, "type") == "Left" }
+
+fn either_map(e, f) {
+    if_then(is_left(e), e, Right(f(get(e, "value"))))
+}
+
+fn either_flatmap(e, f) {
+    if_then(is_left(e), e, f(get(e, "value")))
+}
+
+fn either_fold(e, on_left, on_right) {
+    if_then(is_left(e), on_left(get(e, "value")), on_right(get(e, "value")))
+}
+
+fn demo_either() {
+    // Validation chain using Either
+    fn validate_email(input) {
+        if_then(includes(input, "@"),
+            Right(input),
+            Left(str("Invalid email: ", input))
+        )
+    }
+
+    fn validate_length(min) {
+        fn(input) {
+            if_then(len(input) >= min,
+                Right(input),
+                Left(str("Too short: min ", min, " chars"))
+            )
+        }
+    }
+
+    fn normalize_email(email) { lower(trim(email)) }
+
+    // Chain validations
+    fn process_email(input) {
+        fn result() {
+            either_map(
+                either_flatmap(
+                    Right(normalize_email(input)),
+                    fn(e) { either_flatmap(validate_length(5)(e), fn(e2) { validate_email(e2) }) }
+                ),
+                fn(e) { { email: e, hash: hash(e) } }
+            )
+        }
+
+        either_fold(result(),
+            fn(err) { str("✗ ", err) },
+            fn(val) { str("✓ ", get(val, "email"), " (hash: ", substr(get(val, "hash"), 0, 8), "...)") }
+        )
+    }
+
+    forEach(["alice@example.com", "  BOB@Test.IO  ", "invalid", "ab", "good@mail.com"], fn(input) {
+        print(str("  ", process_email(input)))
+    })
+}
+
+demo_either()
+
+// ── 4. Immutable Data Structures ────────────────────────────────────────────
+section("4. Persistent Immutable List")
+
+fn ImmutableList(items) {
+    {
+        prepend: fn(val) { ImmutableList(concat([val], items)) },
+        append: fn(val) { ImmutableList(push(items, val)) },
+        remove_first: fn(pred) { ImmutableList(filter(items, fn(x) { not(pred(x)) })) },
+        update_at: fn(idx, f) {
+            ImmutableList(map(range(0, len(items)), fn(i) {
+                if_then(i == idx, f(get(items, i)), get(items, i))
+            }))
+        },
+        map_list: fn(f) { ImmutableList(map(items, f)) },
+        filter_list: fn(pred) { ImmutableList(filter(items, pred)) },
+        reduce_list: fn(f, init) { reduce(items, f, init) },
+        to_array: fn() { items },
+        size: fn() { len(items) },
+        head_val: fn() { head(items) },
+        tail_list: fn() { ImmutableList(tail(items)) },
+        reverse_list: fn() { ImmutableList(reverse(items)) }
+    }
+}
+
+fn demo_immutable() {
+    fn list1() { ImmutableList([1, 2, 3, 4, 5]) }
+    fn list2() { get(list1(), "prepend")(0) }
+    fn list3() { get(list2(), "append")(6) }
+    fn list4() { get(list3(), "map_list")(fn(x) { x * x }) }
+    fn list5() { get(list4(), "filter_list")(fn(x) { x > 4 }) }
+
+    // Original is unchanged (immutability)
+    print(str("  list1 (original): ", json_stringify(get(list1(), "to_array")())))
+    print(str("  list2 (prepend 0): ", json_stringify(get(list2(), "to_array")())))
+    print(str("  list3 (append 6):  ", json_stringify(get(list3(), "to_array")())))
+    print(str("  list4 (squared):   ", json_stringify(get(list4(), "to_array")())))
+    print(str("  list5 (filtered):  ", json_stringify(get(list5(), "to_array")())))
+
+    fn total() { get(list5(), "reduce_list")(fn(a, b) { a + b }, 0) }
+    print(str("  Sum of list5: ", total()))
+}
+
+demo_immutable()
+
+// ── 5. Currying & Partial Application ───────────────────────────────────────
+section("5. Currying & Partial Application")
+
+fn demo_currying() {
+    // Manual currying
+    fn add(a) { fn(b) { a + b } }
+    fn multiply(a) { fn(b) { a * b } }
+
+    fn add5() { add(5) }
+    fn double() { multiply(2) }
+    fn triple() { multiply(3) }
+
+    print(str("  add5(3) = ", add5()(3)))
+    print(str("  double(7) = ", double()(7)))
+
+    // Using partial application
+    fn greet(greeting, name) { str(greeting, ", ", name, "!") }
+    fn hello() { partial(greet, "Hello") }
+    fn bonjour() { partial(greet, "Bonjour") }
+
+    print(str("  ", hello()("Alice")))
+    print(str("  ", bonjour()("Bob")))
+
+    // Point-free style with composition
+    fn process_numbers() {
+        fn nums() { [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] }
+        fn is_even(n) { mod(n, 2) == 0 }
+
+        fn pipeline(data) {
+            reduce(
+                [
+                    fn(xs) { filter(xs, is_even) },
+                    fn(xs) { map(xs, triple()) },
+                    fn(xs) { map(xs, add5()) }
+                ],
+                fn(acc, f) { f(acc) },
+                data
+            )
+        }
+
+        pipeline(nums())
+    }
+
+    print(str("  Processed: ", json_stringify(process_numbers())))
+    print(str("  (even → triple → add5)"))
+}
+
+demo_currying()
+
+// ── 6. Pattern Matching ────────────────────────────────────────────────────
+section("6. Pattern Matching")
+
+fn demo_pattern_matching() {
+    // Shape area calculator using match-like dispatch
+    fn shape_area(shape) {
+        fn typ() { get(shape, "type") }
+        match(typ(),
+            "circle",    PI * pow(get(shape, "radius"), 2),
+            "rectangle", get(shape, "width") * get(shape, "height"),
+            "triangle",  get(shape, "base") * get(shape, "height") / 2,
+            "square",    pow(get(shape, "side"), 2),
+            0
+        )
+    }
+
+    fn shapes() {
+        [
+            { type: "circle", radius: 5 },
+            { type: "rectangle", width: 4, height: 6 },
+            { type: "triangle", base: 8, height: 3 },
+            { type: "square", side: 7 }
+        ]
+    }
+
+    forEach(shapes(), fn(s) {
+        fn area() { round(shape_area(s) * 100) / 100 }
+        print(str("  ", pad_end(get(s, "type"), 12, " "), " area = ", area()))
+    })
+
+    // Recursive list pattern matching
+    fn list_describe(items) {
+        cond(
+            len(items) == 0, "empty list",
+            len(items) == 1, str("singleton [", head(items), "]"),
+            len(items) == 2, str("pair [", get(items, 0), ", ", get(items, 1), "]"),
+            str("list of ", len(items), " starting with ", head(items))
+        )
+    }
+
+    forEach([[], [42], [1, 2], [1, 2, 3, 4, 5]], fn(l) {
+        print(str("  ", json_stringify(l), " → ", list_describe(l)))
+    })
+}
+
+demo_pattern_matching()
+
+divider()
+print("Functional programming demo complete — Composition, Maybe, Either, Immutable Data, Currying, Pattern Matching.")

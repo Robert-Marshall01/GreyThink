@@ -1,0 +1,241 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// Grey++ Abstraction Layers — Clean Architecture & Design Patterns
+// Replaces: Java Interfaces, C# Abstractions, Go Interfaces, Rust Traits
+// Demonstrates: Strategy, Adapter, Middleware, Repository, DI patterns
+// ═══════════════════════════════════════════════════════════════════════════
+
+section("GREY++ ABSTRACTION LAYERS")
+
+// ── 1. Strategy Pattern — Payment Processing ────────────────────────────────
+section("1. Strategy Pattern: Payment Processors")
+
+fn PaymentStrategy(name, process_fn, validate_fn, fee_pct) {
+    {
+        name: name,
+        process: process_fn,
+        validate: validate_fn,
+        calculate_fee: fn(amount) { round(amount * fee_pct) / 100 }
+    }
+}
+
+fn CreditCardProcessor() {
+    PaymentStrategy("CreditCard",
+        fn(amount, details) {
+            log(str("Processing $", amount, " via credit card ending ", substr(get(details, "card_number"), 12, 4)))
+            { success: true, transaction_id: uuid(), method: "credit_card", amount: amount }
+        },
+        fn(details) { and(has_key(details, "card_number"), len(get(details, "card_number")) == 16) },
+        2.9
+    )
+}
+
+fn CryptoProcessor() {
+    PaymentStrategy("Crypto",
+        fn(amount, details) {
+            log(str("Processing $", amount, " via ", get(details, "currency"), " to wallet ", substr(get(details, "wallet"), 0, 8), "..."))
+            { success: true, transaction_id: hash(str(amount, now())), method: "crypto", amount: amount }
+        },
+        fn(details) { and(has_key(details, "wallet"), has_key(details, "currency")) },
+        1.0
+    )
+}
+
+fn BankTransferProcessor() {
+    PaymentStrategy("BankTransfer",
+        fn(amount, details) {
+            log(str("Processing $", amount, " bank transfer to routing ", get(details, "routing")))
+            { success: true, transaction_id: uuid(), method: "bank_transfer", amount: amount }
+        },
+        fn(details) { and(has_key(details, "routing"), has_key(details, "account")) },
+        0.5
+    )
+}
+
+fn PaymentService(strategy) {
+    {
+        pay: fn(amount, details) {
+            fn valid() { get(strategy, "validate")(details) }
+            if_then(valid(),
+                fn() {
+                    fn fee() { get(strategy, "calculate_fee")(amount) }
+                    fn result() { get(strategy, "process")(amount + fee(), details) }
+                    merge(result(), { fee: fee(), processor: get(strategy, "name") })
+                },
+                fn() { { success: false, error: str("Invalid details for ", get(strategy, "name")) } }
+            )
+        }
+    }
+}
+
+fn demo_strategy() {
+    // Same interface, different strategies
+    fn cc_result() {
+        fn svc() { PaymentService(CreditCardProcessor()) }
+        get(svc(), "pay")(100, { card_number: "4111111111111234", exp: "12/27", cvv: "123" })
+    }
+
+    fn crypto_result() {
+        fn svc() { PaymentService(CryptoProcessor()) }
+        get(svc(), "pay")(500, { wallet: "0xABCD1234EFGH5678", currency: "ETH" })
+    }
+
+    fn bank_result() {
+        fn svc() { PaymentService(BankTransferProcessor()) }
+        get(svc(), "pay")(10000, { routing: "021000021", account: "123456789" })
+    }
+
+    forEach([cc_result(), crypto_result(), bank_result()], fn(r) {
+        print(str("  ", get(r, "processor"), ": $", get(r, "amount"), " — fee: $", get(r, "fee"), " — tx: ", get(r, "transaction_id")))
+    })
+}
+
+demo_strategy()
+
+// ── 2. Adapter Pattern — Unified Logger ─────────────────────────────────────
+section("2. Adapter Pattern: Unified Logging Interface")
+
+fn LogAdapter(name, format_fn) {
+    fn write(level, message, meta) {
+        fn formatted() { format_fn(level, message, meta) }
+        print(str("  [", name, "] ", formatted()))
+    }
+    { name: name, log: write }
+}
+
+fn JSONLogAdapter() {
+    LogAdapter("JSON", fn(level, msg, meta) {
+        json_stringify(merge({ level: level, message: msg, timestamp: now() }, if_then(is_nil(meta), {}, meta)))
+    })
+}
+
+fn PlainLogAdapter() {
+    LogAdapter("Plain", fn(level, msg, meta) {
+        str(now(), " [", upper(level), "] ", msg)
+    })
+}
+
+fn StructuredLogAdapter() {
+    LogAdapter("Structured", fn(level, msg, meta) {
+        fn fields() { if_then(is_nil(meta), "", str(" | ", join(map(entries(meta), fn(e) { str(get(e, 0), "=", get(e, 1)) }), " "))) }
+        str("level=", level, " msg=\"", msg, "\"", fields())
+    })
+}
+
+fn demo_adapter() {
+    fn adapters() { [JSONLogAdapter(), PlainLogAdapter(), StructuredLogAdapter()] }
+
+    forEach(adapters(), fn(adapter) {
+        get(adapter, "log")("info", "User authenticated", { user_id: 42, ip: "192.168.1.1" })
+    })
+}
+
+demo_adapter()
+
+// ── 3. Middleware Chain — HTTP Pipeline ──────────────────────────────────────
+section("3. Middleware Chain: HTTP Request Pipeline")
+
+fn Middleware(name, handler) { { name: name, handle: handler } }
+
+fn MiddlewareChain(middlewares) {
+    {
+        execute: fn(request) {
+            fn run(req, mws, index) {
+                if_then(index >= len(mws),
+                    req,
+                    fn() {
+                        fn mw() { get(mws, index) }
+                        fn next_req() { get(mw(), "handle")(req) }
+                        log(str("Middleware [", get(mw(), "name"), "] processed"))
+                        run(next_req(), mws, index + 1)
+                    }
+                )
+            }
+            run(request, middlewares, 0)
+        }
+    }
+}
+
+fn demo_middleware() {
+    fn auth_mw() {
+        Middleware("Auth", fn(req) {
+            fn token() { get(req, "token") }
+            merge(req, { authenticated: not(is_nil(token())), user: if_then(is_nil(token()), "anonymous", "user_42") })
+        })
+    }
+
+    fn rate_limit_mw() {
+        Middleware("RateLimit", fn(req) {
+            merge(req, { rate_limit_remaining: 99, rate_limit_reset: 60 })
+        })
+    }
+
+    fn cors_mw() {
+        Middleware("CORS", fn(req) {
+            merge(req, { cors: { allow_origin: "*", allow_methods: "GET,POST,PUT,DELETE" } })
+        })
+    }
+
+    fn logging_mw() {
+        Middleware("Logging", fn(req) {
+            merge(req, { request_id: uuid(), logged_at: now() })
+        })
+    }
+
+    fn chain() { MiddlewareChain([auth_mw(), rate_limit_mw(), cors_mw(), logging_mw()]) }
+    fn request() { { method: "POST", path: "/api/orders", token: "Bearer xyz123", body: { item: "laptop" } } }
+    fn result() { get(chain(), "execute")(request()) }
+
+    print("  Final enriched request:")
+    print(str("    authenticated: ", get(result(), "authenticated")))
+    print(str("    user: ", get(result(), "user")))
+    print(str("    request_id: ", get(result(), "request_id")))
+    print(str("    rate_limit: ", get(result(), "rate_limit_remaining")))
+}
+
+demo_middleware()
+
+// ── 4. Repository Pattern — Data Access Abstraction ─────────────────────────
+section("4. Repository Pattern: Data Access Layer")
+
+fn Repository(name, initial_data) {
+    fn make_repo(data) {
+        {
+            find_all: fn() { data },
+            find_by_id: fn(id) { find(data, fn(item) { get(item, "id") == id }) },
+            find_where: fn(pred) { filter(data, pred) },
+            create: fn(item) {
+                fn new_item() { merge(item, { id: len(data) + 1, created_at: now() }) }
+                log(str(name, ".create: ", json_stringify(new_item())))
+                make_repo(push(data, new_item()))
+            },
+            count: fn() { len(data) },
+            exists: fn(id) { some(data, fn(item) { get(item, "id") == id }) }
+        }
+    }
+    make_repo(initial_data)
+}
+
+fn demo_repository() {
+    fn user_repo() {
+        Repository("UserRepo", [
+            { id: 1, name: "Alice", role: "admin" },
+            { id: 2, name: "Bob", role: "user" },
+            { id: 3, name: "Carol", role: "user" }
+        ])
+    }
+
+    print(str("  Total users: ", get(user_repo(), "count")()))
+    print(str("  Find by id 2: ", get(get(user_repo(), "find_by_id")(2), "name")))
+
+    fn admins() { get(user_repo(), "find_where")(fn(u) { get(u, "role") == "admin" }) }
+    print(str("  Admins: ", len(admins())))
+
+    fn updated_repo() { get(user_repo(), "create")({ name: "Dave", role: "user" }) }
+    print(str("  After insert: ", get(updated_repo(), "count")(), " users"))
+    print(str("  User 4 exists: ", get(updated_repo(), "exists")(4)))
+}
+
+demo_repository()
+
+divider()
+print("Abstraction demo complete — Strategy, Adapter, Middleware, Repository patterns all working.")

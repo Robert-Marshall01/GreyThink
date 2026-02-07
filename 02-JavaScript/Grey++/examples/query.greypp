@@ -1,0 +1,17 @@
+// ─── Grey++ Query Example ───────────────────────────────────────────────────
+// Demonstrates the built-in SQL-style query syntax.
+
+// First, set up some data
+createTable("employees", ["name", "department", "salary"])
+insertRow("employees", { name: "Alice",   department: "Engineering", salary: 120000 })
+insertRow("employees", { name: "Bob",     department: "Engineering", salary: 110000 })
+insertRow("employees", { name: "Carol",   department: "Marketing",   salary: 95000  })
+insertRow("employees", { name: "Dave",    department: "Engineering", salary: 130000 })
+insertRow("employees", { name: "Eve",     department: "Marketing",   salary: 105000 })
+
+// Query all engineers earning above 115k
+query {
+    select name, salary
+    from employees
+    where salary > 115000
+}

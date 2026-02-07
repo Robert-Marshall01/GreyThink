@@ -1,0 +1,265 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// Grey++ Cloud Computing — Serverless, Containers, Orchestration
+// Replaces: AWS CDK, GCP SDK, Azure SDK, Docker Compose, Kubernetes YAML
+// ═══════════════════════════════════════════════════════════════════════════
+
+section("GREY++ CLOUD COMPUTING")
+
+// ── 1. Serverless Functions ─────────────────────────────────────────────────
+section("1. Serverless Function Deployment")
+
+fn Lambda(name, runtime, handler, memory, timeout, env_vars) {
+    {
+        name: name,
+        runtime: runtime,
+        handler: handler,
+        memory_mb: memory,
+        timeout_sec: timeout,
+        env: env_vars,
+        arn: str("arn:aws:lambda:us-east-1:123456789:function:", name),
+        invoke: fn(event) {
+            log(str("Invoking λ:", name, " | memory=", memory, "MB"))
+            fn start() { timestamp() }
+            fn result() { handler(event) }
+            fn elapsed() { timestamp() - start() }
+            { status: 200, body: result(), duration_ms: elapsed(), function: name, request_id: uuid() }
+        }
+    }
+}
+
+fn APIGateway(name, routes) {
+    {
+        name: name,
+        routes: routes,
+        base_url: str("https://", hash(name), ".execute-api.us-east-1.amazonaws.com/prod"),
+        handle: fn(method, path, body) {
+            fn matched() { find(routes, fn(r) { and(get(r, "method") == method, get(r, "path") == path) }) }
+            if_then(is_nil(matched()),
+                { status: 404, body: { error: "Route not found" } },
+                fn() {
+                    fn lambda() { get(matched(), "lambda") }
+                    get(lambda(), "invoke")({ method: method, path: path, body: body })
+                }
+            )
+        }
+    }
+}
+
+fn demo_serverless() {
+    fn user_handler(event) {
+        match(get(get(event, "body"), "action"),
+            "list",   [{ id: 1, name: "Alice" }, { id: 2, name: "Bob" }],
+            "create", { id: 3, name: get(get(event, "body"), "name"), created: true },
+            { error: "Unknown action" }
+        )
+    }
+
+    fn order_handler(event) {
+        { order_id: uuid(), items: get(get(event, "body"), "items"), total: 299, status: "created" }
+    }
+
+    fn user_fn() { Lambda("user-service", "greypp-1.0", user_handler, 256, 30, { DB_URL: "postgres://db.internal:5432" }) }
+    fn order_fn() { Lambda("order-service", "greypp-1.0", order_handler, 512, 30, { QUEUE_URL: "sqs://orders-queue" }) }
+
+    fn api() {
+        APIGateway("main-api", [
+            { method: "GET", path: "/users", lambda: user_fn() },
+            { method: "POST", path: "/users", lambda: user_fn() },
+            { method: "POST", path: "/orders", lambda: order_fn() }
+        ])
+    }
+
+    print(str("  API Base URL: ", get(api(), "base_url")))
+
+    // Simulate requests
+    fn r1() { get(api(), "handle")("GET", "/users", { action: "list" }) }
+    fn r2() { get(api(), "handle")("POST", "/users", { action: "create", name: "Carol" }) }
+    fn r3() { get(api(), "handle")("POST", "/orders", { items: ["laptop", "mouse"], qty: 2 }) }
+
+    print(str("  GET /users → ", json_stringify(get(r1(), "body"))))
+    print(str("  POST /users → ", json_stringify(get(r2(), "body"))))
+    print(str("  POST /orders → ", get(get(r3(), "body"), "order_id")))
+}
+
+demo_serverless()
+
+// ── 2. Container Orchestration ──────────────────────────────────────────────
+section("2. Container Orchestration (Docker/K8s)")
+
+fn Container(name, image, ports, env, resources) {
+    {
+        name: name,
+        image: image,
+        ports: ports,
+        env: env,
+        resources: resources,
+        id: str("container-", hash(str(name, now()))),
+        status: "running"
+    }
+}
+
+fn Service(name, containers, replicas, load_balancer) {
+    {
+        name: name,
+        replicas: replicas,
+        containers: containers,
+        lb: load_balancer,
+        instances: repeat(replicas, fn(i) {
+            map(containers, fn(c) {
+                merge(c, { instance: i, id: str(get(c, "name"), "-", i, "-", hash(str(i, now()))) })
+            })
+        }),
+        describe: fn() {
+            str("Service '", name, "': ", replicas, " replicas, ", len(containers), " containers each")
+        }
+    }
+}
+
+fn demo_containers() {
+    fn web_app() {
+        Container("web", "greypp/web-app:latest", [{ container: 3000, host: 80 }],
+            { NODE_ENV: "production", API_URL: "http://api:8080" },
+            { cpu: "500m", memory: "256Mi" })
+    }
+
+    fn api_server() {
+        Container("api", "greypp/api-server:latest", [{ container: 8080, host: 8080 }],
+            { DB_HOST: "postgres", REDIS_HOST: "redis" },
+            { cpu: "1000m", memory: "512Mi" })
+    }
+
+    fn db() {
+        Container("postgres", "postgres:15", [{ container: 5432, host: 5432 }],
+            { POSTGRES_DB: "app", POSTGRES_USER: "admin" },
+            { cpu: "2000m", memory: "1Gi" })
+    }
+
+    fn redis() {
+        Container("redis", "redis:7-alpine", [{ container: 6379, host: 6379 }],
+            {},
+            { cpu: "250m", memory: "128Mi" })
+    }
+
+    fn web_service() { Service("web-frontend", [web_app()], 3, true) }
+    fn api_service() { Service("api-backend", [api_server()], 2, true) }
+    fn db_service() { Service("database", [db()], 1, false) }
+    fn cache_service() { Service("cache", [redis()], 1, false) }
+
+    fn services() { [web_service(), api_service(), db_service(), cache_service()] }
+
+    forEach(services(), fn(svc) {
+        print(str("  ", get(svc, "describe")()))
+    })
+
+    fn total_containers() { reduce(services(), fn(acc, svc) { acc + get(svc, "replicas") * len(get(svc, "containers")) }, 0) }
+    print(str("  Total running containers: ", total_containers()))
+}
+
+demo_containers()
+
+// ── 3. Auto-Scaling Policy ──────────────────────────────────────────────────
+section("3. Auto-Scaling Engine")
+
+fn ScalingPolicy(name, min_replicas, max_replicas, target_cpu, cooldown) {
+    {
+        name: name,
+        min: min_replicas,
+        max: max_replicas,
+        target_cpu: target_cpu,
+        cooldown_sec: cooldown,
+        evaluate: fn(current_replicas, current_cpu) {
+            fn desired() { ceil(current_replicas * current_cpu / target_cpu) }
+            fn clamped() { clamp(desired(), min_replicas, max_replicas) }
+            fn action() {
+                cond(
+                    clamped() > current_replicas, "SCALE_UP",
+                    clamped() < current_replicas, "SCALE_DOWN",
+                    "NO_CHANGE"
+                )
+            }
+            {
+                action: action(),
+                current: current_replicas,
+                desired: clamped(),
+                cpu: current_cpu,
+                target_cpu: target_cpu
+            }
+        }
+    }
+}
+
+fn demo_autoscaling() {
+    fn policy() { ScalingPolicy("api-scaling", 2, 10, 70, 300) }
+
+    fn scenarios() {
+        [
+            { replicas: 2, cpu: 30, desc: "Low traffic" },
+            { replicas: 2, cpu: 85, desc: "Traffic spike" },
+            { replicas: 5, cpu: 95, desc: "Heavy load" },
+            { replicas: 8, cpu: 40, desc: "Traffic subsided" },
+            { replicas: 10, cpu: 99, desc: "Max capacity" }
+        ]
+    }
+
+    forEach(scenarios(), fn(s) {
+        fn result() { get(policy(), "evaluate")(get(s, "replicas"), get(s, "cpu")) }
+        print(str("  ", pad_end(get(s, "desc"), 18, " "),
+            " | CPU: ", pad_start(to_string(get(s, "cpu")), 3, " "), "%",
+            " | ", get(s, "replicas"), " → ", get(result(), "desired"), " replicas",
+            " | ", get(result(), "action")))
+    })
+}
+
+demo_autoscaling()
+
+// ── 4. Message Queue ────────────────────────────────────────────────────────
+section("4. Message Queue System")
+
+fn MessageQueue(name) {
+    fn make_queue(messages, processed, dead_letter) {
+        {
+            name: name,
+            enqueue: fn(msg) {
+                fn wrapped() { { id: uuid(), body: msg, timestamp: now(), attempts: 0 } }
+                log(str("Enqueued to ", name, ": ", json_stringify(msg)))
+                make_queue(push(messages, wrapped()), processed, dead_letter)
+            },
+            dequeue: fn() {
+                if_then(len(messages) == 0,
+                    { message: nil, queue: make_queue(messages, processed, dead_letter) },
+                    fn() {
+                        fn msg() { head(messages) }
+                        log(str("Dequeued from ", name, ": ", get(msg(), "id")))
+                        { message: msg(), queue: make_queue(tail(messages), push(processed, msg()), dead_letter) }
+                    }
+                )
+            },
+            stats: fn() {
+                { pending: len(messages), processed: len(processed), dead_letter: len(dead_letter), total: len(messages) + len(processed) + len(dead_letter) }
+            }
+        }
+    }
+    make_queue([], [], [])
+}
+
+fn demo_queue() {
+    fn q0() { MessageQueue("order-events") }
+    fn q1() { get(q0(), "enqueue")({ type: "order.created", order_id: 1001 }) }
+    fn q2() { get(q1(), "enqueue")({ type: "order.paid", order_id: 1001 }) }
+    fn q3() { get(q2(), "enqueue")({ type: "order.shipped", order_id: 1001 }) }
+
+    print(str("  After 3 enqueues: ", json_stringify(get(q3(), "stats")())))
+
+    fn d1() { get(q3(), "dequeue")() }
+    fn q4() { get(d1(), "queue") }
+    fn d2() { get(q4(), "dequeue")() }
+    fn q5() { get(d2(), "queue") }
+
+    print(str("  After 2 dequeues: ", json_stringify(get(q5(), "stats")())))
+    print(str("  Last dequeued: ", json_stringify(get(get(d2(), "message"), "body"))))
+}
+
+demo_queue()
+
+divider()
+print("Cloud computing demo complete — Serverless, Containers, Auto-Scaling, Message Queues all working.")

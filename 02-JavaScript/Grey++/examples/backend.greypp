@@ -1,0 +1,231 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// Grey++ Backend Development — REST API, Middleware, Auth, Database
+// Replaces: Express.js, Django, Spring Boot, FastAPI, Rails, Go/Gin
+// ═══════════════════════════════════════════════════════════════════════════
+
+section("GREY++ BACKEND DEVELOPMENT")
+
+// ── 1. HTTP Router ──────────────────────────────────────────────────────────
+section("1. HTTP Router with Path Parameters")
+
+fn Router() {
+    fn make_router(routes) {
+        {
+            get: fn(path, handler) { make_router(push(routes, { method: "GET", path: path, handler: handler })) },
+            post: fn(path, handler) { make_router(push(routes, { method: "POST", path: path, handler: handler })) },
+            put: fn(path, handler) { make_router(push(routes, { method: "PUT", path: path, handler: handler })) },
+            del: fn(path, handler) { make_router(push(routes, { method: "DELETE", path: path, handler: handler })) },
+            handle: fn(method, path, body) {
+                fn matched() { find(routes, fn(r) { and(get(r, "method") == method, get(r, "path") == path) }) }
+                fn req() { merge({ method: method, path: path, timestamp: now(), id: uuid() }, body) }
+                if_then(is_nil(matched()),
+                    { status: 404, body: { error: str("Cannot ", method, " ", path) } },
+                    get(matched(), "handler")(req())
+                )
+            },
+            route_count: fn() { len(routes) }
+        }
+    }
+    make_router([])
+}
+
+fn Response(status, body) {
+    { status: status, body: body, headers: { content_type: "application/json" } }
+}
+
+// ── 2. Database Layer ───────────────────────────────────────────────────────
+section("2. Database Layer")
+
+createTable("api_users", [
+    { id: 1, username: "admin", email: "admin@api.io", role: "admin", api_key: "key-admin-001" },
+    { id: 2, username: "dev1",  email: "dev1@api.io",  role: "developer", api_key: "key-dev-002" },
+    { id: 3, username: "dev2",  email: "dev2@api.io",  role: "developer", api_key: "key-dev-003" }
+])
+
+createTable("api_posts", [
+    { id: 1, author_id: 2, title: "Getting Started with Grey++", body: "Grey++ is a universal language...", likes: 42, created: "2026-01-15" },
+    { id: 2, author_id: 3, title: "Building REST APIs",         body: "REST APIs in Grey++ are simple...", likes: 28, created: "2026-01-20" },
+    { id: 3, author_id: 2, title: "Advanced Query Patterns",    body: "Grey++ query system supports...",  likes: 55, created: "2026-02-01" }
+])
+
+createTable("api_comments", [
+    { id: 1, post_id: 1, author_id: 3, text: "Great intro!", created: "2026-01-16" },
+    { id: 2, post_id: 1, author_id: 1, text: "Well written.", created: "2026-01-17" },
+    { id: 3, post_id: 3, author_id: 3, text: "Very helpful.", created: "2026-02-02" }
+])
+
+print("  Tables created: api_users, api_posts, api_comments")
+
+// ── 3. Middleware Stack ─────────────────────────────────────────────────────
+section("3. Middleware Stack")
+
+fn apply_middleware(req, middlewares) {
+    reduce(middlewares, fn(r, mw) { mw(r) }, req)
+}
+
+fn cors_middleware(req) {
+    merge(req, { headers: merge(if_then(has_key(req, "headers"), get(req, "headers"), {}),
+        { access_control_allow_origin: "*", access_control_allow_methods: "GET,POST,PUT,DELETE" }) })
+}
+
+fn logging_middleware(req) {
+    log(str(get(req, "method"), " ", get(req, "path"), " [", get(req, "id"), "]"))
+    req
+}
+
+fn rate_limit_middleware(req) {
+    merge(req, { rate_limit: { remaining: 98, limit: 100, reset_in: 3600 } })
+}
+
+fn auth_middleware(req) {
+    fn api_key() { if_then(has_key(req, "api_key"), get(req, "api_key"), nil) }
+    fn user() {
+        fn all_users() { query { select * from api_users } }
+        if_then(api_key(), find(all_users(), fn(u) { get(u, "api_key") == api_key() }), nil)
+    }
+    merge(req, { auth: if_then(is_nil(user()), { authenticated: false }, { authenticated: true, user_id: get(user(), "id"), role: get(user(), "role") }) })
+}
+
+fn middleware_stack() { [logging_middleware, cors_middleware, rate_limit_middleware, auth_middleware] }
+
+// ── 4. API Route Handlers ───────────────────────────────────────────────────
+section("4. Route Handlers")
+
+fn get_all_posts(req) {
+    fn posts() { query { select * from api_posts } }
+    fn enriched() {
+        map(posts(), fn(p) {
+            fn author() {
+                fn users() { query { select * from api_users } }
+                find(users(), fn(u) { get(u, "id") == get(p, "author_id") })
+            }
+            fn comment_count() {
+                fn comments() { query { select * from api_comments } }
+                len(filter(comments(), fn(c) { get(c, "post_id") == get(p, "id") }))
+            }
+            merge(p, { author: get(author(), "username"), comment_count: comment_count() })
+        })
+    }
+    Response(200, enriched())
+}
+
+fn get_post_by_id(req) {
+    fn id() { get(req, "id") }
+    fn posts() { query { select * from api_posts } }
+    fn post() { find(posts(), fn(p) { get(p, "id") == id() }) }
+    if_then(is_nil(post()),
+        Response(404, { error: "Post not found" }),
+        fn() {
+            fn comments() {
+                fn all_comments() { query { select * from api_comments } }
+                filter(all_comments(), fn(c) { get(c, "post_id") == id() })
+            }
+            Response(200, merge(post(), { comments: comments() }))
+        }
+    )
+}
+
+fn create_post(req) {
+    fn authenticated() { get(get(req, "auth"), "authenticated") }
+    if_then(not(authenticated()),
+        Response(401, { error: "Authentication required" }),
+        fn() {
+            fn new_post() {
+                merge(req, {
+                    id: random_int(100, 999),
+                    author_id: get(get(req, "auth"), "user_id"),
+                    likes: 0,
+                    created: now()
+                })
+            }
+            insertRow("api_posts", new_post())
+            log(str("Created post: ", get(new_post(), "title")))
+            Response(201, new_post())
+        }
+    )
+}
+
+fn delete_post(req) {
+    fn is_admin() { get(get(req, "auth"), "role") == "admin" }
+    if_then(not(is_admin()),
+        Response(403, { error: "Admin access required" }),
+        Response(204, { deleted: true, id: get(req, "id") })
+    )
+}
+
+fn get_analytics(req) {
+    fn posts() { query { select * from api_posts } }
+    fn total_likes() { reduce(posts(), fn(acc, p) { acc + get(p, "likes") }, 0) }
+    fn avg_likes() { round(total_likes() / len(posts())) }
+    fn top_post() { head(sort(posts(), fn(a, b) { get(b, "likes") - get(a, "likes") })) }
+
+    Response(200, {
+        total_posts: len(posts()),
+        total_likes: total_likes(),
+        avg_likes: avg_likes(),
+        top_post: get(top_post(), "title"),
+        top_post_likes: get(top_post(), "likes")
+    })
+}
+
+// ── 5. Build Server ─────────────────────────────────────────────────────────
+section("5. API Server Simulation")
+
+fn build_server() {
+    fn router() {
+        fn r0() { Router() }
+        fn r1() { get(r0(), "get")("/api/posts", get_all_posts) }
+        fn r2() { get(r1(), "get")("/api/posts/:id", get_post_by_id) }
+        fn r3() { get(r2(), "post")("/api/posts", create_post) }
+        fn r4() { get(r3(), "del")("/api/posts/:id", delete_post) }
+        fn r5() { get(r4(), "get")("/api/analytics", get_analytics) }
+        r5()
+    }
+
+    fn server() { router() }
+
+    fn handle_request(method, path, body, api_key) {
+        fn raw_req() { { method: method, path: path, body: body, id: uuid(), api_key: api_key } }
+        fn enriched() { apply_middleware(raw_req(), middleware_stack()) }
+        get(server(), "handle")(method, path, merge(body, { auth: get(enriched(), "auth") }))
+    }
+
+    print(str("  Routes registered: ", get(server(), "route_count")()))
+
+    // ── Test requests ──
+    section("API Test: GET /api/posts")
+    fn posts() { handle_request("GET", "/api/posts", {}, "key-dev-002") }
+    forEach(get(posts(), "body"), fn(p) {
+        print(str("    [", get(p, "id"), "] ", get(p, "title"), " by ", get(p, "author"), " (", get(p, "likes"), "♥, ", get(p, "comment_count"), " comments)"))
+    })
+
+    section("API Test: GET /api/posts/:id")
+    fn post() { handle_request("GET", "/api/posts/:id", { id: 1 }, "key-dev-002") }
+    print(str("    Post: ", get(get(post(), "body"), "title")))
+    print(str("    Comments: ", len(get(get(post(), "body"), "comments"))))
+
+    section("API Test: POST /api/posts (authenticated)")
+    fn created() { handle_request("POST", "/api/posts", { title: "New Grey++ Feature", body: "Announcing..." }, "key-dev-002") }
+    print(str("    Status: ", get(created(), "status")))
+    print(str("    Created: ", get(get(created(), "body"), "title")))
+
+    section("API Test: POST /api/posts (unauthenticated)")
+    fn unauth() { handle_request("POST", "/api/posts", { title: "Spam" }, nil) }
+    print(str("    Status: ", get(unauth(), "status"), " — ", get(get(unauth(), "body"), "error")))
+
+    section("API Test: DELETE (non-admin)")
+    fn forbidden() { handle_request("DELETE", "/api/posts/:id", { id: 1 }, "key-dev-002") }
+    print(str("    Status: ", get(forbidden(), "status"), " — ", get(get(forbidden(), "body"), "error")))
+
+    section("API Test: GET /api/analytics")
+    fn analytics() { handle_request("GET", "/api/analytics", {}, "key-admin-001") }
+    fn stats() { get(analytics(), "body") }
+    print(str("    Total posts: ", get(stats(), "total_posts")))
+    print(str("    Total likes: ", get(stats(), "total_likes")))
+    print(str("    Top post: ", get(stats(), "top_post"), " (", get(stats(), "top_post_likes"), "♥)"))
+}
+
+build_server()
+
+divider()
+print("Backend demo complete — Routing, Middleware, Auth, CRUD, Analytics all working.")

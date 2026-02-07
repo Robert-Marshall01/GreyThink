@@ -1,0 +1,250 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// Grey++ Frontend Development — Components, Virtual DOM, State Management
+// Replaces: React, Vue, Svelte, Angular, jQuery, HTML/CSS-in-JS
+// ═══════════════════════════════════════════════════════════════════════════
+
+section("GREY++ FRONTEND DEVELOPMENT")
+
+// ── 1. Virtual DOM ──────────────────────────────────────────────────────────
+section("1. Virtual DOM Engine")
+
+fn VNode(tag, props, children) {
+    { type: "vnode", tag: tag, props: if_then(is_nil(props), {}, props), children: if_then(is_nil(children), [], children) }
+}
+
+fn TextNode(text) { { type: "text", value: to_string(text) } }
+
+// JSX-like element constructors
+fn h(tag, props, children) { VNode(tag, props, children) }
+fn div(props, children) { h("div", props, children) }
+fn span(props, children) { h("span", props, children) }
+fn button(props, children) { h("button", props, children) }
+fn input(props) { h("input", props, []) }
+fn ul(props, children) { h("ul", props, children) }
+fn li(props, children) { h("li", props, children) }
+fn p(props, children) { h("p", props, children) }
+fn h1(props, children) { h("h1", props, children) }
+
+fn render_to_string(vnode) {
+    fn render_node(node) {
+        if_then(get(node, "type") == "text",
+            get(node, "value"),
+            fn() {
+                fn tag() { get(node, "tag") }
+                fn props_str() {
+                    fn prop_entries() { entries(get(node, "props")) }
+                    fn formatted() { map(prop_entries(), fn(e) { str(" ", get(e, 0), "=\"", get(e, 1), "\"") }) }
+                    join(formatted(), "")
+                }
+                fn children_str() {
+                    join(map(get(node, "children"), fn(c) { render_node(c) }), "")
+                }
+                str("<", tag(), props_str(), ">", children_str(), "</", tag(), ">")
+            }
+        )
+    }
+    render_node(vnode)
+}
+
+fn demo_vdom() {
+    fn app_tree() {
+        div({ class: "app" }, [
+            h1({ class: "title" }, [TextNode("Grey++ App")]),
+            div({ class: "content" }, [
+                p({}, [TextNode("Welcome to the Grey++ frontend framework!")]),
+                button({ class: "btn btn-primary", onclick: "handleClick" }, [TextNode("Click Me")]),
+                input({ type: "text", placeholder: "Search...", class: "search-input" })
+            ])
+        ])
+    }
+
+    fn html() { render_to_string(app_tree()) }
+    print(str("  ", html()))
+    print(str("  HTML length: ", len(html()), " chars"))
+}
+
+demo_vdom()
+
+// ── 2. Component System ────────────────────────────────────────────────────
+section("2. Component System with Props")
+
+fn Component(name, render_fn) {
+    {
+        name: name,
+        render: render_fn,
+        mount: fn(props) {
+            log(str("Mounting <", name, "> with ", len(keys(props)), " props"))
+            render_fn(props)
+        }
+    }
+}
+
+fn TodoItem(props) {
+    li({ class: if_then(get(props, "done"), "done", "pending") }, [
+        span({}, [TextNode(if_then(get(props, "done"), "✓ ", "○ "))]),
+        span({ class: "todo-text" }, [TextNode(get(props, "text"))]),
+        span({ class: "todo-priority" }, [TextNode(str(" [", get(props, "priority"), "]"))])
+    ])
+}
+
+fn TodoList(props) {
+    fn items() { get(props, "items") }
+    fn sorted_items() { sort(items(), fn(a, b) {
+        fn pri_val(p) { match(p, "high", 1, "medium", 2, "low", 3, 4) }
+        pri_val(get(a, "priority")) - pri_val(get(b, "priority"))
+    })}
+    fn pending_count() { count(items(), fn(i) { not(get(i, "done")) }) }
+
+    div({ class: "todo-list" }, [
+        h1({}, [TextNode(str(get(props, "title"), " (", pending_count(), " pending)"))]),
+        ul({}, map(sorted_items(), fn(item) { TodoItem(item) }))
+    ])
+}
+
+fn demo_components() {
+    fn todo_component() { Component("TodoList", TodoList) }
+
+    fn props() {
+        {
+            title: "Sprint Tasks",
+            items: [
+                { text: "Implement auth", done: true, priority: "high" },
+                { text: "Write tests", done: false, priority: "high" },
+                { text: "Update docs", done: false, priority: "low" },
+                { text: "Code review", done: false, priority: "medium" },
+                { text: "Deploy staging", done: true, priority: "high" },
+                { text: "Fix CSS bug", done: false, priority: "medium" }
+            ]
+        }
+    }
+
+    fn tree() { get(todo_component(), "mount")(props()) }
+    print(str("  ", render_to_string(tree())))
+}
+
+demo_components()
+
+// ── 3. State Management (Redux-like) ────────────────────────────────────────
+section("3. State Management Store")
+
+fn Store(initial_state, reducer_fn) {
+    fn make_store(state, history, listeners) {
+        {
+            get_state: fn() { state },
+            dispatch: fn(action) {
+                fn new_state() { reducer_fn(state, action) }
+                log(str("Dispatch: ", get(action, "type")))
+                forEach(listeners, fn(l) { l(new_state()) })
+                make_store(new_state(), push(history, { action: action, state: new_state() }), listeners)
+            },
+            subscribe: fn(listener) {
+                make_store(state, history, push(listeners, listener))
+            },
+            get_history: fn() { history },
+            time_travel: fn(step) {
+                fn entry() { get(history, step) }
+                if_then(is_nil(entry()), state, get(entry(), "state"))
+            }
+        }
+    }
+    make_store(initial_state, [], [])
+}
+
+fn demo_store() {
+    fn cart_reducer(state, action) {
+        fn type() { get(action, "type") }
+        fn payload() { get(action, "payload") }
+
+        cond(
+            type() == "ADD_ITEM",
+            fn() {
+                fn new_items() { push(get(state, "items"), payload()) }
+                fn new_total() { reduce(new_items(), fn(acc, i) { acc + get(i, "price") * get(i, "qty") }, 0) }
+                merge(state, { items: new_items(), total: new_total(), item_count: len(new_items()) })
+            },
+            type() == "REMOVE_ITEM",
+            fn() {
+                fn new_items() { filter(get(state, "items"), fn(i) { not(get(i, "name") == get(payload(), "name")) }) }
+                fn new_total() { reduce(new_items(), fn(acc, i) { acc + get(i, "price") * get(i, "qty") }, 0) }
+                merge(state, { items: new_items(), total: new_total(), item_count: len(new_items()) })
+            },
+            type() == "APPLY_DISCOUNT",
+            fn() {
+                fn discount() { get(payload(), "percent") }
+                fn discounted() { round(get(state, "total") * (100 - discount()) / 100) }
+                merge(state, { total: discounted(), discount_applied: discount() })
+            },
+            state
+        )
+    }
+
+    fn initial() { { items: [], total: 0, item_count: 0, discount_applied: 0 } }
+    fn store0() { Store(initial(), cart_reducer) }
+
+    // Subscribe to changes
+    fn store1() { get(store0(), "subscribe")(fn(state) {
+        print(str("    [Store Update] items=", get(state, "item_count"), " total=$", get(state, "total")))
+    })}
+
+    // Dispatch actions
+    fn store2() { get(store1(), "dispatch")({ type: "ADD_ITEM", payload: { name: "Laptop", price: 999, qty: 1 } }) }
+    fn store3() { get(store2(), "dispatch")({ type: "ADD_ITEM", payload: { name: "Mouse", price: 49, qty: 2 } }) }
+    fn store4() { get(store3(), "dispatch")({ type: "ADD_ITEM", payload: { name: "Monitor", price: 399, qty: 1 } }) }
+    fn store5() { get(store4(), "dispatch")({ type: "APPLY_DISCOUNT", payload: { percent: 10 } }) }
+
+    print(str("  Final state: ", json_stringify(get(store5(), "get_state")())))
+    print(str("  History length: ", len(get(store5(), "get_history")())))
+}
+
+demo_store()
+
+// ── 4. CSS-in-JS ────────────────────────────────────────────────────────────
+section("4. CSS-in-JS Styling Engine")
+
+fn css(class_name, rules) {
+    fn rule_str() {
+        join(map(entries(rules), fn(e) { str("  ", get(e, 0), ": ", get(e, 1), ";") }), "\n")
+    }
+    str(".", class_name, " {\n", rule_str(), "\n}")
+}
+
+fn media_query(breakpoint, styles) {
+    str("@media (max-width: ", breakpoint, ") {\n", styles, "\n}")
+}
+
+fn demo_css() {
+    fn card_styles() {
+        css("card", {
+            display: "flex",
+            padding: "16px",
+            border_radius: "8px",
+            box_shadow: "0 2px 8px rgba(0,0,0,0.1)",
+            background: "#ffffff",
+            transition: "transform 0.2s ease"
+        })
+    }
+
+    fn btn_styles() {
+        css("btn-primary", {
+            background: "#3b82f6",
+            color: "#ffffff",
+            padding: "8px 16px",
+            border: "none",
+            border_radius: "4px",
+            cursor: "pointer",
+            font_weight: "600"
+        })
+    }
+
+    fn responsive() {
+        media_query("768px", css("card", { flex_direction: "column", padding: "8px" }))
+    }
+
+    fn stylesheet() { join([card_styles(), btn_styles(), responsive()], "\n\n") }
+    print(stylesheet())
+}
+
+demo_css()
+
+divider()
+print("Frontend demo complete — Virtual DOM, Components, State Management, CSS-in-JS all working.")

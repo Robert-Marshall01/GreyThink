@@ -1,0 +1,263 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// Grey++ Speed & Performance — Optimization Patterns
+// Replaces: C, C++, Rust, Go (performance-critical code)
+// Demonstrates: Memoization, Caching, Batch Processing, Lazy Evaluation
+// ═══════════════════════════════════════════════════════════════════════════
+
+section("GREY++ SPEED & PERFORMANCE")
+
+// ── 1. Memoization — Automatic Caching ──────────────────────────────────────
+section("1. Memoization: Expensive Computation Cache")
+
+fn demo_memoization() {
+    fn expensive_compute(n) {
+        // Simulate expensive: compute sum of squares up to n
+        reduce(range(1, n + 1), fn(acc, i) { acc + i * i }, 0)
+    }
+
+    fn memoized_compute() { memoize(expensive_compute) }
+    fn cached_fn() { memoized_compute() }
+
+    // First call — computes
+    fn r1() { bench("First call  (n=1000)", fn() { cached_fn()(1000) }) }
+    // Second call — cache hit
+    fn r2() { bench("Second call (n=1000)", fn() { cached_fn()(1000) }) }
+    // Different argument
+    fn r3() { bench("New arg     (n=5000)", fn() { cached_fn()(5000) }) }
+
+    print(str("  Results: ", r1(), ", ", r2(), ", ", r3()))
+    assert_eq(r1(), r2(), "Cache should return same result")
+    print("  ✓ Cache consistency verified")
+}
+
+demo_memoization()
+
+// ── 2. Batch Processing Engine ──────────────────────────────────────────────
+section("2. Batch Processing: High-Throughput Pipeline")
+
+fn BatchProcessor(batch_size, process_fn) {
+    {
+        process: fn(data) {
+            fn total_items() { len(data) }
+            fn num_batches() { ceil(total_items() / batch_size) }
+
+            fn process_batches(batch_num) {
+                if_then(batch_num >= num_batches(),
+                    [],
+                    fn() {
+                        fn start_idx() { batch_num * batch_size }
+                        fn end_idx() { min(start_idx() + batch_size, total_items()) }
+                        fn batch() { slice(data, start_idx(), end_idx()) }
+                        fn result() { process_fn(batch(), batch_num) }
+                        concat([result()], process_batches(batch_num + 1))
+                    }
+                )
+            }
+
+            fn results() { process_batches(0) }
+            fn flat_results() { flatten(results()) }
+            {
+                results: flat_results(),
+                total_processed: len(flat_results()),
+                batches: num_batches(),
+                batch_size: batch_size
+            }
+        }
+    }
+}
+
+fn demo_batch() {
+    // Generate 50 records
+    fn records() { repeat(50, fn(i) { { id: i + 1, value: random_int(1, 100), processed: false } }) }
+
+    fn processor() {
+        BatchProcessor(10, fn(batch, batch_num) {
+            log(str("Processing batch ", batch_num + 1, " (", len(batch), " items)"))
+            map(batch, fn(record) {
+                merge(record, { processed: true, result: get(record, "value") * 2, batch: batch_num })
+            })
+        })
+    }
+
+    fn output() { get(processor(), "process")(records()) }
+
+    print(str("  Total processed: ", get(output(), "total_processed")))
+    print(str("  Batches used: ", get(output(), "batches")))
+    print(str("  Batch size: ", get(output(), "batch_size")))
+
+    // Verify all processed
+    fn all_done() { every(get(output(), "results"), fn(r) { get(r, "processed") }) }
+    print(str("  All records processed: ", all_done()))
+}
+
+demo_batch()
+
+// ── 3. LRU Cache ────────────────────────────────────────────────────────────
+section("3. LRU Cache Implementation")
+
+fn LRUCache(capacity) {
+    fn make_cache(entries, access_order) {
+        {
+            get_val: fn(key) {
+                fn entry() { find(entries, fn(e) { get(e, "key") == key }) }
+                if_then(is_nil(entry()),
+                    { hit: false, value: nil },
+                    fn() {
+                        fn new_order() { push(filter(access_order, fn(k) { not(k == key) }), key) }
+                        log(str("Cache HIT: ", key))
+                        { hit: true, value: get(entry(), "value"), cache: make_cache(entries, new_order()) }
+                    }
+                )
+            },
+            put: fn(key, value) {
+                fn existing_idx() { index_of(map(entries, fn(e) { get(e, "key") }), key) }
+                fn clean_entries() { filter(entries, fn(e) { not(get(e, "key") == key) }) }
+                fn clean_order() { filter(access_order, fn(k) { not(k == key) }) }
+
+                fn need_evict() { and(len(clean_entries()) >= capacity, existing_idx() < 0) }
+
+                fn base_entries() {
+                    if_then(need_evict(),
+                        fn() {
+                            fn oldest() { head(clean_order()) }
+                            log(str("Cache EVICT: ", oldest()))
+                            filter(clean_entries(), fn(e) { not(get(e, "key") == oldest()) })
+                        },
+                        clean_entries()
+                    )
+                }
+
+                fn base_order() {
+                    if_then(need_evict(),
+                        tail(clean_order()),
+                        clean_order()
+                    )
+                }
+
+                log(str("Cache PUT: ", key, " = ", value))
+                make_cache(push(base_entries(), { key: key, value: value }), push(base_order(), key))
+            },
+            size: fn() { len(entries) },
+            keys_list: fn() { access_order }
+        }
+    }
+    make_cache([], [])
+}
+
+fn demo_lru() {
+    fn c0() { LRUCache(3) }
+    fn c1() { get(c0(), "put")("a", 1) }
+    fn c2() { get(c1(), "put")("b", 2) }
+    fn c3() { get(c2(), "put")("c", 3) }
+    fn c4() { get(c3(), "put")("d", 4) }
+
+    print(str("  Cache size: ", get(c4(), "size")()))
+    print(str("  Keys: ", json_stringify(get(c4(), "keys_list")())))
+
+    fn lookup() { get(c4(), "get_val")("b") }
+    print(str("  Lookup 'b': hit=", get(lookup(), "hit"), " value=", get(lookup(), "value")))
+
+    fn miss() { get(c4(), "get_val")("a") }
+    print(str("  Lookup 'a' (evicted): hit=", get(miss(), "hit")))
+}
+
+demo_lru()
+
+// ── 4. Object Pool ──────────────────────────────────────────────────────────
+section("4. Object Pool: Resource Reuse")
+
+fn ObjectPool(create_fn, max_size) {
+    fn make_pool(available, in_use, total_created) {
+        {
+            acquire: fn() {
+                if_then(len(available) > 0,
+                    fn() {
+                        fn obj() { head(available) }
+                        log(str("Pool: reused object (", len(available) - 1, " remaining)"))
+                        { object: obj(), pool: make_pool(tail(available), push(in_use, obj()), total_created) }
+                    },
+                    fn() {
+                        if_then(total_created < max_size,
+                            fn() {
+                                fn obj() { create_fn(total_created + 1) }
+                                log(str("Pool: created new object #", total_created + 1))
+                                { object: obj(), pool: make_pool(available, push(in_use, obj()), total_created + 1) }
+                            },
+                            fn() {
+                                warn("Pool exhausted!")
+                                { object: nil, pool: make_pool(available, in_use, total_created) }
+                            }
+                        )
+                    }
+                )
+            },
+            release: fn(obj) {
+                log(str("Pool: released object back"))
+                make_pool(push(available, obj), filter(in_use, fn(o) { not(get(o, "id") == get(obj, "id")) }), total_created)
+            },
+            stats: fn() { { available: len(available), in_use: len(in_use), total_created: total_created, max: max_size } }
+        }
+    }
+    make_pool([], [], 0)
+}
+
+fn demo_pool() {
+    fn db_connection(id) { { id: id, type: "db_conn", created: now() } }
+    fn pool() { ObjectPool(db_connection, 5) }
+
+    // Acquire 3 connections
+    fn r1() { get(pool(), "acquire")() }
+    fn p1() { get(r1(), "pool") }
+    fn r2() { get(p1(), "acquire")() }
+    fn p2() { get(r2(), "pool") }
+    fn r3() { get(p2(), "acquire")() }
+    fn p3() { get(r3(), "pool") }
+
+    print(str("  After 3 acquires: ", json_stringify(get(p3(), "stats")())))
+
+    // Release one back
+    fn p4() { get(p3(), "release")(get(r1(), "object")) }
+    print(str("  After 1 release:  ", json_stringify(get(p4(), "stats")())))
+
+    // Acquire again — should reuse
+    fn r4() { get(p4(), "acquire")() }
+    fn p5() { get(r4(), "pool") }
+    print(str("  After reacquire:  ", json_stringify(get(p5(), "stats")())))
+}
+
+demo_pool()
+
+// ── 5. Benchmarking Framework ───────────────────────────────────────────────
+section("5. Micro-Benchmark Suite")
+
+fn benchmark_suite(name, benchmarks) {
+    print(str("  Suite: ", name))
+    fn results() {
+        map(benchmarks, fn(b) {
+            fn label() { get(b, "label") }
+            fn run() { get(b, "fn") }
+            fn t0() { timestamp() }
+            fn result() { run()() }
+            fn elapsed_ms() { timestamp() - t0() }
+            print(str("    ", pad_end(label(), 30, " "), " → ", elapsed_ms(), "ms"))
+            { label: label(), elapsed: elapsed_ms() }
+        })
+    }
+    fn all() { results() }
+    fn fastest() { head(sort(all(), fn(a, b) { get(a, "elapsed") - get(b, "elapsed") })) }
+    print(str("  Winner: ", get(fastest(), "label")))
+}
+
+fn demo_benchmarks() {
+    benchmark_suite("Array Operations", [
+        { label: "map 10000 items", fn: fn() { map(range(0, 10000), fn(x) { x * 2 }) } },
+        { label: "filter 10000 items", fn: fn() { filter(range(0, 10000), fn(x) { mod(x, 2) == 0 }) } },
+        { label: "reduce sum 10000", fn: fn() { reduce(range(0, 10000), fn(a, b) { a + b }, 0) } },
+        { label: "sort 5000 items", fn: fn() { sort(repeat(5000, fn(i) { random_int(0, 10000) }), fn(a, b) { a - b }) } }
+    ])
+}
+
+demo_benchmarks()
+
+divider()
+print("Speed & performance demo complete — Memoization, Batching, Caching, Pooling, Benchmarks all working.")

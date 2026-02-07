@@ -1,0 +1,293 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// Grey++ Fullstack Application — Complete E-Commerce Platform
+// Replaces: Next.js, Django, Rails, Express+React, Spring Boot+Angular
+// ═══════════════════════════════════════════════════════════════════════════
+
+section("GREY++ FULLSTACK E-COMMERCE PLATFORM")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DATABASE LAYER
+// ═══════════════════════════════════════════════════════════════════════════
+section("Database Layer")
+
+createTable("users", [
+    { id: 1, username: "alice", email: "alice@shop.io", password_hash: "a1b2c3", role: "admin", balance: 5000 },
+    { id: 2, username: "bob",   email: "bob@shop.io",   password_hash: "d4e5f6", role: "user",  balance: 1200 },
+    { id: 3, username: "carol", email: "carol@shop.io", password_hash: "g7h8i9", role: "user",  balance: 3400 }
+])
+
+createTable("catalog", [
+    { id: 1, name: "Wireless Headphones", price: 89, stock: 50, category: "audio" },
+    { id: 2, name: "USB-C Hub",           price: 45, stock: 120, category: "accessories" },
+    { id: 3, name: "Mechanical Keyboard", price: 159, stock: 30, category: "input" },
+    { id: 4, name: "Webcam HD",           price: 79, stock: 80, category: "video" },
+    { id: 5, name: "Monitor Stand",       price: 35, stock: 200, category: "accessories" }
+])
+
+createTable("cart_items", [])
+createTable("order_history", [])
+
+print("  Database initialized with tables: users, catalog, cart_items, order_history")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BACKEND: AUTH SERVICE
+// ═══════════════════════════════════════════════════════════════════════════
+section("Backend: Authentication Service")
+
+fn AuthService() {
+    fn sessions() { {} }
+
+    fn make_auth(active_sessions) {
+        {
+            login: fn(username, password) {
+                fn user() {
+                    fn all() { query { select * from users where username == username } }
+                    head(all())
+                }
+                if_then(is_nil(user()),
+                    { success: false, error: "User not found" },
+                    fn() {
+                        fn token() { hash(str(username, now(), random())) }
+                        fn session() { { user_id: get(user(), "id"), username: username, role: get(user(), "role"), token: token(), expires: "2026-02-07T00:00:00Z" } }
+                        log(str("Auth: ", username, " logged in"))
+                        { success: true, session: session(), auth: make_auth(set(active_sessions, token(), session())) }
+                    }
+                )
+            },
+            verify: fn(token) {
+                fn session() { get(active_sessions, token) }
+                if_then(is_nil(session()),
+                    { valid: false, error: "Invalid token" },
+                    { valid: true, user_id: get(session(), "user_id"), role: get(session(), "role") }
+                )
+            },
+            is_admin: fn(token) {
+                fn session() { get(active_sessions, token) }
+                and(not(is_nil(session())), get(session(), "role") == "admin")
+            }
+        }
+    }
+    make_auth(sessions())
+}
+
+fn demo_auth() {
+    fn auth() { AuthService() }
+    fn login_result() { get(auth(), "login")("alice", "password123") }
+
+    print(str("  Login success: ", get(login_result(), "success")))
+
+    fn token() { get(get(login_result(), "session"), "token") }
+    fn auth2() { get(login_result(), "auth") }
+    fn verify() { get(auth2(), "verify")(token()) }
+
+    print(str("  Token valid: ", get(verify(), "valid")))
+    print(str("  Is admin: ", get(auth2(), "is_admin")(token())))
+    login_result()
+}
+
+fn auth_result() { demo_auth() }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BACKEND: PRODUCT API
+// ═══════════════════════════════════════════════════════════════════════════
+section("Backend: Product API")
+
+fn ProductAPI() {
+    {
+        list: fn(category) {
+            fn all() { query { select * from catalog } }
+            if_then(is_nil(category),
+                all(),
+                filter(all(), fn(p) { get(p, "category") == category })
+            )
+        },
+        get_by_id: fn(id) {
+            fn all() { query { select * from catalog } }
+            find(all(), fn(p) { get(p, "id") == id })
+        },
+        search: fn(term) {
+            fn all() { query { select * from catalog } }
+            filter(all(), fn(p) { includes(lower(get(p, "name")), lower(term)) })
+        },
+        in_stock: fn() {
+            query { select name, price, stock from catalog where stock > 0 }
+        }
+    }
+}
+
+fn demo_product_api() {
+    fn api() { ProductAPI() }
+
+    fn all_products() { get(api(), "list")(nil) }
+    print(str("  All products: ", len(all_products())))
+
+    fn accessories() { get(api(), "list")("accessories") }
+    print(str("  Accessories: ", len(accessories()), " products"))
+    forEach(accessories(), fn(p) { print(str("    - ", get(p, "name"), " $", get(p, "price"))) })
+
+    fn search_results() { get(api(), "search")("keyboard") }
+    print(str("  Search 'keyboard': ", len(search_results()), " results"))
+
+    fn stock() { get(api(), "in_stock")() }
+    print(str("  In-stock products: ", len(stock())))
+}
+
+demo_product_api()
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BACKEND: CART & CHECKOUT
+// ═══════════════════════════════════════════════════════════════════════════
+section("Backend: Cart & Checkout")
+
+fn CartService() {
+    fn make_cart(items) {
+        {
+            add: fn(product_id, qty) {
+                fn product() { get(ProductAPI(), "get_by_id")(product_id) }
+                if_then(is_nil(product()),
+                    { error: "Product not found", cart: make_cart(items) },
+                    fn() {
+                        fn item() { { product_id: product_id, name: get(product(), "name"), price: get(product(), "price"), qty: qty, subtotal: get(product(), "price") * qty } }
+                        log(str("Cart: added ", qty, "x ", get(product(), "name")))
+                        { added: item(), cart: make_cart(push(items, item())) }
+                    }
+                )
+            },
+            remove: fn(product_id) {
+                make_cart(filter(items, fn(i) { not(get(i, "product_id") == product_id) }))
+            },
+            get_items: fn() { items },
+            total: fn() { reduce(items, fn(acc, i) { acc + get(i, "subtotal") }, 0) },
+            item_count: fn() { reduce(items, fn(acc, i) { acc + get(i, "qty") }, 0) },
+            checkout: fn(user_id) {
+                fn order() {
+                    {
+                        id: uuid(),
+                        user_id: user_id,
+                        items: items,
+                        total: reduce(items, fn(acc, i) { acc + get(i, "subtotal") }, 0),
+                        status: "confirmed",
+                        created: now()
+                    }
+                }
+                log(str("Checkout: Order ", get(order(), "id"), " for $", get(order(), "total")))
+                { order: order(), cart: make_cart([]) }
+            }
+        }
+    }
+    make_cart([])
+}
+
+fn demo_cart() {
+    fn cart0() { CartService() }
+    fn r1() { get(cart0(), "add")(1, 2) }
+    fn cart1() { get(r1(), "cart") }
+    fn r2() { get(cart1(), "add")(3, 1) }
+    fn cart2() { get(r2(), "cart") }
+    fn r3() { get(cart2(), "add")(2, 3) }
+    fn cart3() { get(r3(), "cart") }
+
+    print(str("  Cart items: ", get(cart3(), "item_count")()))
+    print(str("  Cart total: $", get(cart3(), "total")()))
+
+    forEach(get(cart3(), "get_items")(), fn(item) {
+        print(str("    ", get(item, "qty"), "x ", get(item, "name"), " = $", get(item, "subtotal")))
+    })
+
+    // Checkout
+    fn checkout() { get(cart3(), "checkout")(1) }
+    print(str("  Order placed: ", get(get(checkout(), "order"), "id")))
+    print(str("  Order total: $", get(get(checkout(), "order"), "total")))
+    print(str("  Cart after checkout: ", get(get(checkout(), "cart"), "item_count")(), " items"))
+}
+
+demo_cart()
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FRONTEND: UI COMPONENTS
+// ═══════════════════════════════════════════════════════════════════════════
+section("Frontend: UI Components")
+
+fn ProductCard(product) {
+    fn in_stock() { get(product, "stock") > 0 }
+    {
+        render: fn() {
+            str("<div class='product-card'>",
+                "<h3>", get(product, "name"), "</h3>",
+                "<p class='price'>$", get(product, "price"), "</p>",
+                "<span class='stock ", if_then(in_stock(), "in-stock", "out-of-stock"), "'>",
+                    if_then(in_stock(), str(get(product, "stock"), " in stock"), "Out of stock"),
+                "</span>",
+                if_then(in_stock(), "<button class='add-to-cart'>Add to Cart</button>", ""),
+            "</div>")
+        }
+    }
+}
+
+fn NavBar(user, cart_count) {
+    str("<nav class='navbar'>",
+        "<a href='/' class='logo'>GreyShop</a>",
+        "<div class='nav-links'>",
+            "<a href='/catalog'>Catalog</a>",
+            "<a href='/cart'>Cart (", cart_count, ")</a>",
+            if_then(is_nil(user), "<a href='/login'>Login</a>", str("<span>Hi, ", get(user, "username"), "</span>")),
+        "</div>",
+    "</nav>")
+}
+
+fn demo_frontend() {
+    // Render navbar
+    fn nav() { NavBar({ username: "Alice" }, 3) }
+    print(str("  ", nav()))
+
+    // Render product cards
+    fn products() { get(ProductAPI(), "list")(false) }
+    forEach(take(products(), 3), fn(p) {
+        print(str("  ", get(ProductCard(p), "render")()))
+    })
+}
+
+demo_frontend()
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FULLSTACK INTEGRATION TEST
+// ═══════════════════════════════════════════════════════════════════════════
+section("Fullstack Integration Test")
+
+fn integration_test() {
+    // 1. Auth
+    fn auth() { AuthService() }
+    fn login() { get(auth(), "login")("bob", "pass") }
+    assert(get(login(), "success"), "Login should succeed")
+    print("  ✓ Auth: Login successful")
+
+    // 2. Browse products
+    fn api() { ProductAPI() }
+    fn products() { get(api(), "list")(nil) }
+    assert(len(products()) > 0, "Should have products")
+    print(str("  ✓ Catalog: ", len(products()), " products loaded"))
+
+    // 3. Search
+    fn results() { get(api(), "search")("hub") }
+    assert(len(results()) > 0, "Search should find results")
+    print(str("  ✓ Search: Found ", len(results()), " results for 'hub'"))
+
+    // 4. Cart flow
+    fn cart0() { CartService() }
+    fn cart1() { get(get(cart0(), "add")(1, 1), "cart") }
+    fn cart2() { get(get(cart1(), "add")(4, 2), "cart") }
+    assert(get(cart2(), "item_count")() == 3, "Cart should have 3 items")
+    print(str("  ✓ Cart: ", get(cart2(), "item_count")(), " items, $", get(cart2(), "total")()))
+
+    // 5. Checkout
+    fn order() { get(get(cart2(), "checkout")(2), "order") }
+    assert(get(order(), "status") == "confirmed", "Order should be confirmed")
+    print(str("  ✓ Order: ", get(order(), "id"), " confirmed for $", get(order(), "total")))
+
+    print("  ✓ All integration tests passed!")
+}
+
+integration_test()
+
+divider()
+print("Fullstack demo complete — Auth, Products, Cart, Checkout, Frontend, Integration all working.")

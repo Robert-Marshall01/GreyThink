@@ -1,0 +1,240 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// Grey++ Object-Oriented Programming — Real-World Application
+// Replaces: Java, C#, C++, Python classes, Ruby, Kotlin, Swift
+// Demonstrates: Encapsulation, Inheritance, Polymorphism, Composition
+// ═══════════════════════════════════════════════════════════════════════════
+
+section("GREY++ OBJECT-ORIENTED PROGRAMMING")
+
+// ── 1. Encapsulation — Bank Account ─────────────────────────────────────────
+section("1. Encapsulation: Bank Account System")
+
+fn BankAccount(owner, initial_balance) {
+    // Private state via closure — true encapsulation
+    fn state() { { balance: initial_balance, owner: owner, transactions: [] } }
+
+    fn make_account(s) {
+        {
+            get_balance: fn() { get(s, "balance") },
+            get_owner:   fn() { get(s, "owner") },
+            deposit: fn(amount) {
+                fn new_bal() { get(s, "balance") + amount }
+                fn new_txns() { push(get(s, "transactions"), { type: "deposit", amount: amount }) }
+                log(str(owner, " deposited $", amount, " — new balance: $", new_bal()))
+                make_account(merge(s, { balance: new_bal(), transactions: new_txns() }))
+            },
+            withdraw: fn(amount) {
+                fn can_withdraw() { get(s, "balance") >= amount }
+                if_then(can_withdraw(),
+                    fn() {
+                        fn new_bal() { get(s, "balance") - amount }
+                        log(str(owner, " withdrew $", amount, " — new balance: $", new_bal()))
+                        make_account(merge(s, { balance: new_bal() }))
+                    },
+                    fn() {
+                        warn(str("Insufficient funds for ", owner))
+                        make_account(s)
+                    }
+                )
+            },
+            statement: fn() {
+                print(str("Account: ", get(s, "owner"), " | Balance: $", get(s, "balance"),
+                    " | Transactions: ", len(get(s, "transactions"))))
+            }
+        }
+    }
+    make_account(state())
+}
+
+// Usage
+fn run_bank_demo() {
+    fn acct1() { BankAccount("Alice", 5000) }
+    fn acct2() { get(acct1(), "deposit")(2000) }
+    fn acct3() { get(acct2(), "withdraw")(1500) }
+    fn acct4() { get(acct3(), "withdraw")(10000) }
+    get(acct4(), "statement")()
+}
+
+run_bank_demo()
+
+// ── 2. Inheritance — Shape Hierarchy ────────────────────────────────────────
+section("2. Inheritance: Shape Hierarchy")
+
+fn Shape(type, color) {
+    {
+        type: type,
+        color: color,
+        describe: fn() { str(color, " ", type) }
+    }
+}
+
+fn Circle(radius, color) {
+    fn base() { Shape("circle", color) }
+    merge(base(), {
+        radius: radius,
+        area: fn() { round(PI * radius * radius * 100) / 100 },
+        perimeter: fn() { round(2 * PI * radius * 100) / 100 },
+        describe: fn() { str(color, " circle (r=", radius, ", area=", round(PI * radius * radius * 100) / 100, ")") }
+    })
+}
+
+fn Rectangle(width, height, color) {
+    fn base() { Shape("rectangle", color) }
+    merge(base(), {
+        width: width,
+        height: height,
+        area: fn() { width * height },
+        perimeter: fn() { 2 * (width + height) },
+        describe: fn() { str(color, " rectangle (", width, "x", height, ", area=", width * height, ")") }
+    })
+}
+
+fn Triangle(base_len, height, color) {
+    fn parent() { Shape("triangle", color) }
+    merge(parent(), {
+        base_len: base_len,
+        height: height,
+        area: fn() { base_len * height / 2 },
+        describe: fn() { str(color, " triangle (b=", base_len, ", h=", height, ", area=", base_len * height / 2, ")") }
+    })
+}
+
+fn run_shapes() {
+    fn shapes() {
+        [
+            Circle(5, "red"),
+            Rectangle(10, 4, "blue"),
+            Triangle(8, 6, "green"),
+            Circle(3, "yellow"),
+            Rectangle(7, 7, "purple")
+        ]
+    }
+
+    // Polymorphic dispatch
+    forEach(shapes(), fn(s) {
+        print(str("  ", get(s, "describe")(), " → area = ", get(s, "area")()))
+    })
+
+    // Aggregate
+    fn total_area() {
+        reduce(shapes(), fn(acc, s) { acc + get(s, "area")() }, 0)
+    }
+
+    print(str("  Total area of all shapes: ", round(total_area() * 100) / 100))
+}
+
+run_shapes()
+
+// ── 3. Composition — Entity Component System ───────────────────────────────
+section("3. Composition: Entity Component System")
+
+fn Position(x, y) { { component: "position", x: x, y: y } }
+fn Velocity(dx, dy) { { component: "velocity", dx: dx, dy: dy } }
+fn Health(hp, max_hp) { { component: "health", hp: hp, max_hp: max_hp } }
+fn Renderable(sprite, layer) { { component: "renderable", sprite: sprite, layer: layer } }
+
+fn Entity(name, components) {
+    {
+        name: name,
+        components: components,
+        get_component: fn(comp_type) {
+            find(components, fn(c) { get(c, "component") == comp_type })
+        },
+        has_component: fn(comp_type) {
+            some(components, fn(c) { get(c, "component") == comp_type })
+        },
+        describe: fn() {
+            fn comp_names() { join(map(components, fn(c) { get(c, "component") }), ", ") }
+            str(name, " [", comp_names(), "]")
+        }
+    }
+}
+
+fn run_ecs() {
+    fn player() {
+        Entity("Player", [
+            Position(100, 200),
+            Velocity(5, 0),
+            Health(100, 100),
+            Renderable("hero.png", 2)
+        ])
+    }
+
+    fn enemy() {
+        Entity("Goblin", [
+            Position(300, 200),
+            Velocity(0 - 2, 0),
+            Health(30, 30),
+            Renderable("goblin.png", 2)
+        ])
+    }
+
+    fn projectile() {
+        Entity("Arrow", [
+            Position(120, 200),
+            Velocity(15, 0),
+            Renderable("arrow.png", 3)
+        ])
+    }
+
+    fn entities() { [player(), enemy(), projectile()] }
+
+    forEach(entities(), fn(e) {
+        print(str("  ", get(e, "describe")()))
+    })
+
+    // Check which entities have health
+    fn living_entities() { filter(entities(), fn(e) { get(e, "has_component")("health") }) }
+    print(str("  Entities with Health: ", len(living_entities())))
+}
+
+run_ecs()
+
+// ── 4. Design Pattern — Observer / Event System ─────────────────────────────
+section("4. Design Pattern: Observer / Event System")
+
+fn EventEmitter() {
+    fn make_emitter(listeners) {
+        {
+            on: fn(event, handler) {
+                fn existing() { if_then(has_key(listeners, event), get(listeners, event), []) }
+                make_emitter(set(listeners, event, push(existing(), handler)))
+            },
+            emit: fn(event, data) {
+                fn handlers() { if_then(has_key(listeners, event), get(listeners, event), []) }
+                forEach(handlers(), fn(h) { h(data) })
+                str("Emitted '", event, "' to ", len(handlers()), " listeners")
+            },
+            listener_count: fn() { reduce(values(listeners), fn(acc, v) { acc + len(v) }, 0) }
+        }
+    }
+    make_emitter({})
+}
+
+fn run_events() {
+    fn emitter1() { EventEmitter() }
+    fn emitter2() {
+        get(emitter1(), "on")("user:login", fn(data) {
+            print(str("  [Auth] User logged in: ", get(data, "username")))
+        })
+    }
+    fn emitter3() {
+        get(emitter2(), "on")("user:login", fn(data) {
+            print(str("  [Analytics] Login tracked for: ", get(data, "username")))
+        })
+    }
+    fn emitter4() {
+        get(emitter3(), "on")("order:placed", fn(data) {
+            print(str("  [Notification] Order #", get(data, "id"), " placed — $", get(data, "total")))
+        })
+    }
+
+    print(get(emitter4(), "emit")("user:login", { username: "alice_dev", role: "admin" }))
+    print(get(emitter4(), "emit")("order:placed", { id: 42, total: 299 }))
+    print(str("  Total listeners registered: ", get(emitter4(), "listener_count")()))
+}
+
+run_events()
+
+divider()
+print("OOP demo complete — Encapsulation, Inheritance, Composition, Patterns all working.")

@@ -1,0 +1,322 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// Grey++ DevOps — CI/CD Pipelines, Monitoring, Deployment Automation
+// Replaces: Jenkins, GitHub Actions, GitLab CI, Terraform, Prometheus, Grafana
+// ═══════════════════════════════════════════════════════════════════════════
+
+section("GREY++ DEVOPS AUTOMATION")
+
+// ── 1. CI/CD Pipeline Engine ────────────────────────────────────────────────
+section("1. CI/CD Pipeline Engine")
+
+fn PipelineStep(name, command, timeout_sec, required) {
+    {
+        name: name,
+        command: command,
+        timeout: timeout_sec,
+        required: required,
+        status: "pending"
+    }
+}
+
+fn PipelineStage(name, steps, parallel) {
+    {
+        name: name,
+        steps: steps,
+        parallel: parallel,
+        run: fn() {
+            log(str("Stage: ", name, if_then(parallel, " (parallel)", " (sequential)")))
+            fn results() {
+                map(steps, fn(step) {
+                    fn duration() { random_int(100, 2000) }
+                    fn success() { random() > 0.05 }
+                    fn result() {
+                        {
+                            step: get(step, "name"),
+                            status: if_then(success(), "passed", "failed"),
+                            duration_ms: duration(),
+                            output: str(get(step, "command"), " completed")
+                        }
+                    }
+                    result()
+                })
+            }
+            fn all_results() { results() }
+            fn all_passed() { every(all_results(), fn(r) { get(r, "status") == "passed" }) }
+            { stage: name, results: all_results(), passed: all_passed() }
+        }
+    }
+}
+
+fn Pipeline(name, trigger, stages) {
+    {
+        name: name,
+        trigger: trigger,
+        run: fn() {
+            fn run_id() { str("run-", hash(str(name, now()))) }
+            log(str("Pipeline '", name, "' triggered by: ", trigger))
+            print(str("  Pipeline: ", name, " [", run_id(), "]"))
+
+            fn execute_stages(remaining, passed_so_far, results) {
+                if_then(len(remaining) == 0,
+                    { pipeline: name, run_id: run_id(), stages: results, all_passed: passed_so_far },
+                    fn() {
+                        fn stage() { head(remaining) }
+                        fn result() { get(stage(), "run")() }
+                        fn stage_passed() { get(result(), "passed") }
+
+                        forEach(get(result(), "results"), fn(r) {
+                            fn icon() { if_then(get(r, "status") == "passed", "✓", "✗") }
+                            print(str("    ", icon(), " ", pad_end(get(r, "step"), 28, " "), " ", get(r, "duration_ms"), "ms"))
+                        })
+
+                        if_then(and(not(stage_passed()), true),
+                            fn() {
+                                print(str("    ⚠ Stage '", get(result(), "stage"), "' had failures"))
+                                execute_stages(tail(remaining), false, push(results, result()))
+                            },
+                            fn() { execute_stages(tail(remaining), passed_so_far, push(results, result())) }
+                        )
+                    }
+                )
+            }
+
+            execute_stages(stages, true, [])
+        }
+    }
+}
+
+fn demo_pipeline() {
+    fn ci_pipeline() {
+        Pipeline("greypp-ci", "push to main", [
+            PipelineStage("Build", [
+                PipelineStep("Install dependencies", "npm install", 120, true),
+                PipelineStep("Compile TypeScript", "tsc --build", 60, true),
+                PipelineStep("Generate types", "npm run codegen", 30, false)
+            ], false),
+            PipelineStage("Test", [
+                PipelineStep("Unit tests", "npm test -- --unit", 300, true),
+                PipelineStep("Integration tests", "npm test -- --integration", 600, true),
+                PipelineStep("E2E tests", "npm run test:e2e", 900, true),
+                PipelineStep("Coverage report", "npm run coverage", 120, false)
+            ], true),
+            PipelineStage("Security", [
+                PipelineStep("SAST scan", "semgrep scan", 180, true),
+                PipelineStep("Dependency audit", "npm audit", 60, true),
+                PipelineStep("License check", "license-checker", 30, false)
+            ], true),
+            PipelineStage("Deploy", [
+                PipelineStep("Build Docker image", "docker build -t app:latest .", 120, true),
+                PipelineStep("Push to registry", "docker push registry/app:latest", 60, true),
+                PipelineStep("Deploy to staging", "kubectl apply -f deploy/staging.yaml", 90, true),
+                PipelineStep("Smoke tests", "npm run test:smoke", 120, true)
+            ], false)
+        ])
+    }
+
+    fn result() { get(ci_pipeline(), "run")() }
+    fn total_steps() { reduce(get(result(), "stages"), fn(acc, s) { acc + len(get(s, "results")) }, 0) }
+    print(str("  Pipeline result: ", if_then(get(result(), "all_passed"), "ALL PASSED ✓", "FAILURES DETECTED ✗")))
+    print(str("  Total steps executed: ", total_steps()))
+}
+
+demo_pipeline()
+
+// ── 2. Infrastructure Monitoring ────────────────────────────────────────────
+section("2. Infrastructure Monitoring")
+
+fn MetricCollector(service_name) {
+    {
+        collect: fn() {
+            {
+                service: service_name,
+                timestamp: now(),
+                cpu_percent: round(random() * 80 + 10),
+                memory_mb: round(random() * 1500 + 500),
+                disk_percent: round(random() * 60 + 20),
+                requests_per_sec: round(random() * 500),
+                error_rate: round(random() * 5 * 100) / 100,
+                latency_p50_ms: round(random() * 50 + 5),
+                latency_p99_ms: round(random() * 500 + 50),
+                active_connections: random_int(10, 200)
+            }
+        }
+    }
+}
+
+fn AlertRule(name, metric, operator, threshold, severity) {
+    {
+        name: name,
+        metric: metric,
+        operator: operator,
+        threshold: threshold,
+        severity: severity,
+        evaluate: fn(value) {
+            fn triggered() {
+                cond(
+                    operator == ">",  value > threshold,
+                    operator == "<",  value < threshold,
+                    operator == ">=", value >= threshold,
+                    operator == "<=", value <= threshold,
+                    false
+                )
+            }
+            if_then(triggered(),
+                { alert: true, name: name, severity: severity, value: value, threshold: threshold, message: str(name, ": ", metric, " ", operator, " ", threshold, " (current: ", value, ")") },
+                { alert: false }
+            )
+        }
+    }
+}
+
+fn demo_monitoring() {
+    fn services() { ["api-server", "web-frontend", "database", "cache", "worker"] }
+    fn collectors() { map(services(), fn(s) { MetricCollector(s) }) }
+    fn metrics() { map(collectors(), fn(c) { get(c, "collect")() }) }
+
+    // Display dashboard
+    forEach(metrics(), fn(m) {
+        print(str("  ", pad_end(get(m, "service"), 15, " "),
+            " CPU:", pad_start(to_string(get(m, "cpu_percent")), 3, " "), "%",
+            " MEM:", pad_start(to_string(get(m, "memory_mb")), 5, " "), "MB",
+            " REQ/s:", pad_start(to_string(get(m, "requests_per_sec")), 4, " "),
+            " P99:", pad_start(to_string(get(m, "latency_p99_ms")), 4, " "), "ms",
+            " ERR:", get(m, "error_rate"), "%"))
+    })
+
+    // Alert evaluation
+    fn alert_rules() {
+        [
+            AlertRule("High CPU", "cpu_percent", ">", 80, "warning"),
+            AlertRule("High Memory", "memory_mb", ">", 1800, "critical"),
+            AlertRule("High Error Rate", "error_rate", ">", 3, "critical"),
+            AlertRule("High Latency", "latency_p99_ms", ">", 400, "warning")
+        ]
+    }
+
+    fn check_alerts() {
+        fn all_alerts() {
+            flat_map(metrics(), fn(m) {
+                filter(map(alert_rules(), fn(rule) {
+                    get(rule, "evaluate")(get(m, get(rule, "metric")))
+                }), fn(a) { get(a, "alert") })
+            })
+        }
+        all_alerts()
+    }
+
+    fn alerts() { check_alerts() }
+    print(str("\n  Active alerts: ", len(alerts())))
+    forEach(alerts(), fn(a) {
+        fn icon() { if_then(get(a, "severity") == "critical", "🔴", "🟡") }
+        print(str("    ", icon(), " [", upper(get(a, "severity")), "] ", get(a, "message")))
+    })
+}
+
+demo_monitoring()
+
+// ── 3. Deployment Rollout ───────────────────────────────────────────────────
+section("3. Canary Deployment Rollout")
+
+fn CanaryDeployment(service, old_version, new_version) {
+    fn make_deploy(traffic_split, health_checks_passed, status) {
+        {
+            service: service,
+            old_version: old_version,
+            new_version: new_version,
+            canary_percent: traffic_split,
+            status: status,
+            promote: fn() {
+                fn new_split() { min(traffic_split + 25, 100) }
+                fn healthy() { random() > 0.1 }
+                if_then(not(healthy()),
+                    fn() {
+                        warn(str("Canary unhealthy! Rolling back ", service))
+                        make_deploy(0, 0, "rolled_back")
+                    },
+                    fn() {
+                        log(str(service, " canary: ", traffic_split, "% → ", new_split(), "%"))
+                        if_then(new_split() >= 100,
+                            make_deploy(100, health_checks_passed + 1, "fully_deployed"),
+                            make_deploy(new_split(), health_checks_passed + 1, "canary")
+                        )
+                    }
+                )
+            },
+            describe: fn() {
+                str(service, " [", old_version, " → ", new_version, "] ",
+                    traffic_split, "% canary | status: ", status,
+                    " | health checks: ", health_checks_passed)
+            }
+        }
+    }
+    make_deploy(0, 0, "pending")
+}
+
+fn demo_canary() {
+    fn deploy() { CanaryDeployment("api-service", "v2.3.1", "v2.4.0") }
+    fn d1() { get(deploy(), "promote")() }
+    fn d2() { get(d1(), "promote")() }
+    fn d3() { get(d2(), "promote")() }
+    fn d4() { get(d3(), "promote")() }
+
+    print(str("  Step 1: ", get(d1(), "describe")()))
+    print(str("  Step 2: ", get(d2(), "describe")()))
+    print(str("  Step 3: ", get(d3(), "describe")()))
+    print(str("  Step 4: ", get(d4(), "describe")()))
+}
+
+demo_canary()
+
+// ── 4. Log Aggregation ──────────────────────────────────────────────────────
+section("4. Centralized Log Aggregation")
+
+fn LogEntry(level, service, message) {
+    { timestamp: now(), level: level, service: service, message: message, trace_id: uuid() }
+}
+
+fn LogAggregator() {
+    fn make_agg(logs) {
+        {
+            ingest: fn(entry) { make_agg(push(logs, entry)) },
+            search: fn(term) { filter(logs, fn(l) { includes(lower(get(l, "message")), lower(term)) }) },
+            by_level: fn(level) { filter(logs, fn(l) { get(l, "level") == level }) },
+            by_service: fn(service) { filter(logs, fn(l) { get(l, "service") == service }) },
+            stats: fn() {
+                fn level_counts() {
+                    { info: len(filter(logs, fn(l) { get(l, "level") == "info" })),
+                      warn: len(filter(logs, fn(l) { get(l, "level") == "warn" })),
+                      error: len(filter(logs, fn(l) { get(l, "level") == "error" })) }
+                }
+                { total: len(logs), by_level: level_counts() }
+            }
+        }
+    }
+    make_agg([])
+}
+
+fn demo_logs() {
+    fn agg0() { LogAggregator() }
+    fn agg1() { get(agg0(), "ingest")(LogEntry("info", "api", "Request handled successfully")) }
+    fn agg2() { get(agg1(), "ingest")(LogEntry("warn", "api", "Slow query detected: 2.3s")) }
+    fn agg3() { get(agg2(), "ingest")(LogEntry("error", "worker", "Failed to process job 42")) }
+    fn agg4() { get(agg3(), "ingest")(LogEntry("info", "api", "Health check passed")) }
+    fn agg5() { get(agg4(), "ingest")(LogEntry("info", "cache", "Cache warmed: 1200 keys")) }
+    fn agg6() { get(agg5(), "ingest")(LogEntry("error", "api", "Connection timeout to database")) }
+
+    fn stats() { get(agg6(), "stats")() }
+    print(str("  Total logs: ", get(stats(), "total")))
+    print(str("  By level: info=", get(get(stats(), "by_level"), "info"),
+        " warn=", get(get(stats(), "by_level"), "warn"),
+        " error=", get(get(stats(), "by_level"), "error")))
+
+    fn errors() { get(agg6(), "by_level")("error") }
+    print("  Errors:")
+    forEach(errors(), fn(e) {
+        print(str("    [", get(e, "service"), "] ", get(e, "message")))
+    })
+}
+
+demo_logs()
+
+divider()
+print("DevOps demo complete — CI/CD, Monitoring, Canary Deployments, Log Aggregation all working.")

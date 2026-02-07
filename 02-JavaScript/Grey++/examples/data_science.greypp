@@ -1,0 +1,378 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// Grey++ Data Science — Statistics, ETL, Analysis, Visualization Prep
+// Replaces: Python (pandas, numpy, scipy), R, Julia, MATLAB
+// ═══════════════════════════════════════════════════════════════════════════
+
+section("GREY++ DATA SCIENCE")
+
+// ── 1. Statistical Functions ────────────────────────────────────────────────
+section("1. Descriptive Statistics Library")
+
+fn Stats(data) {
+    fn sorted() { sort(data, fn(a, b) { a - b }) }
+    fn n() { len(data) }
+
+    {
+        count: fn() { n() },
+        sum: fn() { reduce(data, fn(a, b) { a + b }, 0) },
+        mean: fn() { reduce(data, fn(a, b) { a + b }, 0) / n() },
+        median: fn() {
+            fn s() { sorted() }
+            fn mid() { floor(n() / 2) }
+            if_then(mod(n(), 2) == 0,
+                (get(s(), mid() - 1) + get(s(), mid())) / 2,
+                get(s(), mid())
+            )
+        },
+        mode: fn() {
+            fn freqs() { group_by(data, fn(x) { x }) }
+            fn freq_entries() { entries(freqs()) }
+            fn max_freq() { reduce(freq_entries(), fn(best, e) {
+                if_then(len(get(e, 1)) > len(get(best, 1)), e, best)
+            }, head(freq_entries())) }
+            get(max_freq(), 0)
+        },
+        variance: fn() {
+            fn mu() { reduce(data, fn(a, b) { a + b }, 0) / n() }
+            fn sq_diffs() { map(data, fn(x) { pow(x - mu(), 2) }) }
+            reduce(sq_diffs(), fn(a, b) { a + b }, 0) / n()
+        },
+        std_dev: fn() {
+            fn mu() { reduce(data, fn(a, b) { a + b }, 0) / n() }
+            fn sq_diffs() { map(data, fn(x) { pow(x - mu(), 2) }) }
+            fn variance() { reduce(sq_diffs(), fn(a, b) { a + b }, 0) / n() }
+            sqrt(variance())
+        },
+        min_val: fn() { head(sorted()) },
+        max_val: fn() { last(sorted()) },
+        range_val: fn() { last(sorted()) - head(sorted()) },
+        percentile: fn(p) {
+            fn s() { sorted() }
+            fn idx() { floor(p / 100 * (n() - 1)) }
+            get(s(), idx())
+        },
+        quartiles: fn() {
+            fn s() { sorted() }
+            fn q1_idx() { floor(0.25 * (n() - 1)) }
+            fn q2_idx() { floor(0.50 * (n() - 1)) }
+            fn q3_idx() { floor(0.75 * (n() - 1)) }
+            { Q1: get(s(), q1_idx()), Q2: get(s(), q2_idx()), Q3: get(s(), q3_idx()) }
+        },
+        describe: fn() {
+            fn mu() { reduce(data, fn(a, b) { a + b }, 0) / n() }
+            fn sq_diffs() { map(data, fn(x) { pow(x - mu(), 2) }) }
+            fn sd() { sqrt(reduce(sq_diffs(), fn(a, b) { a + b }, 0) / n()) }
+            {
+                count: n(),
+                mean: round(mu() * 100) / 100,
+                std: round(sd() * 100) / 100,
+                min: head(sorted()),
+                max: last(sorted()),
+                range: last(sorted()) - head(sorted())
+            }
+        }
+    }
+}
+
+fn demo_stats() {
+    fn dataset() { [23, 45, 12, 67, 34, 89, 21, 56, 78, 43, 31, 65, 48, 72, 39, 55, 27, 61, 84, 36] }
+    fn stats() { Stats(dataset()) }
+
+    print(str("  Dataset: ", len(dataset()), " values"))
+    fn desc() { get(stats(), "describe")() }
+    print(str("  Mean:    ", get(desc(), "mean")))
+    print(str("  Std Dev: ", get(desc(), "std")))
+    print(str("  Min:     ", get(desc(), "min")))
+    print(str("  Max:     ", get(desc(), "max")))
+    print(str("  Range:   ", get(desc(), "range")))
+    print(str("  Median:  ", get(stats(), "median")()))
+
+    fn q() { get(stats(), "quartiles")() }
+    print(str("  Q1=", get(q(), "Q1"), "  Q2=", get(q(), "Q2"), "  Q3=", get(q(), "Q3")))
+}
+
+demo_stats()
+
+// ── 2. DataFrame Operations ────────────────────────────────────────────────
+section("2. DataFrame Operations")
+
+fn DataFrame(columns, rows) {
+    {
+        shape: fn() { str(len(rows), " rows × ", len(columns), " columns") },
+        columns: fn() { columns },
+        head_df: fn(n) { take(rows, n) },
+        select_cols: fn(cols) {
+            fn new_rows() { map(rows, fn(r) { from_entries(map(cols, fn(c) { [c, get(r, c)] })) }) }
+            DataFrame(cols, new_rows())
+        },
+        where_df: fn(pred) { DataFrame(columns, filter(rows, pred)) },
+        sort_by: fn(col, ascending) {
+            fn sorted_rows() {
+                sort(rows, fn(a, b) {
+                    fn va() { get(a, col) }
+                    fn vb() { get(b, col) }
+                    if_then(ascending, va() - vb(), vb() - va())
+                })
+            }
+            DataFrame(columns, sorted_rows())
+        },
+        add_column: fn(name, compute_fn) {
+            fn new_rows() { map(rows, fn(r) { set(r, name, compute_fn(r)) }) }
+            DataFrame(push(columns, name), new_rows())
+        },
+        group_agg: fn(group_col, agg_col, agg_fn) {
+            fn groups() { group_by(rows, fn(r) { get(r, group_col) }) }
+            fn group_names() { keys(groups()) }
+            map(group_names(), fn(g) {
+                fn group_rows() { get(groups(), g) }
+                fn agg_vals() { map(group_rows(), fn(r) { get(r, agg_col) }) }
+                { group: g, value: agg_fn(agg_vals()) }
+            })
+        },
+        describe_col: fn(col) {
+            fn vals() { map(rows, fn(r) { get(r, col) }) }
+            fn numeric() { filter(vals(), fn(v) { is_number(v) }) }
+            if_then(len(numeric()) > 0,
+                get(Stats(numeric()), "describe")(),
+                { count: len(vals()), type: "non-numeric" }
+            )
+        },
+        to_rows: fn() { rows },
+        row_count: fn() { len(rows) }
+    }
+}
+
+fn demo_dataframe() {
+    fn sales_data() {
+        DataFrame(
+            ["region", "product", "quarter", "revenue", "units"],
+            [
+                { region: "North", product: "Widget A", quarter: "Q1", revenue: 45000, units: 120 },
+                { region: "North", product: "Widget B", quarter: "Q1", revenue: 32000, units: 80 },
+                { region: "South", product: "Widget A", quarter: "Q1", revenue: 38000, units: 95 },
+                { region: "South", product: "Widget B", quarter: "Q1", revenue: 41000, units: 110 },
+                { region: "North", product: "Widget A", quarter: "Q2", revenue: 52000, units: 140 },
+                { region: "North", product: "Widget B", quarter: "Q2", revenue: 28000, units: 70 },
+                { region: "South", product: "Widget A", quarter: "Q2", revenue: 44000, units: 115 },
+                { region: "South", product: "Widget B", quarter: "Q2", revenue: 47000, units: 125 },
+                { region: "East",  product: "Widget A", quarter: "Q1", revenue: 35000, units: 88 },
+                { region: "East",  product: "Widget B", quarter: "Q2", revenue: 39000, units: 100 },
+                { region: "West",  product: "Widget A", quarter: "Q1", revenue: 42000, units: 105 },
+                { region: "West",  product: "Widget B", quarter: "Q2", revenue: 36000, units: 92 }
+            ]
+        )
+    }
+
+    fn df() { sales_data() }
+    print(str("  Shape: ", get(df(), "shape")()))
+
+    // Revenue statistics
+    fn rev_stats() { get(df(), "describe_col")("revenue") }
+    print(str("  Revenue — Mean: $", get(rev_stats(), "mean"), " | Std: $", get(rev_stats(), "std")))
+
+    // Group by region
+    fn by_region() { get(df(), "group_agg")("region", "revenue", fn(vals) { reduce(vals, fn(a, b) { a + b }, 0) }) }
+    print("\n  Revenue by Region:")
+    forEach(sort(by_region(), fn(a, b) { get(b, "value") - get(a, "value") }), fn(g) {
+        print(str("    ", pad_end(get(g, "group"), 8, " "), " $", get(g, "value")))
+    })
+
+    // Filter and sort
+    fn top_sales() {
+        fn filtered() { get(df(), "where_df")(fn(r) { get(r, "revenue") > 40000 }) }
+        get(filtered(), "sort_by")("revenue", false)
+    }
+    print("\n  Top Revenue (> $40k):")
+    forEach(get(top_sales(), "to_rows")(), fn(r) {
+        print(str("    ", pad_end(get(r, "region"), 8, " "), pad_end(get(r, "product"), 12, " "), "$", get(r, "revenue")))
+    })
+
+    // Add computed column
+    fn with_avg_price() { get(df(), "add_column")("avg_price", fn(r) { round(get(r, "revenue") / get(r, "units")) }) }
+    print("\n  With avg_price column:")
+    forEach(take(get(with_avg_price(), "to_rows")(), 4), fn(r) {
+        print(str("    ", get(r, "product"), " ", get(r, "region"), " → $", get(r, "avg_price"), "/unit"))
+    })
+}
+
+demo_dataframe()
+
+// ── 3. Correlation & Regression ─────────────────────────────────────────────
+section("3. Correlation Analysis")
+
+fn correlation(xs, ys) {
+    fn n() { len(xs) }
+    fn mean_x() { reduce(xs, fn(a, b) { a + b }, 0) / n() }
+    fn mean_y() { reduce(ys, fn(a, b) { a + b }, 0) / n() }
+    fn pairs() { zip(xs, ys) }
+
+    fn sum_xy() { reduce(pairs(), fn(acc, p) { acc + (get(p, 0) - mean_x()) * (get(p, 1) - mean_y()) }, 0) }
+    fn sum_x2() { reduce(xs, fn(acc, x) { acc + pow(x - mean_x(), 2) }, 0) }
+    fn sum_y2() { reduce(ys, fn(acc, y) { acc + pow(y - mean_y(), 2) }, 0) }
+
+    fn denom() { sqrt(sum_x2() * sum_y2()) }
+    if_then(denom() == 0, 0, round(sum_xy() / denom() * 1000) / 1000)
+}
+
+fn linear_regression(xs, ys) {
+    fn n() { len(xs) }
+    fn mean_x() { reduce(xs, fn(a, b) { a + b }, 0) / n() }
+    fn mean_y() { reduce(ys, fn(a, b) { a + b }, 0) / n() }
+    fn pairs() { zip(xs, ys) }
+
+    fn ss_xy() { reduce(pairs(), fn(acc, p) { acc + (get(p, 0) - mean_x()) * (get(p, 1) - mean_y()) }, 0) }
+    fn ss_xx() { reduce(xs, fn(acc, x) { acc + pow(x - mean_x(), 2) }, 0) }
+
+    fn slope() { round(ss_xy() / ss_xx() * 1000) / 1000 }
+    fn intercept() { round((mean_y() - slope() * mean_x()) * 1000) / 1000 }
+
+    {
+        slope: slope(),
+        intercept: intercept(),
+        predict: fn(x) { round((slope() * x + intercept()) * 100) / 100 },
+        equation: str("y = ", slope(), "x + ", intercept())
+    }
+}
+
+fn demo_regression() {
+    // Advertising spend vs sales
+    fn ad_spend() { [10, 20, 30, 40, 50, 60, 70, 80, 90, 100] }
+    fn sales() { [15, 28, 35, 48, 52, 65, 72, 81, 90, 102] }
+
+    fn r() { correlation(ad_spend(), sales()) }
+    print(str("  Correlation (spend vs sales): r = ", r()))
+    print(str("  Interpretation: ", cond(
+        abs(r()) > 0.8, "Strong positive",
+        abs(r()) > 0.5, "Moderate positive",
+        abs(r()) > 0.3, "Weak positive",
+        "No significant"
+    ), " correlation"))
+
+    fn model() { linear_regression(ad_spend(), sales()) }
+    print(str("  Regression: ", get(model(), "equation")))
+
+    // Predictions
+    fn test_values() { [25, 55, 75, 120] }
+    print("\n  Predictions:")
+    forEach(test_values(), fn(x) {
+        print(str("    Spend $", x, "k → Predicted sales: $", get(model(), "predict")(x), "k"))
+    })
+}
+
+demo_regression()
+
+// ── 4. Data Cleaning Pipeline ───────────────────────────────────────────────
+section("4. Data Cleaning Pipeline")
+
+fn clean_pipeline(raw_data, steps) {
+    fn execute(data, remaining_steps) {
+        if_then(len(remaining_steps) == 0,
+            { cleaned: data, steps_applied: len(steps), record_count: len(data) },
+            fn() {
+                fn step() { head(remaining_steps) }
+                fn step_name() { get(step(), "name") }
+                fn step_fn() { get(step(), "transform") }
+                fn result() { step_fn()(data) }
+                log(str("  Clean: ", step_name(), " → ", len(result()), " records"))
+                execute(result(), tail(remaining_steps))
+            }
+        )
+    }
+    execute(raw_data, steps)
+}
+
+fn demo_cleaning() {
+    fn raw() {
+        [
+            { name: "Alice",   age: 28,   salary: 75000,  dept: "Engineering" },
+            { name: "Bob",     age: 0,    salary: 82000,  dept: "engineering" },
+            { name: "",        age: 35,   salary: 90000,  dept: "Sales" },
+            { name: "Carol",   age: 42,   salary: 0,      dept: "Engineering" },
+            { name: "Dave",    age: 31,   salary: 68000,  dept: "sales" },
+            { name: "Eve",     age: 200,  salary: 95000,  dept: "HR" },
+            { name: "Frank",   age: 38,   salary: 71000,  dept: "Engineering" },
+            { name: "Grace",   age: 29,   salary: 88000,  dept: "hr" }
+        ]
+    }
+
+    fn steps() {
+        [
+            { name: "Remove empty names", transform: fn(data) { filter(data, fn(r) { len(get(r, "name")) > 0 }) } },
+            { name: "Filter invalid ages", transform: fn(data) { filter(data, fn(r) { and(get(r, "age") > 0, get(r, "age") < 150) }) } },
+            { name: "Filter zero salary", transform: fn(data) { filter(data, fn(r) { get(r, "salary") > 0 }) } },
+            { name: "Normalize department", transform: fn(data) {
+                fn normalize_dept(d) {
+                    fn lowered() { lower(d) }
+                    cond(
+                        lowered() == "engineering", "Engineering",
+                        lowered() == "sales", "Sales",
+                        lowered() == "hr", "HR",
+                        d
+                    )
+                }
+                map(data, fn(r) { set(r, "dept", normalize_dept(get(r, "dept"))) })
+            }}
+        ]
+    }
+
+    print(str("  Raw records: ", len(raw())))
+    fn result() { clean_pipeline(raw(), steps()) }
+    print(str("  Cleaned records: ", get(result(), "record_count")))
+    print(str("  Steps applied: ", get(result(), "steps_applied")))
+
+    print("\n  Clean data:")
+    forEach(get(result(), "cleaned"), fn(r) {
+        print(str("    ", pad_end(get(r, "name"), 10, " "), " age=", get(r, "age"), " salary=$", get(r, "salary"), " dept=", get(r, "dept")))
+    })
+}
+
+demo_cleaning()
+
+// ── 5. ASCII Visualization ──────────────────────────────────────────────────
+section("5. Bar Chart Visualization")
+
+fn bar_chart(title, data, max_width) {
+    print(str("  ", title))
+    print(str("  ", join(repeat("─", max_width + 20), "")))
+
+    fn max_val() { reduce(data, fn(best, d) { max(best, get(d, "value")) }, 0) }
+
+    forEach(data, fn(d) {
+        fn bar_len() { round(get(d, "value") / max_val() * max_width) }
+        fn bar() { join(repeat("█", bar_len()), "") }
+        print(str("  ", pad_end(get(d, "label"), 12, " "), " ", bar(), " ", get(d, "value")))
+    })
+}
+
+fn demo_visualization() {
+    bar_chart("Monthly Revenue ($k)", [
+        { label: "Jan", value: 42 },
+        { label: "Feb", value: 38 },
+        { label: "Mar", value: 55 },
+        { label: "Apr", value: 61 },
+        { label: "May", value: 48 },
+        { label: "Jun", value: 72 },
+        { label: "Jul", value: 68 },
+        { label: "Aug", value: 79 },
+        { label: "Sep", value: 65 },
+        { label: "Oct", value: 81 },
+        { label: "Nov", value: 74 },
+        { label: "Dec", value: 90 }
+    ], 30)
+
+    print("")
+
+    bar_chart("Language Popularity", [
+        { label: "Grey++", value: 95 },
+        { label: "Python", value: 88 },
+        { label: "JavaScript", value: 85 },
+        { label: "Rust", value: 72 },
+        { label: "Go", value: 68 },
+        { label: "TypeScript", value: 82 }
+    ], 30)
+}
+
+demo_visualization()
+
+divider()
+print("Data Science demo complete — Statistics, DataFrames, Regression, Cleaning, Visualization all working.")

@@ -1,0 +1,260 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "Grey++",
+    "scopeName": "source.greypp",
+    "fileTypes": [
+        "greypp",
+        "gpp",
+        "grey"
+    ],
+    "patterns": [
+        {
+            "include": "#comments"
+        },
+        {
+            "include": "#strings"
+        },
+        {
+            "include": "#numbers"
+        },
+        {
+            "include": "#keywords"
+        },
+        {
+            "include": "#types"
+        },
+        {
+            "include": "#functions"
+        },
+        {
+            "include": "#operators"
+        },
+        {
+            "include": "#decorators"
+        },
+        {
+            "include": "#constants"
+        }
+    ],
+    "repository": {
+        "comments": {
+            "patterns": [
+                {
+                    "name": "comment.line.double-slash.greypp",
+                    "match": "//.*$"
+                },
+                {
+                    "name": "comment.block.greypp",
+                    "begin": "/\\*",
+                    "end": "\\*/"
+                }
+            ]
+        },
+        "strings": {
+            "patterns": [
+                {
+                    "name": "string.quoted.double.greypp",
+                    "begin": "\"",
+                    "end": "\"",
+                    "patterns": [
+                        {
+                            "name": "constant.character.escape.greypp",
+                            "match": "\\\\."
+                        },
+                        {
+                            "name": "variable.other.interpolation.greypp",
+                            "match": "\\{[^}]+\\}"
+                        }
+                    ]
+                },
+                {
+                    "name": "string.quoted.single.greypp",
+                    "begin": "'",
+                    "end": "'",
+                    "patterns": [
+                        {
+                            "name": "constant.character.escape.greypp",
+                            "match": "\\\\."
+                        }
+                    ]
+                }
+            ]
+        },
+        "numbers": {
+            "patterns": [
+                {
+                    "name": "constant.numeric.hex.greypp",
+                    "match": "\\b0x[0-9a-fA-F][0-9a-fA-F_]*\\b"
+                },
+                {
+                    "name": "constant.numeric.binary.greypp",
+                    "match": "\\b0b[01][01_]*\\b"
+                },
+                {
+                    "name": "constant.numeric.float.greypp",
+                    "match": "\\b[0-9][0-9_]*\\.[0-9][0-9_]*([eE][+-]?[0-9]+)?\\b"
+                },
+                {
+                    "name": "constant.numeric.integer.greypp",
+                    "match": "\\b[0-9][0-9_]*\\b"
+                }
+            ]
+        },
+        "keywords": {
+            "patterns": [
+                {
+                    "name": "keyword.control.greypp",
+                    "match": "\\b(cond|match|loop|while|for|break|continue|guard|when|return|yield|if|else)\\b"
+                },
+                {
+                    "name": "keyword.declaration.greypp",
+                    "match": "\\b(fn|async|await|pure|gen|defer|bind|mut|const|type|struct|enum|trait|impl|interface|data|record|newtype|class|module|import|export|use|package)\\b"
+                },
+                {
+                    "name": "keyword.operator.error.greypp",
+                    "match": "\\b(try|catch|finally|throw|panic|recover)\\b"
+                },
+                {
+                    "name": "keyword.concurrency.greypp",
+                    "match": "\\b(spawn|channel|send|receive|select|actor|supervisor|atomic|mutex)\\b"
+                },
+                {
+                    "name": "keyword.memory.greypp",
+                    "match": "\\b(unsafe|own|ref|drop|alloc|free|box)\\b"
+                },
+                {
+                    "name": "keyword.data.greypp",
+                    "match": "\\b(query|from|where|orderby|groupby|join|into|pipe|matrix|dataframe|vector|transaction|cursor|procedure)\\b"
+                },
+                {
+                    "name": "keyword.ai.greypp",
+                    "match": "\\b(infer|train|tensor|model|predict|embed)\\b"
+                },
+                {
+                    "name": "keyword.blockchain.greypp",
+                    "match": "\\b(contract|event|modifier|payable|state)\\b"
+                },
+                {
+                    "name": "keyword.hardware.greypp",
+                    "match": "\\b(hardware|signal|process|port|asm|register|interrupt)\\b"
+                },
+                {
+                    "name": "keyword.ui.greypp",
+                    "match": "\\b(widget|render|component|observe|binding)\\b"
+                },
+                {
+                    "name": "keyword.logic.greypp",
+                    "match": "\\b(logic|fact|rule|solve)\\b"
+                },
+                {
+                    "name": "keyword.meta.greypp",
+                    "match": "\\b(macro|comptime|reflect|quote|unquote)\\b"
+                },
+                {
+                    "name": "keyword.system.greypp",
+                    "match": "\\b(sys|exec|env|pipe_cmd|net|http|socket|rpc|sec)\\b"
+                },
+                {
+                    "name": "keyword.functional.greypp",
+                    "match": "\\b(compose|curry|partial|lazy|memo)\\b"
+                },
+                {
+                    "name": "keyword.scientific.greypp",
+                    "match": "\\b(simd|parallel|distribute)\\b"
+                },
+                {
+                    "name": "keyword.test.greypp",
+                    "match": "\\b(test|assert|expect|bench)\\b"
+                },
+                {
+                    "name": "keyword.other.greypp",
+                    "match": "\\b(pipeline|stage|on_failure|emit)\\b"
+                }
+            ]
+        },
+        "types": {
+            "patterns": [
+                {
+                    "name": "storage.type.primitive.greypp",
+                    "match": "\\b(int|i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|u256|f32|f64|bool|char|str|byte|void|never|any|addr)\\b"
+                },
+                {
+                    "name": "storage.type.composite.greypp",
+                    "match": "\\b(vec|map|set|tuple|Option|Result|Future|Stream|Channel|Ref|MutRef|Box|Arc|Tensor|Matrix|DataFrame)\\b"
+                },
+                {
+                    "name": "storage.type.result.greypp",
+                    "match": "\\b(Ok|Err|Some|None)\\b"
+                },
+                {
+                    "name": "entity.name.type.greypp",
+                    "match": "\\b[A-Z][a-zA-Z0-9_]*\\b"
+                }
+            ]
+        },
+        "functions": {
+            "patterns": [
+                {
+                    "name": "entity.name.function.greypp",
+                    "match": "\\b([a-z_][a-zA-Z0-9_]*)\\s*(?=\\()"
+                }
+            ]
+        },
+        "operators": {
+            "patterns": [
+                {
+                    "name": "keyword.operator.pipe.greypp",
+                    "match": "\\|>"
+                },
+                {
+                    "name": "keyword.operator.arrow.greypp",
+                    "match": "->|=>"
+                },
+                {
+                    "name": "keyword.operator.range.greypp",
+                    "match": "\\.\\.(=)?"
+                },
+                {
+                    "name": "keyword.operator.optional.greypp",
+                    "match": "\\?\\.?|\\?\\?"
+                },
+                {
+                    "name": "keyword.operator.comparison.greypp",
+                    "match": "==|!=|<=|>=|<=>|<|>"
+                },
+                {
+                    "name": "keyword.operator.logical.greypp",
+                    "match": "\\b(and|or|not)\\b|&&|\\|\\||!"
+                },
+                {
+                    "name": "keyword.operator.assignment.greypp",
+                    "match": "\\+=|-=|\\*=|/=|%=|="
+                },
+                {
+                    "name": "keyword.operator.arithmetic.greypp",
+                    "match": "\\*\\*|\\+|-|\\*|/|%|//"
+                },
+                {
+                    "name": "keyword.operator.path.greypp",
+                    "match": "::"
+                }
+            ]
+        },
+        "decorators": {
+            "patterns": [
+                {
+                    "name": "entity.name.decorator.greypp",
+                    "match": "@[a-zA-Z_][a-zA-Z0-9_.]*"
+                }
+            ]
+        },
+        "constants": {
+            "patterns": [
+                {
+                    "name": "constant.language.greypp",
+                    "match": "\\b(true|false|nil|self|Self)\\b"
+                }
+            ]
+        }
+    }
+}
