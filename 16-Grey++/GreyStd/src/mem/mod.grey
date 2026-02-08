@@ -1,82 +1,20 @@
-/// mem — Memory & Ownership Utilities
-///
-/// Ergonomic helpers for memory management: smart pointers,
-/// reference wrappers, arena allocators, cloning, and borrowing.
+// mem — Memory management utilities
+//
+// In Grey++, memory is managed automatically (garbage collected).
+// This module provides high-level abstractions for ownership
+// patterns, reference counting, arenas, and cloning.
+//
+// Submodules:
+//   smart_ptr    — Box, Rc, Arc (smart pointer patterns)
+//   arena        — Region-based bump allocation
+//   clone        — Deep and shallow cloning utilities
+//   borrow       — Borrow tracking and cow (copy-on-write)
+//   ref_wrapper  — Reference wrapper utilities
 
-pub mod smart_ptr;
-pub mod ref_wrapper;
-pub mod arena;
-pub mod clone;
-pub mod borrow;
-
-// Re-export primary types
-pub use smart_ptr::{ Box, Rc, Arc, Weak, WeakArc };
-pub use arena::Arena;
-pub use clone::{ Clone, DeepClone };
-pub use borrow::{ Borrow, BorrowMut, Cow };
-
-// ─── Core Memory Functions ──────────────────────────────────────────────────
-
-/// Swaps two values in-place.
-pub fn swap<T>(a: &mut T, b: &mut T) {
-    unsafe {
-        let tmp = ptr::read(a);
-        ptr::copy_nonoverlapping(b, a, 1);
-        ptr::write(b, tmp);
+fn mem_info() {
+    {
+        name: "mem",
+        version: "1.0.0",
+        modules: ["smart_ptr", "arena", "clone", "borrow", "ref_wrapper"]
     }
-}
-
-/// Replaces a value with a new one, returning the old value.
-pub fn replace<T>(dest: &mut T, src: T) -> T {
-    unsafe {
-        let old = ptr::read(dest);
-        ptr::write(dest, src);
-        old
-    }
-}
-
-/// Takes a value out, leaving Default::default() in its place.
-pub fn take<T: Default>(dest: &mut T) -> T {
-    replace(dest, T::default())
-}
-
-/// Drops a value explicitly.
-pub fn drop<T>(value: T) {
-    // Value goes out of scope and is dropped
-}
-
-/// Returns the size of a type in bytes.
-pub fn size_of<T>() -> usize {
-    intrinsics::size_of::<T>()
-}
-
-/// Returns the alignment of a type in bytes.
-pub fn align_of<T>() -> usize {
-    intrinsics::align_of::<T>()
-}
-
-/// Forgets a value without running its destructor.
-pub fn forget<T>(value: T) {
-    intrinsics::forget(value);
-}
-
-/// Transmutes between two types of the same size. UNSAFE.
-pub unsafe fn transmute<A, B>(value: A) -> B {
-    assert(size_of::<A>() == size_of::<B>(), "transmute: size mismatch");
-    intrinsics::transmute(value)
-}
-
-/// Returns the type name as a string (for debugging).
-pub fn type_name<T>() -> &'static str {
-    intrinsics::type_name::<T>()
-}
-
-/// Creates an uninitialized value. UNSAFE — must be written before reading.
-pub unsafe fn uninit<T>() -> T {
-    intrinsics::uninit::<T>()
-}
-
-/// Zeroes out a region of memory.
-pub unsafe fn zero<T>(ptr: *mut T) {
-    ptr::write_bytes(ptr as *mut u8, 0, size_of::<T>());
 }

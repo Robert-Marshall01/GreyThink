@@ -1,222 +1,103 @@
-/// concurrent::event_loop — Async event loop for driving futures.
+// concurrent::event_loop — Async event loop
+//
+// A simple event loop that processes callbacks and timers.
 
-/// The core event loop / async runtime.
-///
-/// ```grey
-/// let rt = EventLoop::new();
-/// rt.block_on(async {
-///     let result = fetch("https://example.com").await;
-///     println("{}", result);
-/// });
-/// ```
-pub struct EventLoop {
-    scheduler: Scheduler,
-    io_driver: IoDriver,
-    timer_driver: TimerDriver,
-    running: AtomicBool,
-}
-
-impl EventLoop {
-    /// Creates a new single-threaded event loop.
-    pub fn new() -> EventLoop {
-        EventLoop {
-            scheduler: Scheduler::new(),
-            io_driver: IoDriver::new(),
-            timer_driver: TimerDriver::new(),
-            running: AtomicBool::new(false),
-        }
-    }
-
-    /// Creates a multi-threaded event loop with the given number of worker threads.
-    pub fn with_threads(n: usize) -> EventLoop {
-        EventLoop {
-            scheduler: Scheduler::with_threads(n),
-            io_driver: IoDriver::new(),
-            timer_driver: TimerDriver::new(),
-            running: AtomicBool::new(false),
-        }
-    }
-
-    /// Runs a future to completion on this event loop.
-    pub fn block_on<F: Future<Output = T>, T>(mut self, future: F) -> T {
-        self.running.store(true, Ordering::Release);
-
-        let task = self.scheduler.schedule(future);
-
-        loop {
-            // Drive IO events
-            self.io_driver.poll();
-
-            // Drive timers
-            self.timer_driver.tick();
-
-            // Run ready tasks
-            let progress = self.scheduler.run_ready();
-
-            // Check if our main task is done
-            if let Some(result) = task.try_take_result() {
-                self.running.store(false, Ordering::Release);
-                return result;
-            }
-
-            // If no progress was made, park the thread
-            if !progress {
-                self.io_driver.park(self.timer_driver.next_deadline());
-            }
-        }
-    }
-
-    /// Spawns a task onto this event loop.
-    pub fn spawn<F: Future<Output = T> + Send + 'static, T: Send + 'static>(self, future: F) -> JoinHandle<T> {
-        let handle = self.scheduler.schedule(future);
-        handle
-    }
-
-    /// Returns true if the event loop is currently running.
-    pub fn is_running(self) -> bool {
-        self.running.load(Ordering::Acquire)
-    }
-
-    /// Shuts down the event loop.
-    pub fn shutdown(mut self) {
-        self.running.store(false, Ordering::Release);
-        self.scheduler.shutdown();
-        self.io_driver.shutdown();
-        self.timer_driver.shutdown();
+// Creates a new event loop.
+fn EventLoop_new() {
+    {
+        _type: "EventLoop",
+        tasks: [],
+        timers: [],
+        running: false,
+        tick: 0
     }
 }
 
-/// Internal task scheduler.
-struct Scheduler {
-    ready_queue: Mutex<VecDeque<ScheduledTask>>,
-    thread_pool: Option<ThreadPool>,
+// Schedules a callback to run on the next tick.
+fn loop_next_tick(evloop, callback) {
+    set(evloop, "tasks", push(get(evloop, "tasks"), {
+        callback: callback,
+        tick: get(evloop, "tick") + 1
+    }))
 }
 
-impl Scheduler {
-    fn new() -> Scheduler {
-        Scheduler {
-            ready_queue: Mutex::new(VecDeque::new()),
-            thread_pool: None,
-        }
-    }
-
-    fn with_threads(n: usize) -> Scheduler {
-        Scheduler {
-            ready_queue: Mutex::new(VecDeque::new()),
-            thread_pool: Some(ThreadPool::new(n)),
-        }
-    }
-
-    fn schedule<F: Future<Output = T>, T>(mut self, future: F) -> JoinHandle<T> {
-        let result = Arc::new(Mutex::new(None));
-        let waker = Arc::new(AtomicWaker::new());
-        let id = TaskId { id: generate_task_id() };
-
-        let scheduled = ScheduledTask {
-            id,
-            future: Box::new(future),
-            result: result.clone(),
-            waker: waker.clone(),
-        };
-
-        self.ready_queue.lock().push_back(scheduled);
-        JoinHandle { id, result, waker }
-    }
-
-    fn run_ready(mut self) -> bool {
-        let mut ran_any = false;
-        loop {
-            let task = self.ready_queue.lock().pop_front();
-            match task {
-                Some(mut t) => {
-                    ran_any = true;
-                    let waker = Waker::new(t.waker.clone());
-                    let mut cx = Context::new(waker);
-                    match t.future.poll(&mut cx) {
-                        Poll::Ready(value) => {
-                            // Task completed
-                        }
-                        Poll::Pending => {
-                            // Re-enqueue when woken
-                        }
-                    }
-                }
-                None => break,
-            }
-        }
-        ran_any
-    }
-
-    fn shutdown(self) {
-        if let Some(pool) = &self.thread_pool {
-            pool.shutdown();
-        }
-    }
+// Schedules a callback to run after a delay (in ms).
+fn loop_set_timeout(evloop, callback, delay_ms) {
+    set(evloop, "timers", push(get(evloop, "timers"), {
+        callback: callback,
+        fire_at: timestamp() + delay_ms,
+        repeat: false
+    }))
 }
 
-struct ScheduledTask {
-    id: TaskId,
-    future: Box<dyn Future<Output = ()>>,
-    result: Arc<Mutex<Option<()>>>,
-    waker: Arc<AtomicWaker>,
+// Schedules a callback to repeat at an interval (in ms).
+fn loop_set_interval(evloop, callback, interval_ms) {
+    set(evloop, "timers", push(get(evloop, "timers"), {
+        callback: callback,
+        fire_at: timestamp() + interval_ms,
+        interval: interval_ms,
+        repeat: true
+    }))
 }
 
-/// Internal IO event driver (epoll/kqueue/IOCP abstraction).
-struct IoDriver {
-    // Platform-specific implementation
-}
+// Runs one tick of the event loop.
+fn loop_tick(evloop) {
+    fn current_tick() { get(evloop, "tick") + 1 }
+    fn now_ms() { timestamp() }
 
-impl IoDriver {
-    fn new() -> IoDriver { IoDriver {} }
-    fn poll(self) { /* poll for IO events */ }
-    fn park(self, timeout: Option<Duration>) { /* park thread until IO or timeout */ }
-    fn shutdown(self) {}
-}
+    // Execute ready tasks
+    fn ready_tasks() {
+        filter(get(evloop, "tasks"), fn(t) { get(t, "tick") <= current_tick() })
+    }
+    fn remaining_tasks() {
+        filter(get(evloop, "tasks"), fn(t) { get(t, "tick") > current_tick() })
+    }
+    forEach(ready_tasks(), fn(t) { get(t, "callback")() })
 
-/// Internal timer driver.
-struct TimerDriver {
-    timers: Mutex<Vec<TimerEntry>>,
-}
+    // Execute ready timers
+    fn ready_timers() {
+        filter(get(evloop, "timers"), fn(t) { get(t, "fire_at") <= now_ms() })
+    }
+    fn remaining_timers() {
+        filter(get(evloop, "timers"), fn(t) { get(t, "fire_at") > now_ms() })
+    }
+    forEach(ready_timers(), fn(t) { get(t, "callback")() })
 
-struct TimerEntry {
-    deadline: Instant,
-    waker: Waker,
-}
-
-impl TimerDriver {
-    fn new() -> TimerDriver {
-        TimerDriver { timers: Mutex::new(Vec::new()) }
+    // Re-schedule repeating timers
+    fn repeating() {
+        map(
+            filter(ready_timers(), fn(t) { get(t, "repeat") }),
+            fn(t) { set(t, "fire_at", now_ms() + get(t, "interval")) }
+        )
     }
 
-    fn tick(self) {
-        let now = Instant::now();
-        let mut timers = self.timers.lock();
-        timers.retain(|entry| {
-            if now >= entry.deadline {
-                entry.waker.wake_by_ref();
-                false
-            } else {
-                true
-            }
-        });
-    }
-
-    fn next_deadline(self) -> Option<Duration> {
-        let now = Instant::now();
-        let timers = self.timers.lock();
-        timers.iter()
-            .map(|t| t.deadline.duration_since(now))
-            .min()
-    }
-
-    fn register(self, deadline: Instant, waker: Waker) {
-        self.timers.lock().push(TimerEntry { deadline, waker });
-    }
-
-    fn shutdown(self) {}
+    merge(evloop, {
+        tasks: remaining_tasks(),
+        timers: concat(remaining_timers(), repeating()),
+        tick: current_tick()
+    })
 }
 
-fn generate_task_id() -> u64 {
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    COUNTER.fetch_add(1, Ordering::Relaxed)
+// Runs the event loop until no tasks remain.
+fn loop_run(evloop) {
+    fn step(ev) {
+        fn has_work() { len(get(ev, "tasks")) > 0 }
+        fn has_timers() { len(get(ev, "timers")) > 0 }
+        if_then(has_work(),
+            fn() { step(loop_tick(ev)) },
+            fn() { if_then(has_timers(),
+                fn() { step(loop_tick(ev)) },
+                fn() { ev }) })
+    }
+    step(set(evloop, "running", true))
+}
+
+// Returns the number of pending tasks.
+fn loop_pending_count(evloop) {
+    len(get(evloop, "tasks")) + len(get(evloop, "timers"))
+}
+
+// Returns true if the loop has pending work.
+fn loop_has_pending(evloop) {
+    loop_pending_count(evloop) > 0
 }

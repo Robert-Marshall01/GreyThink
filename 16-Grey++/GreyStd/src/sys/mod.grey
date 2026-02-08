@@ -1,11 +1,12 @@
-/// sys — System interfaces: environment, processes, signals, and platform info.
+// GreyStd Sys Module
+// System-level utilities
+// Submodules: process, env, signal, info
 
-pub mod env;
-pub mod process;
-pub mod signal;
-pub mod info;
-
-pub use env::{var, set_var, remove_var, vars, args, current_dir, set_current_dir, home_dir, temp_dir};
-pub use process::{Command, Child, ExitStatus, exit, abort};
-pub use signal::{Signal, on_signal};
-pub use info::{SysInfo, CpuInfo, MemInfo, os_name, arch};
+fn sys_info() {
+  {
+    _type: "Module",
+    name: "sys",
+    submodules: ["process", "env", "signal", "info"],
+    description: "System process management, environment, and OS information"
+  }
+}

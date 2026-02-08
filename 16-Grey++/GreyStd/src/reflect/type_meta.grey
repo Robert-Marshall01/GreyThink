@@ -1,237 +1,115 @@
-/// reflect::type_meta — Compile-time and runtime type metadata.
+// GreyStd Reflect - TypeMeta
+// Type metadata and type descriptors
 
-use crate::core::string::String;
-use crate::core::vec::Vec;
-use crate::core::option::Option;
-use crate::core::map::HashMap;
-
-/// Unique type identifier, assigned at compile time.
-#[derive(Copy, Clone, Eq, PartialEq, Hash)]
-pub struct TypeId {
-    /// Opaque hash of the fully-qualified type name + generic params.
-    inner: u64,
+// Create a type descriptor
+fn TypeMeta_new(name, kind, fields) {
+  {
+    _type: "TypeMeta",
+    name: name,
+    kind: kind,
+    fields: fields,
+    methods: {},
+    traits: [],
+    doc: nil
+  }
 }
 
-impl TypeId {
-    /// Get the TypeId for a given type.
-    pub fn of<T: 'static>() -> TypeId {
-        extern fn __grey_type_id<T: 'static>() -> u64;
-        TypeId { inner: unsafe { __grey_type_id::<T>() } }
-    }
-
-    /// Raw numeric value.
-    pub fn as_u64(&self) -> u64 { self.inner }
+// Create type meta for a primitive
+fn TypeMeta_primitive(name) {
+  TypeMeta_new(name, "primitive", {})
 }
 
-impl Display for TypeId {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(f, "TypeId(0x{:016x})", self.inner)
-    }
+// Create type meta for a composite (object)
+fn TypeMeta_composite(name, field_defs) {
+  TypeMeta_new(name, "composite", field_defs)
 }
 
-/// What kind of type this is.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum TypeKind {
-    /// Primitive scalar type (bool, i32, f64, etc.).
-    Primitive,
-    /// Struct with named fields.
-    Struct,
-    /// Enum with variants.
-    Enum,
-    /// Trait object / interface.
-    Trait,
-    /// Tuple type.
-    Tuple,
-    /// Array type.
-    Array,
-    /// Function / closure type.
-    Function,
-    /// Pointer / reference type.
-    Pointer,
-    /// Opaque / foreign type.
-    Opaque,
+// Add a method descriptor
+fn typemeta_add_method(tm, method_name, arity) {
+  merge(tm, {
+    methods: merge(get(tm, "methods"), fromEntries([[method_name, { name: method_name, arity: arity }]]))
+  })
 }
 
-/// Metadata about a generic type parameter.
-#[derive(Debug, Clone)]
-pub struct GenericParam {
-    /// Parameter name (e.g. "T").
-    pub name: String,
-    /// Trait bounds (e.g. ["Display", "Clone"]).
-    pub bounds: Vec<String>,
-    /// Concrete type if monomorphized, None if still generic.
-    pub concrete: Option<TypeId>,
+// Add a trait to the type
+fn typemeta_add_trait(tm, trait_name) {
+  merge(tm, { traits: append(get(tm, "traits"), trait_name) })
 }
 
-/// Metadata about a struct field.
-#[derive(Debug, Clone)]
-pub struct Field {
-    /// Field name.
-    pub name: String,
-    /// Field type name.
-    pub type_name: String,
-    /// Field type id.
-    pub type_id: TypeId,
-    /// Byte offset within the struct.
-    pub offset: usize,
-    /// Size in bytes.
-    pub size: usize,
-    /// Whether the field is public.
-    pub is_public: bool,
-    /// Whether the field is mutable.
-    pub is_mutable: bool,
-    /// Custom attributes on the field.
-    pub attributes: Vec<crate::reflect::attribute::Attribute>,
+// Set documentation
+fn typemeta_set_doc(tm, doc_str) {
+  merge(tm, { doc: doc_str })
 }
 
-/// Metadata about an enum variant.
-#[derive(Debug, Clone)]
-pub struct Variant {
-    /// Variant name.
-    pub name: String,
-    /// Discriminant value.
-    pub discriminant: i64,
-    /// Fields (empty for unit variants).
-    pub fields: Vec<Field>,
-    /// Custom attributes on the variant.
-    pub attributes: Vec<crate::reflect::attribute::Attribute>,
+// Get type name
+fn typemeta_name(tm) { get(tm, "name") }
+
+// Get type kind
+fn typemeta_kind(tm) { get(tm, "kind") }
+
+// Get field definitions
+fn typemeta_fields(tm) { get(tm, "fields") }
+
+// Get method list
+fn typemeta_methods(tm) { keys(get(tm, "methods")) }
+
+// Check if type has a method
+fn typemeta_has_method(tm, name) {
+  not(eq(get(get(tm, "methods"), name), nil))
 }
 
-/// Metadata about a method.
-#[derive(Debug, Clone)]
-pub struct MethodMeta {
-    /// Method name.
-    pub name: String,
-    /// Parameter type names (excluding self).
-    pub param_types: Vec<String>,
-    /// Return type name.
-    pub return_type: String,
-    /// Whether the method takes &self, &mut self, or is static.
-    pub receiver: ReceiverKind,
-    /// Whether the method is public.
-    pub is_public: bool,
-    /// Whether the method is async.
-    pub is_async: bool,
+// Check if type implements a trait
+fn typemeta_has_trait(tm, trait_name) {
+  contains(get(tm, "traits"), trait_name)
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum ReceiverKind {
-    /// No self parameter (static method / associated function).
-    None,
-    /// &self
-    Ref,
-    /// &mut self
-    RefMut,
-    /// self (by value)
-    Value,
+// Get type of a runtime value
+fn reflect_type(value) {
+  cond(
+    eq(value, nil), TypeMeta_primitive("nil"),
+    is_number(value), TypeMeta_primitive("number"),
+    is_string(value), TypeMeta_primitive("string"),
+    eq(value, true), TypeMeta_primitive("boolean"),
+    eq(value, false), TypeMeta_primitive("boolean"),
+    is_array(value), TypeMeta_new("array", "collection", { length: length(value) }),
+    is_object(value), reflect_object_type(value),
+    TypeMeta_primitive("unknown")
+  )
 }
 
-/// Complete type metadata.
-#[derive(Debug, Clone)]
-pub struct TypeMeta {
-    /// Type identifier.
-    pub id: TypeId,
-    /// Fully-qualified type name (e.g. "greystd::core::vec::Vec<i32>").
-    pub name: String,
-    /// Short type name (e.g. "Vec<i32>").
-    pub short_name: String,
-    /// Module path.
-    pub module_path: String,
-    /// What kind of type.
-    pub kind: TypeKind,
-    /// Size in bytes.
-    pub size: usize,
-    /// Alignment in bytes.
-    pub align: usize,
-    /// Fields (for structs and enum variants).
-    pub fields: Vec<Field>,
-    /// Variants (for enums).
-    pub variants: Vec<Variant>,
-    /// Generic parameters.
-    pub generics: Vec<GenericParam>,
-    /// Implemented trait names.
-    pub traits: Vec<String>,
-    /// Method metadata.
-    pub methods: Vec<MethodMeta>,
-    /// Custom attributes.
-    pub attributes: Vec<crate::reflect::attribute::Attribute>,
+// Reflect on an object's type using _type field
+fn reflect_object_type(obj) {
+  fn type_name() { get(obj, "_type") }
+  fn field_names() { filter(keys(obj), fn(k) { not(eq(k, "_type")) }) }
+  fn field_defs() {
+    fold(field_names(), {}, fn(acc, k) {
+      merge(acc, fromEntries([[k, type_of(get(obj, k))]]))
+    })
+  }
+  if_then(not(eq(type_name(), nil)),
+    fn() { TypeMeta_composite(type_name(), field_defs()) },
+    fn() { TypeMeta_composite("Object", field_defs()) }
+  )
 }
 
-impl TypeMeta {
-    /// Get field by name.
-    pub fn field(&self, name: &str) -> Option<&Field> {
-        self.fields.iter().find(|f| f.name == name)
-    }
-
-    /// Get variant by name.
-    pub fn variant(&self, name: &str) -> Option<&Variant> {
-        self.variants.iter().find(|v| v.name == name)
-    }
-
-    /// Get method metadata by name.
-    pub fn method(&self, name: &str) -> Option<&MethodMeta> {
-        self.methods.iter().find(|m| m.name == name)
-    }
-
-    /// Check if this type implements a trait by name.
-    pub fn implements(&self, trait_name: &str) -> bool {
-        self.traits.iter().any(|t| t == trait_name)
-    }
-
-    /// Get all public fields.
-    pub fn public_fields(&self) -> Vec<&Field> {
-        self.fields.iter().filter(|f| f.is_public).collect()
-    }
-
-    /// Get all public methods.
-    pub fn public_methods(&self) -> Vec<&MethodMeta> {
-        self.methods.iter().filter(|m| m.is_public).collect()
-    }
-
-    /// Whether the type is a zero-sized type.
-    pub fn is_zst(&self) -> bool { self.size == 0 }
-
-    /// Whether the type is Copy.
-    pub fn is_copy(&self) -> bool { self.implements("Copy") }
-
-    /// Whether the type is Send.
-    pub fn is_send(&self) -> bool { self.implements("Send") }
-
-    /// Whether the type is Sync.
-    pub fn is_sync(&self) -> bool { self.implements("Sync") }
+// Build a type registry
+fn TypeRegistry_new() {
+  { _type: "TypeRegistry", types: {} }
 }
 
-/// Trait that all reflectable types implement (derived automatically with #[derive(Reflect)]).
-pub trait Reflect: 'static {
-    /// Get type metadata.
-    fn type_meta() -> &'static TypeMeta;
-
-    /// Get the TypeId.
-    fn type_id(&self) -> TypeId { TypeId::of::<Self>() }
-
-    /// Get the type name.
-    fn type_name(&self) -> &str {
-        &Self::type_meta().name
-    }
+// Register a type
+fn registry_register_type(reg, type_meta) {
+  merge(reg, {
+    types: merge(get(reg, "types"), fromEntries([[typemeta_name(type_meta), type_meta]]))
+  })
 }
 
-/// Get TypeMeta for a concrete type at runtime.
-pub fn type_meta_of<T: Reflect>() -> &'static TypeMeta {
-    T::type_meta()
+// Look up a type
+fn registry_lookup(reg, name) {
+  get(get(reg, "types"), name)
 }
 
-/// Get type name as a string.
-pub fn type_name<T: 'static>() -> &'static str {
-    extern fn __grey_type_name<T: 'static>() -> &'static str;
-    unsafe { __grey_type_name::<T>() }
-}
-
-/// Get size of a type in bytes.
-pub fn size_of<T>() -> usize {
-    crate::mem::size_of::<T>()
-}
-
-/// Get alignment of a type in bytes.
-pub fn align_of<T>() -> usize {
-    crate::mem::align_of::<T>()
+// List all registered types
+fn registry_type_names(reg) {
+  keys(get(reg, "types"))
 }

@@ -1,56 +1,12 @@
-/// crypto — Cryptographic primitives, hashing, encryption, and secure random.
+// GreyStd Crypto Module
+// Cryptographic utilities
+// Submodules: hash, symmetric, asymmetric, hmac, kdf, random
 
-pub mod hash;
-pub mod hmac;
-pub mod random;
-pub mod symmetric;
-pub mod asymmetric;
-pub mod kdf;
-
-pub use hash::{HashAlgorithm, Hasher, Digest};
-pub use hmac::Hmac;
-pub use random::{SecureRandom, fill_random, random_bytes, random_u64};
-pub use symmetric::{Aes128Gcm, Aes256Gcm, ChaCha20Poly1305, Cipher, CipherError};
-pub use asymmetric::{RsaKeyPair, Ed25519KeyPair, EcdsaKeyPair, SignatureError};
-pub use kdf::{pbkdf2, hkdf, scrypt, argon2, KdfParams};
-
-/// Common result type for crypto operations.
-pub type CryptoResult<T> = Result<T, CryptoError>;
-
-/// Error type for cryptographic operations.
-pub enum CryptoError {
-    /// Invalid key length.
-    InvalidKeyLength { expected: usize, got: usize },
-    /// Invalid nonce/IV length.
-    InvalidNonceLength { expected: usize, got: usize },
-    /// Decryption failed (authentication tag mismatch).
-    DecryptionFailed,
-    /// Signature verification failed.
-    VerificationFailed,
-    /// Invalid signature format.
-    InvalidSignature,
-    /// Invalid key format.
-    InvalidKey(String),
-    /// Unsupported algorithm.
-    UnsupportedAlgorithm(String),
-    /// RNG failure.
-    RngError(String),
-    /// Generic internal error.
-    Internal(String),
-}
-
-impl CryptoError {
-    pub fn message(&self) -> String {
-        match self {
-            CryptoError::InvalidKeyLength { expected, got } => format!("invalid key length: expected {}, got {}", expected, got),
-            CryptoError::InvalidNonceLength { expected, got } => format!("invalid nonce length: expected {}, got {}", expected, got),
-            CryptoError::DecryptionFailed => String::from("decryption failed: authentication tag mismatch"),
-            CryptoError::VerificationFailed => String::from("signature verification failed"),
-            CryptoError::InvalidSignature => String::from("invalid signature format"),
-            CryptoError::InvalidKey(s) => format!("invalid key: {}", s),
-            CryptoError::UnsupportedAlgorithm(s) => format!("unsupported algorithm: {}", s),
-            CryptoError::RngError(s) => format!("RNG error: {}", s),
-            CryptoError::Internal(s) => format!("internal error: {}", s),
-        }
-    }
+fn crypto_info() {
+  {
+    _type: "Module",
+    name: "crypto",
+    submodules: ["hash", "symmetric", "asymmetric", "hmac", "kdf", "random"],
+    description: "Cryptographic hashing, encryption, and random number generation"
+  }
 }

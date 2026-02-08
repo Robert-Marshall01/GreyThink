@@ -1,121 +1,102 @@
-/// error::debug — Debug utilities: dbg!, todo!, unreachable, pretty-printing.
+// GreyStd Error - Debug
+// Debugging utilities
 
-use crate::core::string::String;
-
-/// Print a value's debug representation and return it.
-/// Usage: `let x = dbg!(compute_value());`
-#[macro_export]
-macro_rules! dbg {
-    ($val:expr) => {{
-        let val = $val;
-        eprintln!("[{}:{}] {} = {:?}", file!(), line!(), stringify!($val), &val);
-        val
-    }};
-    ($($val:expr),+ $(,)?) => {
-        ($($crate::dbg!($val)),+)
-    };
+// Pretty-print a value with indentation
+fn debug_print(value) {
+  fn formatted() { debug_format_val(value, 0) }
+  println(formatted())
 }
 
-/// Mark code as not yet implemented. Panics with a message.
-#[macro_export]
-macro_rules! todo {
-    () => {
-        panic!("not yet implemented: {}:{}", file!(), line!())
-    };
-    ($($arg:tt)*) => {
-        panic!("not yet implemented: {} ({}:{})", format!($($arg)*), file!(), line!())
-    };
+// Format value for debug display
+fn debug_format_val(value, indent) {
+  fn spaces() { repeat_str("  ", indent) }
+  cond(
+    eq(value, nil), "nil",
+    is_string(value), concat_str("\"", value, "\""),
+    is_number(value), to_string(value),
+    eq(value, true), "true",
+    eq(value, false), "false",
+    is_array(value), debug_format_array(value, indent),
+    is_object(value), debug_format_object(value, indent),
+    to_string(value)
+  )
 }
 
-/// Mark code that should never be reached. Panics with a message.
-#[macro_export]
-macro_rules! unimplemented {
-    () => {
-        panic!("not implemented: {}:{}", file!(), line!())
-    };
-    ($($arg:tt)*) => {
-        panic!("not implemented: {} ({}:{})", format!($($arg)*), file!(), line!())
-    };
-}
-
-/// Hint to the compiler that this code is unreachable.
-/// Unlike `unreachable!()` / `unimplemented!()`, this is UB if reached.
-pub unsafe fn unreachable_unchecked() -> ! {
-    core::hint::unreachable_unchecked()
-}
-
-/// Pretty-print a value with indentation.
-pub fn pretty_print<T: Debug>(value: &T) -> String {
-    format!("{:#?}", value)
-}
-
-/// Print to stderr with a newline.
-pub fn eprint(s: &str) {
-    extern fn __grey_stderr_write(s: &str);
-    unsafe { __grey_stderr_write(s) }
-}
-
-/// Print to stderr with a newline.
-pub fn eprintln(s: &str) {
-    extern fn __grey_stderr_writeln(s: &str);
-    unsafe { __grey_stderr_writeln(s) }
-}
-
-/// Hexdump a byte slice for debugging.
-pub fn hexdump(data: &[u8]) -> String {
-    let mut out = String::new();
-    let mut offset = 0usize;
-
-    while offset < data.len() {
-        // Offset
-        out.push_str(&format!("{:08x}  ", offset));
-
-        // Hex bytes
-        for i in 0..16 {
-            if offset + i < data.len() {
-                out.push_str(&format!("{:02x} ", data[offset + i]));
-            } else {
-                out.push_str("   ");
-            }
-            if i == 7 { out.push(' '); }
-        }
-
-        out.push_str(" |");
-        // ASCII representation
-        for i in 0..16 {
-            if offset + i < data.len() {
-                let b = data[offset + i];
-                if b >= 0x20 && b < 0x7F {
-                    out.push(b as char);
-                } else {
-                    out.push('.');
-                }
-            }
-        }
-        out.push_str("|\n");
-        offset += 16;
+// Format array for debug
+fn debug_format_array(arr, indent) {
+  if_then(eq(length(arr), 0), fn() { "[]" }, fn() {
+    fn items() {
+      map(arr, fn(item) {
+        concat_str(repeat_str("  ", add(indent, 1)), debug_format_val(item, add(indent, 1)))
+      })
     }
-
-    out
+    concat_str("[\n", join(items(), ",\n"), "\n", repeat_str("  ", indent), "]")
+  })
 }
 
-/// Time a block of code and print the elapsed duration.
-#[macro_export]
-macro_rules! time_it {
-    ($label:expr, $block:expr) => {{
-        let _start = $crate::time::instant::Instant::now();
-        let _result = $block;
-        let _elapsed = _start.elapsed();
-        eprintln!("[TIMER] {}: {}", $label, _elapsed);
-        _result
-    }};
+// Format object for debug
+fn debug_format_object(obj, indent) {
+  fn k() { keys(obj) }
+  if_then(eq(length(k()), 0), fn() { "{}" }, fn() {
+    fn entries() {
+      map(k(), fn(key) {
+        concat_str(repeat_str("  ", add(indent, 1)), key, ": ", debug_format_val(get(obj, key), add(indent, 1)))
+      })
+    }
+    concat_str("{\n", join(entries(), ",\n"), "\n", repeat_str("  ", indent), "}")
+  })
 }
 
-/// Conditional compilation helper for debug-only code.
-#[macro_export]
-macro_rules! debug_only {
-    ($($body:tt)*) => {
-        #[cfg(debug_assertions)]
-        { $($body)* }
-    };
+// Repeat a string n times
+fn repeat_str(s, n) {
+  if_then(lte(n, 0), fn() { "" }, fn() {
+    join(map(range(0, n), fn(_) { s }), "")
+  })
+}
+
+// Debug log with label
+fn debug_log(label, value) {
+  println(concat_str("[DEBUG] ", label, " = ", debug_format_val(value, 0)))
+}
+
+// Tap - log and pass through (useful in pipelines)
+fn tap(value, label) {
+  debug_log(label, value)
+  value
+}
+
+// Time a function and log the duration
+fn debug_time(label, f) {
+  fn start() { timestamp() }
+  fn result() { f() }
+  fn elapsed() { sub(timestamp(), start()) }
+  println(concat_str("[TIME] ", label, ": ", to_string(elapsed()), "ms"))
+  result()
+}
+
+// Conditional debug print
+fn debug_if(condition, label, value) {
+  when(condition, fn() { debug_log(label, value) })
+}
+
+// Inspect an object's structure
+fn debug_inspect(value) {
+  cond(
+    eq(value, nil), { type: "nil" },
+    is_string(value), { type: "string", length: length(value) },
+    is_number(value), { type: "number", value: value },
+    eq(value, true), { type: "boolean", value: true },
+    eq(value, false), { type: "boolean", value: false },
+    is_array(value), { type: "array", length: length(value), element_types: map(slice(value, 0, min(3, length(value))), fn(v) { type_of(v) }) },
+    is_object(value), { type: "object", keys: keys(value), key_count: length(keys(value)), obj_type: get(value, "_type") },
+    { type: type_of(value) }
+  )
+}
+
+// Assert and log (hybrid debug assertion)
+fn debug_assert(condition, message) {
+  unless(condition, fn() {
+    println(concat_str("[ASSERT FAILED] ", message))
+    panic(message)
+  })
 }

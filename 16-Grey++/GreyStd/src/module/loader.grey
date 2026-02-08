@@ -1,164 +1,115 @@
-/// module::loader — Dynamic library loading and symbol resolution.
+// GreyStd Module - Loader
+// Module loading and resolution utilities
 
-use crate::core::string::String;
-use crate::core::option::Option;
-
-/// Error type for dynamic loading.
-pub enum LoadError {
-    /// Library file not found.
-    NotFound(String),
-    /// Symbol not found in loaded library.
-    SymbolNotFound(String),
-    /// OS-level loading error.
-    OsError(String),
+// Create a module registry
+fn ModuleRegistry_new() {
+  {
+    _type: "ModuleRegistry",
+    modules: {},
+    load_order: [],
+    search_paths: ["."]
+  }
 }
 
-impl LoadError {
-    pub fn message(&self) -> String {
-        match self {
-            LoadError::NotFound(p) => format!("library not found: {}", p),
-            LoadError::SymbolNotFound(s) => format!("symbol not found: {}", s),
-            LoadError::OsError(e) => format!("OS error: {}", e),
-        }
-    }
+// Register a module
+fn registry_register(reg, name, module) {
+  merge(reg, {
+    modules: merge(get(reg, "modules"), fromEntries([[name, module]])),
+    load_order: append(get(reg, "load_order"), name)
+  })
 }
 
-pub type LoadResult<T> = Result<T, LoadError>;
-
-/// A handle to a dynamically loaded shared library.
-pub struct DynLib {
-    handle: *mut u8,
-    path: String,
+// Look up a module by name
+fn registry_get(reg, name) {
+  get(get(reg, "modules"), name)
 }
 
-impl DynLib {
-    /// Load a shared library from the given path.
-    /// On Linux: .so, macOS: .dylib, Windows: .dll
-    pub fn open(path: &str) -> LoadResult<DynLib> {
-        extern fn __grey_dynlib_open(path: &str) -> Option<*mut u8>;
-        let handle = unsafe { __grey_dynlib_open(path) }
-            .ok_or(LoadError::NotFound(String::from(path)))?;
-        Ok(DynLib { handle, path: String::from(path) })
-    }
-
-    /// Load a shared library by name, searching standard paths.
-    pub fn open_by_name(name: &str) -> LoadResult<DynLib> {
-        let platform_name = if cfg!(target_os = "windows") {
-            format!("{}.dll", name)
-        } else if cfg!(target_os = "macos") {
-            format!("lib{}.dylib", name)
-        } else {
-            format!("lib{}.so", name)
-        };
-        Self::open(&platform_name)
-    }
-
-    /// Look up a raw symbol by name. Returns a raw pointer.
-    pub unsafe fn get_raw(&self, name: &str) -> LoadResult<*mut u8> {
-        extern fn __grey_dynlib_symbol(handle: *mut u8, name: &str) -> Option<*mut u8>;
-        __grey_dynlib_symbol(self.handle, name)
-            .ok_or(LoadError::SymbolNotFound(String::from(name)))
-    }
-
-    /// Look up a typed function symbol.
-    pub unsafe fn get_fn<F>(&self, name: &str) -> LoadResult<Symbol<F>> {
-        let ptr = self.get_raw(name)?;
-        Ok(Symbol { ptr: ptr as *const F, _marker: PhantomData })
-    }
-
-    /// Returns true if the library contains the named symbol.
-    pub fn has_symbol(&self, name: &str) -> bool {
-        unsafe { self.get_raw(name).is_ok() }
-    }
-
-    /// The path this library was loaded from.
-    pub fn path(&self) -> &str { &self.path }
-
-    /// Close the library handle explicitly.
-    pub fn close(self) -> LoadResult<()> {
-        extern fn __grey_dynlib_close(handle: *mut u8) -> bool;
-        if unsafe { __grey_dynlib_close(self.handle) } {
-            core::mem::forget(self); // prevent Drop from double-closing
-            Ok(())
-        } else {
-            Err(LoadError::OsError(String::from("failed to close library")))
-        }
-    }
+// Check if a module is registered
+fn registry_has(reg, name) {
+  not(eq(get(get(reg, "modules"), name), nil))
 }
 
-impl Drop for DynLib {
-    fn drop(&mut self) {
-        extern fn __grey_dynlib_close(handle: *mut u8) -> bool;
-        unsafe { __grey_dynlib_close(self.handle); }
-    }
+// List all registered module names
+fn registry_list(reg) {
+  get(reg, "load_order")
 }
 
-/// A typed reference to a symbol in a loaded library.
-pub struct Symbol<F> {
-    ptr: *const F,
-    _marker: PhantomData<F>,
+// Add a search path
+fn registry_add_path(reg, path) {
+  merge(reg, { search_paths: append(get(reg, "search_paths"), path) })
 }
 
-impl<F> Symbol<F> {
-    /// Get the raw pointer to the symbol.
-    pub fn as_ptr(&self) -> *const F { self.ptr }
-
-    /// Cast to a function pointer and call it.
-    ///
-    /// # Safety
-    /// The caller must ensure the symbol's type matches F.
-    pub unsafe fn call(&self) -> &F {
-        &*self.ptr
-    }
+// Create a module descriptor
+fn ModuleDescriptor_new(name, version, exports) {
+  {
+    _type: "ModuleDescriptor",
+    name: name,
+    version: version,
+    exports: exports,
+    dependencies: [],
+    loaded_at: timestamp()
+  }
 }
 
-/// A plugin interface for Grey++ modules.
-pub trait Plugin {
-    /// Called when the plugin is loaded.
-    fn on_load(&mut self);
-    /// Called when the plugin is unloaded.
-    fn on_unload(&mut self);
-    /// Plugin name.
-    fn name(&self) -> &str;
-    /// Plugin version.
-    fn version(&self) -> &str;
+// Add a dependency to a module descriptor
+fn module_add_dep(desc, dep_name, dep_version) {
+  merge(desc, {
+    dependencies: append(get(desc, "dependencies"), { name: dep_name, version: dep_version })
+  })
 }
 
-/// Registry for loaded plugins.
-pub struct PluginRegistry {
-    plugins: Vec<(DynLib, Box<dyn Plugin>)>,
+// Get module exports
+fn module_exports(desc) {
+  get(desc, "exports")
 }
 
-impl PluginRegistry {
-    pub fn new() -> PluginRegistry {
-        PluginRegistry { plugins: Vec::new() }
-    }
-
-    /// Load a plugin from a shared library.
-    /// The library must export a `grey_plugin_create() -> Box<dyn Plugin>` function.
-    pub fn load(&mut self, path: &str) -> LoadResult<()> {
-        let lib = DynLib::open(path)?;
-        let create_fn: Symbol<fn() -> Box<dyn Plugin>> = unsafe { lib.get_fn("grey_plugin_create")? };
-        let mut plugin = unsafe { (create_fn.call())() };
-        plugin.on_load();
-        self.plugins.push((lib, plugin));
-        Ok(())
-    }
-
-    /// Unload all plugins.
-    pub fn unload_all(&mut self) {
-        for (_, plugin) in self.plugins.iter_mut().rev() {
-            plugin.on_unload();
-        }
-        self.plugins.clear();
-    }
-
-    /// Number of loaded plugins.
-    pub fn count(&self) -> usize { self.plugins.len() }
+// Get a specific export
+fn module_get_export(desc, name) {
+  get(get(desc, "exports"), name)
 }
 
-impl Drop for PluginRegistry {
-    fn drop(&mut self) {
-        self.unload_all();
-    }
+// Check if module has an export
+fn module_has_export(desc, name) {
+  not(eq(get(get(desc, "exports"), name), nil))
+}
+
+// Get module dependencies
+fn module_deps(desc) {
+  get(desc, "dependencies")
+}
+
+// Create a lazy-loading module
+fn LazyModule_new(name, loader_fn) {
+  {
+    _type: "LazyModule",
+    name: name,
+    loader: loader_fn,
+    loaded: false,
+    module: nil
+  }
+}
+
+// Force-load a lazy module
+fn lazy_load(lm) {
+  if_then(get(lm, "loaded"),
+    fn() { lm },
+    fn() { merge(lm, { loaded: true, module: get(lm, "loader")() }) }
+  )
+}
+
+// Get lazy module contents (loading if needed)
+fn lazy_get(lm) {
+  fn loaded() { lazy_load(lm) }
+  get(loaded(), "module")
+}
+
+// Resolve a module path from search paths
+fn resolve_module(reg, name) {
+  fn paths() { get(reg, "search_paths") }
+  fn candidates() {
+    map(paths(), fn(base) {
+      concat_str(base, "/", name, ".grey")
+    })
+  }
+  find(candidates(), fn(path) { file_exists(path) })
 }

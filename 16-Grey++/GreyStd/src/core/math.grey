@@ -1,499 +1,195 @@
-/// core::math — Math utilities, numeric traits, and optionally big integers.
-///
-/// Provides fundamental math operations, constants, and arbitrary-precision integers.
+// core::math — Numeric utilities and constants
+//
+// This module provides additional math utilities beyond
+// the built-in abs, sqrt, pow, floor, ceil, round, min, max,
+// mod, clamp, lerp, sin, cos, log_n, exp, random, random_int,
+// sum, avg.
 
-// ─── Numeric Traits ─────────────────────────────────────────────────────────
+// ── Constants ───────────────────────────────────────────────────
 
-/// Trait for types with a zero value.
-pub trait Zero {
-    fn zero() -> Self;
-    fn is_zero(self) -> bool;
+fn MATH_PI() { PI }
+fn MATH_E() { E }
+fn MATH_TAU() { PI * 2 }
+fn MATH_SQRT2() { sqrt(2) }
+fn MATH_LN2() { log_n(2) }
+fn MATH_LN10() { log_n(10) }
+fn MATH_INFINITY() { 1 / 0 }
+fn MATH_NEG_INFINITY() { -1 / 0 }
+
+// ── Rounding ────────────────────────────────────────────────────
+
+// Rounds to n decimal places.
+fn round_to(x, decimals) {
+    fn factor() { pow(10, decimals) }
+    round(x * factor()) / factor()
 }
 
-/// Trait for types with a one/identity value.
-pub trait One {
-    fn one() -> Self;
+// Truncates toward zero.
+fn trunc(x) {
+    if_then(x >= 0, fn() { floor(x) }, fn() { ceil(x) })
 }
 
-/// Numeric trait combining basic arithmetic.
-pub trait Num: Add + Sub + Mul + Div + Rem + Zero + One + Eq + Clone {}
-
-/// Trait for signed numeric types.
-pub trait Signed: Num {
-    fn abs(self) -> Self;
-    fn signum(self) -> Self;
-    fn is_negative(self) -> bool;
-    fn is_positive(self) -> bool;
+// Returns the sign: -1, 0, or 1.
+fn sign(x) {
+    cond(
+        x > 0, 1,
+        x < 0, -1,
+        0
+    )
 }
 
-/// Trait for unsigned numeric types.
-pub trait Unsigned: Num {}
+// ── Arithmetic ──────────────────────────────────────────────────
 
-/// Trait for floating-point operations.
-pub trait Float: Signed {
-    fn nan() -> Self;
-    fn infinity() -> Self;
-    fn neg_infinity() -> Self;
-    fn is_nan(self) -> bool;
-    fn is_infinite(self) -> bool;
-    fn is_finite(self) -> bool;
-    fn floor(self) -> Self;
-    fn ceil(self) -> Self;
-    fn round(self) -> Self;
-    fn trunc(self) -> Self;
-    fn fract(self) -> Self;
-    fn sqrt(self) -> Self;
-    fn cbrt(self) -> Self;
-    fn powi(self, n: i32) -> Self;
-    fn powf(self, n: Self) -> Self;
-    fn exp(self) -> Self;
-    fn exp2(self) -> Self;
-    fn ln(self) -> Self;
-    fn log2(self) -> Self;
-    fn log10(self) -> Self;
-    fn log(self, base: Self) -> Self;
-    fn sin(self) -> Self;
-    fn cos(self) -> Self;
-    fn tan(self) -> Self;
-    fn asin(self) -> Self;
-    fn acos(self) -> Self;
-    fn atan(self) -> Self;
-    fn atan2(self, other: Self) -> Self;
-    fn sinh(self) -> Self;
-    fn cosh(self) -> Self;
-    fn tanh(self) -> Self;
-    fn hypot(self, other: Self) -> Self;
-    fn to_degrees(self) -> Self;
-    fn to_radians(self) -> Self;
-    fn min(self, other: Self) -> Self;
-    fn max(self, other: Self) -> Self;
-    fn clamp(self, min: Self, max: Self) -> Self;
-    fn epsilon() -> Self;
-}
+// Integer division (truncates toward zero).
+fn div(a, b) { trunc(a / b) }
 
-// ─── Constants ──────────────────────────────────────────────────────────────
-
-pub const PI: f64       = 3.14159265358979323846;
-pub const TAU: f64      = 6.28318530717958647692;
-pub const E: f64        = 2.71828182845904523536;
-pub const PHI: f64      = 1.61803398874989484820;  // Golden ratio
-pub const SQRT_2: f64   = 1.41421356237309504880;
-pub const LN_2: f64     = 0.69314718055994530942;
-pub const LN_10: f64    = 2.30258509299404568402;
-pub const LOG2_E: f64   = 1.44269504088896340736;
-pub const LOG10_E: f64  = 0.43429448190325182765;
-
-// ─── Free Functions ─────────────────────────────────────────────────────────
-
-/// Returns the absolute value.
-pub fn abs<T: Signed>(x: T) -> T {
-    x.abs()
-}
-
-/// Returns the minimum of two values.
-pub fn min<T: Ord>(a: T, b: T) -> T {
-    if a <= b { a } else { b }
-}
-
-/// Returns the maximum of two values.
-pub fn max<T: Ord>(a: T, b: T) -> T {
-    if a >= b { a } else { b }
-}
-
-/// Clamps a value between a minimum and maximum.
-pub fn clamp<T: Ord>(value: T, lo: T, hi: T) -> T {
-    if value < lo { lo }
-    else if value > hi { hi }
-    else { value }
-}
-
-/// Returns the greatest common divisor.
-pub fn gcd(mut a: u64, mut b: u64) -> u64 {
-    while b != 0 {
-        let t = b;
-        b = a % b;
-        a = t;
+// Greatest common divisor.
+fn gcd(a, b) {
+    fn abs_a() { abs(a) }
+    fn abs_b() { abs(b) }
+    fn euclid(x, y) {
+        if_then(y == 0, fn() { x }, fn() { euclid(y, mod(x, y)) })
     }
-    a
+    euclid(abs_a(), abs_b())
 }
 
-/// Returns the least common multiple.
-pub fn lcm(a: u64, b: u64) -> u64 {
-    if a == 0 || b == 0 { return 0; }
-    (a / gcd(a, b)) * b
+// Least common multiple.
+fn lcm(a, b) {
+    if_then(a == 0, 0, fn() {
+        if_then(b == 0, 0, fn() { abs(a * b) / gcd(a, b) })
+    })
 }
 
-/// Integer power: base^exp.
-pub fn pow(base: u64, exp: u64) -> u64 {
-    let mut result: u64 = 1;
-    let mut base = base;
-    let mut exp = exp;
-    while exp > 0 {
-        if exp & 1 == 1 {
-            result *= base;
+// Factorial.
+fn factorial(n) {
+    if_then(n <= 1, 1, fn() { n * factorial(n - 1) })
+}
+
+// Fibonacci.
+fn fibonacci(n) {
+    fn fib(a, b, i) {
+        if_then(i >= n, fn() { a }, fn() { fib(b, a + b, i + 1) })
+    }
+    fib(0, 1, 0)
+}
+
+// Power with integer exponent (supports negative exponents).
+fn ipow(base, exp) {
+    cond(
+        exp == 0, 1,
+        exp < 0, fn() { 1 / ipow(base, -exp) },
+        fn() { base * ipow(base, exp - 1) }
+    )
+}
+
+// ── Trigonometry ────────────────────────────────────────────────
+
+// Tangent.
+fn tan(x) { sin(x) / cos(x) }
+
+// Arc sine (approximation using Newton's method).
+fn asin(x) {
+    if_then(abs(x) > 1, fn() { error("asin domain error") },
+        fn() { x + pow(x, 3) / 6 + 3 * pow(x, 5) / 40 + 15 * pow(x, 7) / 336 })
+}
+
+// Converts degrees to radians.
+fn deg_to_rad(degrees) { degrees * PI / 180 }
+
+// Converts radians to degrees.
+fn rad_to_deg(radians) { radians * 180 / PI }
+
+// ── Logarithms ──────────────────────────────────────────────────
+
+// Log base 2.
+fn log2(x) { log_n(x) / log_n(2) }
+
+// Log base 10.
+fn log10(x) { log_n(x) / log_n(10) }
+
+// Log with arbitrary base.
+fn log_base(x, base) { log_n(x) / log_n(base) }
+
+// ── Statistics ──────────────────────────────────────────────────
+
+// Mean (average).
+fn mean(arr) { avg(arr) }
+
+// Median.
+fn median(arr) {
+    fn sorted() { sort(arr, fn(a, b) { a - b }) }
+    fn n() { len(sorted()) }
+    if_then(n() == 0, fn() { nil },
+        fn() { if_then(mod(n(), 2) == 1,
+            fn() { get(sorted(), floor(n() / 2)) },
+            fn() {
+                fn mid() { n() / 2 }
+                (get(sorted(), mid() - 1) + get(sorted(), mid())) / 2
+            }) })
+}
+
+// Variance.
+fn variance(arr) {
+    fn m() { mean(arr) }
+    fn squared_diffs() { map(arr, fn(x) { pow(x - m(), 2) }) }
+    mean(squared_diffs())
+}
+
+// Standard deviation.
+fn std_dev(arr) { sqrt(variance(arr)) }
+
+// Minimum of an array.
+fn arr_min(arr) {
+    reduce(tail(arr), fn(a, b) { min(a, b) }, head(arr))
+}
+
+// Maximum of an array.
+fn arr_max(arr) {
+    reduce(tail(arr), fn(a, b) { max(a, b) }, head(arr))
+}
+
+// ── Number Checking ─────────────────────────────────────────────
+
+// Returns true if n is even.
+fn is_even(n) { mod(n, 2) == 0 }
+
+// Returns true if n is odd.
+fn is_odd(n) { mod(n, 2) != 0 }
+
+// Returns true if n is positive.
+fn is_positive(n) { n > 0 }
+
+// Returns true if n is negative.
+fn is_negative(n) { n < 0 }
+
+// Returns true if n is zero.
+fn is_zero(n) { n == 0 }
+
+// Returns true if n is a whole number.
+fn is_integer(n) { floor(n) == n }
+
+// ── Conversion ──────────────────────────────────────────────────
+
+// Formats a number with specified decimal places.
+fn format_number(n, decimals) {
+    to_string(round_to(n, decimals))
+}
+
+// Formats a number with thousands separators.
+fn format_with_commas(n) {
+    fn int_part() { to_string(floor(abs(n))) }
+    fn add_commas(s) {
+        fn process(i, acc) {
+            if_then(i < 0, fn() { acc },
+                fn() {
+                    fn chunk_start() { max(0, i - 2) }
+                    fn chunk() { substr(s, chunk_start(), i - chunk_start() + 1) }
+                    fn sep() { if_then(chunk_start() > 0, ",", "") }
+                    process(chunk_start() - 1, str(sep(), chunk(), acc))
+                })
         }
-        base *= base;
-        exp >>= 1;
+        process(len(s) - 1, "")
     }
-    result
-}
-
-/// Modular exponentiation: (base^exp) % modulus.
-pub fn mod_pow(base: u64, exp: u64, modulus: u64) -> u64 {
-    if modulus == 1 { return 0; }
-    let mut result: u64 = 1;
-    let mut base = base % modulus;
-    let mut exp = exp;
-    while exp > 0 {
-        if exp & 1 == 1 {
-            result = (result * base) % modulus;
-        }
-        exp >>= 1;
-        base = (base * base) % modulus;
-    }
-    result
-}
-
-/// Integer square root (floor).
-pub fn isqrt(n: u64) -> u64 {
-    if n == 0 { return 0; }
-    let mut x = n;
-    let mut y = (x + 1) / 2;
-    while y < x {
-        x = y;
-        y = (x + n / x) / 2;
-    }
-    x
-}
-
-/// Checks if a number is prime (trial division for simplicity).
-pub fn is_prime(n: u64) -> bool {
-    if n < 2 { return false; }
-    if n < 4 { return true; }
-    if n % 2 == 0 || n % 3 == 0 { return false; }
-    let mut i: u64 = 5;
-    while i * i <= n {
-        if n % i == 0 || n % (i + 2) == 0 { return false; }
-        i += 6;
-    }
-    true
-}
-
-/// Linear interpolation: lerp(a, b, t) = a + t * (b - a).
-pub fn lerp(a: f64, b: f64, t: f64) -> f64 {
-    a + t * (b - a)
-}
-
-/// Inverse linear interpolation: returns t such that lerp(a, b, t) ≈ value.
-pub fn inv_lerp(a: f64, b: f64, value: f64) -> f64 {
-    (value - a) / (b - a)
-}
-
-/// Remaps a value from one range to another.
-pub fn remap(value: f64, from_lo: f64, from_hi: f64, to_lo: f64, to_hi: f64) -> f64 {
-    let t = inv_lerp(from_lo, from_hi, value);
-    lerp(to_lo, to_hi, t)
-}
-
-/// Wraps a value into the range [lo, hi).
-pub fn wrap(value: f64, lo: f64, hi: f64) -> f64 {
-    let range = hi - lo;
-    lo + ((value - lo) % range + range) % range
-}
-
-// ─── BigInt ─────────────────────────────────────────────────────────────────
-
-/// Arbitrary-precision integer.
-///
-/// Stored as a sign flag plus a little-endian vector of u32 "digits" (base 2^32).
-pub struct BigInt {
-    negative: bool,
-    digits: Vec<u32>,
-}
-
-impl BigInt {
-    /// Creates a BigInt from 0.
-    pub fn zero() -> BigInt {
-        BigInt { negative: false, digits: vec![0] }
-    }
-
-    /// Creates a BigInt from 1.
-    pub fn one() -> BigInt {
-        BigInt { negative: false, digits: vec![1] }
-    }
-
-    /// Creates a BigInt from an i64.
-    pub fn from_i64(value: i64) -> BigInt {
-        let negative = value < 0;
-        let abs = if value == i64::MIN { (i64::MAX as u64) + 1 } else { value.abs() as u64 };
-        let lo = abs as u32;
-        let hi = (abs >> 32) as u32;
-        let digits = if hi == 0 { vec![lo] } else { vec![lo, hi] };
-        BigInt { negative, digits }
-    }
-
-    /// Creates a BigInt from a decimal string.
-    pub fn from_string(s: &str) -> Result<BigInt, ParseError> {
-        let bytes = s.as_bytes();
-        if bytes.is_empty() { return Err(ParseError::new("empty string")); }
-
-        let (negative, start) = match bytes[0] {
-            b'-' => (true, 1),
-            b'+' => (false, 1),
-            _    => (false, 0),
-        };
-
-        if start >= bytes.len() { return Err(ParseError::new("no digits")); }
-
-        let mut result = BigInt::zero();
-        let ten = BigInt::from_i64(10);
-        for i in start..bytes.len() {
-            let d = bytes[i];
-            if d < b'0' || d > b'9' {
-                return Err(ParseError::new("invalid digit"));
-            }
-            result = result.mul(&ten).add(&BigInt::from_i64((d - b'0') as i64));
-        }
-        result.negative = negative && !result.is_zero();
-        Ok(result)
-    }
-
-    /// Returns true if the value is zero.
-    pub fn is_zero(self) -> bool {
-        self.digits.len() == 1 && self.digits[0] == 0
-    }
-
-    /// Returns the absolute value.
-    pub fn abs(self) -> BigInt {
-        BigInt { negative: false, digits: self.digits.clone() }
-    }
-
-    /// Negates the value.
-    pub fn negate(self) -> BigInt {
-        if self.is_zero() { return self.clone(); }
-        BigInt { negative: !self.negative, digits: self.digits.clone() }
-    }
-
-    /// Adds two BigInts.
-    pub fn add(self, other: &BigInt) -> BigInt {
-        if self.negative == other.negative {
-            // Same sign: add magnitudes
-            let digits = add_magnitudes(&self.digits, &other.digits);
-            BigInt { negative: self.negative, digits }
-        } else {
-            // Different signs: subtract magnitudes
-            let cmp = compare_magnitudes(&self.digits, &other.digits);
-            match cmp {
-                Ordering::Equal   => BigInt::zero(),
-                Ordering::Greater => {
-                    let digits = sub_magnitudes(&self.digits, &other.digits);
-                    BigInt { negative: self.negative, digits }
-                }
-                Ordering::Less => {
-                    let digits = sub_magnitudes(&other.digits, &self.digits);
-                    BigInt { negative: other.negative, digits }
-                }
-            }
-        }
-    }
-
-    /// Subtracts another BigInt.
-    pub fn sub(self, other: &BigInt) -> BigInt {
-        self.add(&other.negate())
-    }
-
-    /// Multiplies two BigInts.
-    pub fn mul(self, other: &BigInt) -> BigInt {
-        let digits = mul_magnitudes(&self.digits, &other.digits);
-        let negative = self.negative != other.negative;
-        let mut result = BigInt { negative, digits };
-        if result.is_zero() { result.negative = false; }
-        result
-    }
-
-    /// Converts to a decimal string.
-    pub fn to_string(self) -> String {
-        if self.is_zero() { return String::from_slice("0"); }
-        let mut result = Vec::new();
-        let mut tmp = self.abs();
-        let ten = BigInt::from_i64(10);
-        while !tmp.is_zero() {
-            let (quot, rem) = div_mod_magnitudes(&tmp.digits, &ten.digits);
-            result.push(b'0' + rem.digits[0] as u8);
-            tmp = BigInt { negative: false, digits: quot };
-        }
-        if self.negative { result.push(b'-'); }
-        result.reverse();
-        String::from_utf8(result).unwrap()
-    }
-}
-
-impl Eq for BigInt {
-    fn eq(self, other: BigInt) -> bool {
-        self.negative == other.negative && self.digits == other.digits
-    }
-}
-
-impl Ord for BigInt {
-    fn cmp(self, other: BigInt) -> Ordering {
-        if self.negative != other.negative {
-            return if self.negative { Ordering::Less } else { Ordering::Greater };
-        }
-        let mag = compare_magnitudes(&self.digits, &other.digits);
-        if self.negative { mag.reverse() } else { mag }
-    }
-}
-
-impl Clone for BigInt {
-    fn clone(self) -> BigInt {
-        BigInt { negative: self.negative, digits: self.digits.clone() }
-    }
-}
-
-impl Debug for BigInt {
-    fn debug_fmt(self, f: &mut Formatter) -> Result<(), FormatError> {
-        f.write_str(&self.to_string())
-    }
-}
-
-// ── BigInt internal helpers ─────────────────────────────────────────────────
-
-fn add_magnitudes(a: &Vec<u32>, b: &Vec<u32>) -> Vec<u32> {
-    let max_len = max(a.len(), b.len());
-    let mut result = Vec::with_capacity(max_len + 1);
-    let mut carry: u64 = 0;
-    for i in 0..max_len {
-        let da = if i < a.len() { a[i] as u64 } else { 0 };
-        let db = if i < b.len() { b[i] as u64 } else { 0 };
-        let sum = da + db + carry;
-        result.push(sum as u32);
-        carry = sum >> 32;
-    }
-    if carry > 0 { result.push(carry as u32); }
-    result
-}
-
-fn sub_magnitudes(a: &Vec<u32>, b: &Vec<u32>) -> Vec<u32> {
-    // Assumes a >= b in magnitude
-    let mut result = Vec::with_capacity(a.len());
-    let mut borrow: i64 = 0;
-    for i in 0..a.len() {
-        let da = a[i] as i64;
-        let db = if i < b.len() { b[i] as i64 } else { 0 };
-        let diff = da - db - borrow;
-        if diff < 0 {
-            result.push((diff + (1i64 << 32)) as u32);
-            borrow = 1;
-        } else {
-            result.push(diff as u32);
-            borrow = 0;
-        }
-    }
-    // Remove leading zeros
-    while result.len() > 1 && *result.last().unwrap() == 0 {
-        result.pop();
-    }
-    result
-}
-
-fn mul_magnitudes(a: &Vec<u32>, b: &Vec<u32>) -> Vec<u32> {
-    let mut result = Vec::filled(0u32, a.len() + b.len());
-    for i in 0..a.len() {
-        let mut carry: u64 = 0;
-        for j in 0..b.len() {
-            let prod = (a[i] as u64) * (b[j] as u64) + (result[i + j] as u64) + carry;
-            result[i + j] = prod as u32;
-            carry = prod >> 32;
-        }
-        result[i + b.len()] += carry as u32;
-    }
-    while result.len() > 1 && *result.last().unwrap() == 0 {
-        result.pop();
-    }
-    result
-}
-
-fn compare_magnitudes(a: &Vec<u32>, b: &Vec<u32>) -> Ordering {
-    if a.len() != b.len() {
-        return a.len().cmp(&b.len());
-    }
-    for i in (0..a.len()).rev() {
-        if a[i] != b[i] {
-            return a[i].cmp(&b[i]);
-        }
-    }
-    Ordering::Equal
-}
-
-fn div_mod_magnitudes(a: &Vec<u32>, b: &Vec<u32>) -> (Vec<u32>, BigInt) {
-    // Simple long division — sufficient for to_string conversions
-    // For production use, implement Knuth's Algorithm D
-    let divisor = BigInt { negative: false, digits: b.clone() };
-    let mut remainder = BigInt::zero();
-    let mut quotient_bits = Vec::new();
-
-    for i in (0..a.len()).rev() {
-        for bit in (0..32).rev() {
-            // Shift remainder left by 1 bit
-            let mut carry = (a[i] >> bit) & 1;
-            let new_digits = shift_left_one(&remainder.digits, carry as u32);
-            remainder = BigInt { negative: false, digits: new_digits };
-
-            if compare_magnitudes(&remainder.digits, &divisor.digits) != Ordering::Less {
-                remainder = BigInt {
-                    negative: false,
-                    digits: sub_magnitudes(&remainder.digits, &divisor.digits),
-                };
-                quotient_bits.push(1u32);
-            } else {
-                quotient_bits.push(0u32);
-            }
-        }
-    }
-
-    quotient_bits.reverse();
-    // Convert quotient bits to u32 digits
-    let mut quotient = Vec::new();
-    let mut i = 0;
-    while i < quotient_bits.len() {
-        let mut digit: u32 = 0;
-        for bit in 0..32 {
-            if i + bit < quotient_bits.len() {
-                digit |= quotient_bits[i + bit] << bit;
-            }
-        }
-        quotient.push(digit);
-        i += 32;
-    }
-    while quotient.len() > 1 && *quotient.last().unwrap() == 0 {
-        quotient.pop();
-    }
-    if quotient.is_empty() { quotient.push(0); }
-
-    (quotient, remainder)
-}
-
-fn shift_left_one(digits: &Vec<u32>, carry_in: u32) -> Vec<u32> {
-    let mut result = Vec::with_capacity(digits.len() + 1);
-    let mut carry = carry_in;
-    for &d in digits.iter() {
-        let new_d = (d << 1) | carry;
-        carry = d >> 31;
-        result.push(new_d);
-    }
-    if carry > 0 { result.push(carry); }
-    while result.len() > 1 && *result.last().unwrap() == 0 { result.pop(); }
-    result
-}
-
-// ─── Parse Error ────────────────────────────────────────────────────────────
-
-pub struct ParseError {
-    pub message: String,
-}
-
-impl ParseError {
-    pub fn new(msg: &str) -> ParseError {
-        ParseError { message: String::from_slice(msg) }
-    }
+    fn prefix() { if_then(n < 0, "-", "") }
+    str(prefix(), add_commas(int_part()))
 }

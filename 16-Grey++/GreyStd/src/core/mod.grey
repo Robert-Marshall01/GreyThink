@@ -1,29 +1,32 @@
-/// core — Core Language Primitives
-///
-/// The foundational types every Grey++ program depends on.
-/// Includes strings, byte buffers, collections, option/result types,
-/// iterators, and math utilities.
+// core — Core Language Primitives
+//
+// The foundational types every Grey++ program depends on.
+// Includes string utilities, array/vector helpers, maps, sets,
+// option/result types, iterators, math, bytes, tuples.
+//
+// Grey++ is dynamically typed — these modules provide factory
+// functions and utility functions, not struct/trait definitions.
+//
+// Submodules:
+//   string   — String construction and manipulation
+//   bytes    — Byte sequence utilities
+//   array    — Fixed-size array helpers
+//   vec      — Dynamic array (vector) utilities
+//   map      — Hash map (object) utilities
+//   set      — Hash set utilities
+//   tuple    — Tuple construction and access
+//   option   — Option type (Some/None)
+//   result   — Result type (Ok/Err)
+//   iter     — Iterator protocol and adapters
+//   math     — Numeric utilities and constants
 
-pub mod string;
-pub mod bytes;
-pub mod array;
-pub mod vec;
-pub mod map;
-pub mod set;
-pub mod tuple;
-pub mod option;
-pub mod result;
-pub mod iter;
-pub mod math;
-
-// Re-exports for convenience.
-pub use string::String;
-pub use bytes::{Bytes, ByteBuffer};
-pub use array::Array;
-pub use vec::Vec;
-pub use map::HashMap;
-pub use set::HashSet;
-pub use option::Option;
-pub use result::Result;
-pub use iter::{Iterator, IntoIterator};
-pub use string::{Display, Debug, Formatter, FormatError};
+fn core_info() {
+    {
+        name: "core",
+        version: "1.0.0",
+        modules: [
+            "string", "bytes", "array", "vec", "map", "set",
+            "tuple", "option", "result", "iter", "math"
+        ]
+    }
+}

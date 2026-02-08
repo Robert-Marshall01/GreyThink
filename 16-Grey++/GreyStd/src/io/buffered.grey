@@ -1,296 +1,69 @@
-/// io::buffered — Buffered readers and writers.
+// io::buffered — Buffered I/O readers and writers
+//
+// Wraps streams with buffering for more efficient I/O.
 
-use crate::core::option::Option;
-use crate::core::string::String;
-use crate::core::vec::Vec;
-use crate::io::{IoResult, IoError, IoErrorKind};
-use crate::io::stream::{Read, Write, Seek, SeekFrom, BufRead};
-
-/// A buffered wrapper around a reader for more efficient I/O.
-///
-/// ```grey
-/// let f = File::open("data.txt")?;
-/// let reader = BufReader::new(f);
-/// for line in reader.lines() {
-///     println("{}", line?);
-/// }
-/// ```
-pub struct BufReader<R> {
-    inner: R,
-    buf: Vec<u8>,
-    pos: usize,   // current read position in buf
-    cap: usize,   // number of valid bytes in buf
-}
-
-const DEFAULT_BUF_SIZE: usize = 8192;
-
-impl<R: Read> BufReader<R> {
-    /// Creates a new BufReader with the default buffer size (8 KiB).
-    pub fn new(inner: R) -> BufReader<R> {
-        BufReader::with_capacity(DEFAULT_BUF_SIZE, inner)
-    }
-
-    /// Creates a new BufReader with a custom buffer size.
-    pub fn with_capacity(capacity: usize, inner: R) -> BufReader<R> {
-        let mut buf = Vec::with_capacity(capacity);
-        buf.resize(capacity, 0);
-        BufReader { inner, buf, pos: 0, cap: 0 }
-    }
-
-    /// Returns a reference to the underlying reader.
-    pub fn get_ref(self) -> &R {
-        &self.inner
-    }
-
-    /// Returns a mutable reference to the underlying reader.
-    pub fn get_mut(mut self) -> &mut R {
-        &mut self.inner
-    }
-
-    /// Unwraps the BufReader, returning the inner reader.
-    /// Any buffered data is lost.
-    pub fn into_inner(self) -> R {
-        self.inner
-    }
-
-    /// Returns the currently buffered data.
-    pub fn buffer(self) -> &[u8] {
-        &self.buf[self.pos..self.cap]
-    }
-
-    /// Returns the number of bytes buffered.
-    pub fn buffered_len(self) -> usize {
-        self.cap - self.pos
-    }
-
-    /// Fills the internal buffer if it's empty.
-    fn fill_buf(mut self) -> IoResult<&[u8]> {
-        if self.pos >= self.cap {
-            self.pos = 0;
-            self.cap = self.inner.read(&mut self.buf)?;
-        }
-        Ok(&self.buf[self.pos..self.cap])
-    }
-
-    fn consume(mut self, amt: usize) {
-        self.pos = self.pos + amt;
-        if self.pos > self.cap {
-            self.pos = self.cap;
-        }
+// Creates a buffered reader wrapping an input stream.
+fn BufReader_new(stream) {
+    {
+        _type: "BufReader",
+        stream: stream,
+        buffer: "",
+        buf_size: 4096
     }
 }
 
-impl<R: Read> Read for BufReader<R> {
-    fn read(mut self, buf: &mut [u8]) -> IoResult<usize> {
-        // If our buffer is empty or the request is larger than our buffer,
-        // read directly
-        if self.pos == self.cap && buf.len() >= self.buf.len() {
-            return self.inner.read(buf);
-        }
-
-        let available = self.fill_buf()?;
-        let n = min(available.len(), buf.len());
-        buf[..n].copy_from_slice(&available[..n]);
-        self.consume(n);
-        Ok(n)
+// Creates a buffered reader with custom buffer size.
+fn BufReader_with_size(stream, buf_size) {
+    {
+        _type: "BufReader",
+        stream: stream,
+        buffer: "",
+        buf_size: buf_size
     }
 }
 
-impl<R: Read> BufRead for BufReader<R> {
-    fn read_until(mut self, delim: u8, buf: &mut Vec<u8>) -> IoResult<usize> {
-        let mut total = 0;
-        loop {
-            let available = self.fill_buf()?;
-            if available.is_empty() {
-                break;
-            }
+// Reads a line from the buffered reader.
+fn bufreader_read_line(reader) {
+    stream_read_line(get(reader, "stream"))
+}
 
-            // Search for delimiter
-            let used = match available.iter().position(|&b| b == delim) {
-                Some(i) => {
-                    buf.extend_from_slice(&available[..=i]);
-                    total = total + i + 1;
-                    self.consume(i + 1);
-                    return Ok(total);
-                }
-                None => {
-                    buf.extend_from_slice(available);
-                    let len = available.len();
-                    total = total + len;
-                    len
-                }
-            };
-            self.consume(used);
-        }
-        Ok(total)
+// Reads all lines into an array.
+fn bufreader_lines(reader) {
+    fn collect(s, acc) {
+        if_then(stream_is_eof(s), fn() { acc },
+            fn() {
+                fn result() { stream_read_line(s) }
+                collect(get(result(), "stream"), push(acc, get(result(), "line")))
+            })
+    }
+    collect(get(reader, "stream"), [])
+}
+
+// Creates a buffered writer wrapping an output stream.
+fn BufWriter_new(stream) {
+    {
+        _type: "BufWriter",
+        stream: stream,
+        buffer: "",
+        buf_size: 4096
     }
 }
 
-impl<R: Read + Seek> Seek for BufReader<R> {
-    fn seek(mut self, pos: SeekFrom) -> IoResult<u64> {
-        // When seeking, discard the buffer
-        let result = match pos {
-            SeekFrom::Current(n) => {
-                let remainder = (self.cap - self.pos) as i64;
-                self.inner.seek(SeekFrom::Current(n - remainder))
-            }
-            other => self.inner.seek(other),
-        };
-        self.pos = 0;
-        self.cap = 0;
-        result
-    }
+// Writes data to the buffered writer.
+fn bufwriter_write(writer, data) {
+    fn new_buf() { str(get(writer, "buffer"), data) }
+    if_then(len(new_buf()) >= get(writer, "buf_size"),
+        fn() {
+            stream_write(get(writer, "stream"), new_buf())
+            set(writer, "buffer", "")
+        },
+        fn() { set(writer, "buffer", new_buf()) })
 }
 
-/// A buffered wrapper around a writer for more efficient I/O.
-///
-/// ```grey
-/// let f = File::create("output.txt")?;
-/// let mut writer = BufWriter::new(f);
-/// writer.write_all(b"Hello, ")?;
-/// writer.write_all(b"World!")?;
-/// writer.flush()?; // ensures data is written
-/// ```
-pub struct BufWriter<W> {
-    inner: W,
-    buf: Vec<u8>,
-    panicked: bool,
-}
-
-impl<W: Write> BufWriter<W> {
-    /// Creates a new BufWriter with the default buffer size (8 KiB).
-    pub fn new(inner: W) -> BufWriter<W> {
-        BufWriter::with_capacity(DEFAULT_BUF_SIZE, inner)
-    }
-
-    /// Creates a new BufWriter with a custom buffer size.
-    pub fn with_capacity(capacity: usize, inner: W) -> BufWriter<W> {
-        BufWriter {
-            inner,
-            buf: Vec::with_capacity(capacity),
-            panicked: false,
-        }
-    }
-
-    /// Returns a reference to the underlying writer.
-    pub fn get_ref(self) -> &W {
-        &self.inner
-    }
-
-    /// Returns a mutable reference to the underlying writer.
-    pub fn get_mut(mut self) -> &mut W {
-        &mut self.inner
-    }
-
-    /// Returns the currently buffered data.
-    pub fn buffer(self) -> &[u8] {
-        &self.buf
-    }
-
-    /// Returns the number of bytes buffered.
-    pub fn buffered_len(self) -> usize {
-        self.buf.len()
-    }
-
-    /// Returns the buffer capacity.
-    pub fn capacity(self) -> usize {
-        self.buf.capacity()
-    }
-
-    /// Unwraps the BufWriter, returning the inner writer.
-    /// Flushes any remaining data first.
-    pub fn into_inner(mut self) -> Result<W, IoError> {
-        self.flush()?;
-        Ok(self.inner)
-    }
-
-    /// Flushes the internal buffer to the underlying writer.
-    fn flush_buf(mut self) -> IoResult<()> {
-        let mut written = 0;
-        while written < self.buf.len() {
-            self.panicked = true;
-            let r = self.inner.write(&self.buf[written..]);
-            self.panicked = false;
-            match r {
-                Ok(0) => return Err(IoError::new(IoErrorKind::WriteZero, String::from("write returned 0"))),
-                Ok(n) => written = written + n,
-                Err(e) if e.kind() == IoErrorKind::Interrupted => continue,
-                Err(e) => return Err(e),
-            }
-        }
-        self.buf.clear();
-        Ok(())
-    }
-}
-
-impl<W: Write> Write for BufWriter<W> {
-    fn write(mut self, buf: &[u8]) -> IoResult<usize> {
-        // If the write is larger than our buffer, flush and write directly
-        if self.buf.len() + buf.len() > self.buf.capacity() {
-            self.flush_buf()?;
-            if buf.len() >= self.buf.capacity() {
-                return self.inner.write(buf);
-            }
-        }
-        self.buf.extend_from_slice(buf);
-        Ok(buf.len())
-    }
-
-    fn flush(mut self) -> IoResult<()> {
-        self.flush_buf()?;
-        self.inner.flush()
-    }
-}
-
-impl<W: Write + Seek> Seek for BufWriter<W> {
-    fn seek(mut self, pos: SeekFrom) -> IoResult<u64> {
-        self.flush_buf()?;
-        self.inner.seek(pos)
-    }
-}
-
-impl<W: Write> Drop for BufWriter<W> {
-    fn drop(mut self) {
-        if !self.panicked {
-            let _ = self.flush_buf();
-        }
-    }
-}
-
-/// A line-based reader that yields complete lines.
-pub struct LineReader<R> {
-    reader: BufReader<R>,
-    line: String,
-}
-
-impl<R: Read> LineReader<R> {
-    pub fn new(reader: R) -> LineReader<R> {
-        LineReader {
-            reader: BufReader::new(reader),
-            line: String::new(),
-        }
-    }
-
-    /// Reads the next line. Returns None at EOF.
-    pub fn next_line(mut self) -> IoResult<Option<String>> {
-        self.line.clear();
-        match self.reader.read_line(&mut self.line) {
-            Ok(0) => Ok(None),
-            Ok(_) => {
-                // Strip trailing newline
-                if self.line.ends_with('\n') {
-                    self.line.pop();
-                    if self.line.ends_with('\r') {
-                        self.line.pop();
-                    }
-                }
-                Ok(Some(self.line.clone()))
-            }
-            Err(e) => Err(e),
-        }
-    }
-}
-
-fn min(a: usize, b: usize) -> usize {
-    if a < b { a } else { b }
+// Flushes the buffered writer.
+fn bufwriter_flush(writer) {
+    when(len(get(writer, "buffer")) > 0, fn() {
+        stream_write(get(writer, "stream"), get(writer, "buffer"))
+    })
+    set(writer, "buffer", "")
 }

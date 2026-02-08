@@ -1,259 +1,91 @@
-/// sys::process — Process spawning, management, and exit codes.
+// GreyStd Sys - Process
+// Process management utilities
 
-use crate::core::string::String;
-use crate::core::vec::Vec;
-use crate::core::option::Option;
-use crate::core::map::HashMap;
-use crate::io::IoResult;
-
-/// Exit status from a child process.
-pub struct ExitStatus {
-    code: Option<i32>,
+// Get current process info
+fn process_current() {
+  {
+    _type: "Process",
+    pid: process_id(),
+    args: process_args(),
+    cwd: process_cwd(),
+    start_time: timestamp()
+  }
 }
 
-impl ExitStatus {
-    pub fn new(code: i32) -> ExitStatus { ExitStatus { code: Some(code) } }
-
-    /// Exit code, or None if terminated by signal.
-    pub fn code(&self) -> Option<i32> { self.code }
-
-    /// Whether the process exited successfully (code 0).
-    pub fn success(&self) -> bool { self.code == Some(0) }
+// Get process ID
+fn process_pid(proc) {
+  get(proc, "pid")
 }
 
-impl Display for ExitStatus {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        match self.code {
-            Some(code) => write!(f, "exit code: {}", code),
-            None => write!(f, "terminated by signal"),
-        }
-    }
+// Get command-line arguments
+fn process_argv() {
+  process_args()
 }
 
-/// Output captured from a finished process.
-pub struct Output {
-    pub status: ExitStatus,
-    pub stdout: Vec<u8>,
-    pub stderr: Vec<u8>,
+// Get the nth command-line argument
+fn process_arg(n) {
+  fn args() { process_args() }
+  if_then(lt(n, length(args())), fn() { get(args(), n) }, fn() { nil })
 }
 
-impl Output {
-    /// stdout as a UTF-8 string (lossy).
-    pub fn stdout_str(&self) -> String {
-        String::from_utf8_lossy(&self.stdout)
-    }
-
-    /// stderr as a UTF-8 string (lossy).
-    pub fn stderr_str(&self) -> String {
-        String::from_utf8_lossy(&self.stderr)
-    }
+// Get current working directory
+fn process_working_dir() {
+  process_cwd()
 }
 
-/// The stdio configuration for a child process.
-pub enum Stdio {
-    /// Inherit the parent's stdio.
-    Inherit,
-    /// Pipe stdio to/from the child.
-    Piped,
-    /// Discard output (redirect to null).
-    Null,
+// Execute a shell command
+fn process_exec(command) {
+  fn result() { exec(command) }
+  {
+    _type: "ProcessResult",
+    stdout: get(result(), "stdout"),
+    stderr: get(result(), "stderr"),
+    exit_code: get(result(), "exitCode"),
+    success: eq(get(result(), "exitCode"), 0)
+  }
 }
 
-/// A builder for creating and spawning child processes.
-pub struct Command {
-    program: String,
-    args: Vec<String>,
-    env: HashMap<String, String>,
-    env_clear: bool,
-    current_dir: Option<String>,
-    stdin: Stdio,
-    stdout: Stdio,
-    stderr: Stdio,
+// Execute a command and return just stdout
+fn process_exec_output(command) {
+  fn result() { process_exec(command) }
+  if_then(get(result(), "success"),
+    fn() { Ok(get(result(), "stdout")) },
+    fn() { Err(get(result(), "stderr")) }
+  )
 }
 
-impl Command {
-    /// Create a new command for the given program.
-    pub fn new(program: &str) -> Command {
-        Command {
-            program: String::from(program),
-            args: Vec::new(),
-            env: HashMap::new(),
-            env_clear: false,
-            current_dir: None,
-            stdin: Stdio::Inherit,
-            stdout: Stdio::Inherit,
-            stderr: Stdio::Inherit,
-        }
-    }
-
-    /// Add a single argument.
-    pub fn arg(mut self, arg: &str) -> Command {
-        self.args.push(String::from(arg));
-        self
-    }
-
-    /// Add multiple arguments.
-    pub fn args(mut self, args: &[&str]) -> Command {
-        for a in args { self.args.push(String::from(*a)); }
-        self
-    }
-
-    /// Set an environment variable.
-    pub fn env(mut self, key: &str, value: &str) -> Command {
-        self.env.insert(String::from(key), String::from(value));
-        self
-    }
-
-    /// Set multiple environment variables.
-    pub fn envs(mut self, pairs: &[(&str, &str)]) -> Command {
-        for (k, v) in pairs {
-            self.env.insert(String::from(*k), String::from(*v));
-        }
-        self
-    }
-
-    /// Clear the entire environment before adding custom variables.
-    pub fn env_clear(mut self) -> Command {
-        self.env_clear = true;
-        self
-    }
-
-    /// Set the working directory for the child process.
-    pub fn current_dir(mut self, dir: &str) -> Command {
-        self.current_dir = Some(String::from(dir));
-        self
-    }
-
-    /// Configure stdin.
-    pub fn stdin(mut self, cfg: Stdio) -> Command { self.stdin = cfg; self }
-    /// Configure stdout.
-    pub fn stdout(mut self, cfg: Stdio) -> Command { self.stdout = cfg; self }
-    /// Configure stderr.
-    pub fn stderr(mut self, cfg: Stdio) -> Command { self.stderr = cfg; self }
-
-    /// Spawn the process and return a handle.
-    pub fn spawn(&self) -> IoResult<Child> {
-        extern fn __grey_process_spawn(
-            program: &str, args: &[String], env: &[(String, String)],
-            env_clear: bool, cwd: Option<&str>,
-            stdin: u8, stdout: u8, stderr: u8
-        ) -> Option<u64>;
-
-        let env_vec: Vec<(String, String)> = self.env.iter()
-            .map(|(k, v)| (k.clone(), v.clone())).collect();
-        let cwd_ref = self.current_dir.as_deref();
-        let stdin_flag = match &self.stdin { Stdio::Inherit => 0, Stdio::Piped => 1, Stdio::Null => 2 };
-        let stdout_flag = match &self.stdout { Stdio::Inherit => 0, Stdio::Piped => 1, Stdio::Null => 2 };
-        let stderr_flag = match &self.stderr { Stdio::Inherit => 0, Stdio::Piped => 1, Stdio::Null => 2 };
-
-        let pid = unsafe {
-            __grey_process_spawn(&self.program, &self.args, &env_vec, self.env_clear, cwd_ref,
-                stdin_flag, stdout_flag, stderr_flag)
-        }.ok_or(crate::io::IoError::new(crate::io::IoErrorKind::Other, "failed to spawn process"))?;
-
-        Ok(Child { pid, finished: false })
-    }
-
-    /// Run the process and wait for completion, capturing output.
-    pub fn output(&self) -> IoResult<Output> {
-        let cmd = Command {
-            program: self.program.clone(),
-            args: self.args.clone(),
-            env: self.env.clone(),
-            env_clear: self.env_clear,
-            current_dir: self.current_dir.clone(),
-            stdin: Stdio::Null,
-            stdout: Stdio::Piped,
-            stderr: Stdio::Piped,
-        };
-        let mut child = cmd.spawn()?;
-        child.wait_with_output()
-    }
-
-    /// Run the process and wait for its exit status (inheriting stdio).
-    pub fn status(&self) -> IoResult<ExitStatus> {
-        let mut child = self.spawn()?;
-        child.wait()
-    }
+// Spawn a background process
+fn process_spawn(command) {
+  {
+    _type: "SpawnedProcess",
+    command: command,
+    started_at: timestamp(),
+    handle: exec_async(command)
+  }
 }
 
-/// A handle to a spawned child process.
-pub struct Child {
-    pid: u64,
-    finished: bool,
+// Exit the current process
+fn process_exit(code) {
+  exit(code)
 }
 
-impl Child {
-    /// Process ID.
-    pub fn id(&self) -> u64 { self.pid }
-
-    /// Wait for the process to exit.
-    pub fn wait(&mut self) -> IoResult<ExitStatus> {
-        extern fn __grey_process_wait(pid: u64) -> i32;
-        let code = unsafe { __grey_process_wait(self.pid) };
-        self.finished = true;
-        Ok(ExitStatus::new(code))
-    }
-
-    /// Wait and capture stdout/stderr.
-    pub fn wait_with_output(&mut self) -> IoResult<Output> {
-        extern fn __grey_process_wait_output(pid: u64) -> (i32, Vec<u8>, Vec<u8>);
-        let (code, stdout, stderr) = unsafe { __grey_process_wait_output(self.pid) };
-        self.finished = true;
-        Ok(Output { status: ExitStatus::new(code), stdout, stderr })
-    }
-
-    /// Send a signal to the child process.
-    pub fn kill(&mut self) -> IoResult<()> {
-        extern fn __grey_process_kill(pid: u64) -> bool;
-        if unsafe { __grey_process_kill(self.pid) } {
-            Ok(())
-        } else {
-            Err(crate::io::IoError::new(crate::io::IoErrorKind::Other, "failed to kill process"))
-        }
-    }
-
-    /// Check if the process has finished without blocking.
-    pub fn try_wait(&mut self) -> IoResult<Option<ExitStatus>> {
-        extern fn __grey_process_try_wait(pid: u64) -> Option<i32>;
-        match unsafe { __grey_process_try_wait(self.pid) } {
-            Some(code) => { self.finished = true; Ok(Some(ExitStatus::new(code))) }
-            None => Ok(None),
-        }
-    }
+// Exit with success
+fn process_exit_ok() {
+  exit(0)
 }
 
-impl Drop for Child {
-    fn drop(&mut self) {
-        if !self.finished {
-            let _ = self.kill();
-            let _ = self.wait();
-        }
-    }
+// Exit with failure
+fn process_exit_err(message) {
+  eprintln(message)
+  exit(1)
 }
 
-// ─── Convenience ────────────────────────────────────────────
-
-/// Exit the current process with the given code.
-pub fn exit(code: i32) -> ! {
-    extern fn __grey_process_exit(code: i32) -> !;
-    unsafe { __grey_process_exit(code) }
+// Sleep the current process for ms
+fn process_sleep(ms) {
+  sleep(ms)
 }
 
-/// Abort the process immediately with SIGABRT.
-pub fn abort() -> ! {
-    extern fn __grey_process_abort() -> !;
-    unsafe { __grey_process_abort() }
-}
-
-/// Get the current process ID.
-pub fn id() -> u64 {
-    extern fn __grey_process_id() -> u64;
-    unsafe { __grey_process_id() }
-}
-
-/// Get the parent process ID.
-pub fn parent_id() -> u64 {
-    extern fn __grey_process_parent_id() -> u64;
-    unsafe { __grey_process_parent_id() }
+// Sleep for seconds
+fn process_sleep_secs(secs) {
+  sleep(mul(secs, 1000))
 }

@@ -1,232 +1,105 @@
-/// crypto::asymmetric — Asymmetric cryptography (RSA, Ed25519, ECDSA).
+// GreyStd Crypto - Asymmetric
+// Asymmetric (public-key) cryptography wrappers
 
-use crate::core::vec::Vec;
-use crate::core::string::String;
-use crate::crypto::{CryptoResult, CryptoError};
-use crate::crypto::hash::{HashAlgorithm, Digest};
-
-/// Signature verification error.
-pub enum SignatureError {
-    InvalidSignature,
-    InvalidKey,
-    UnsupportedAlgorithm,
+// Create an RSA key pair configuration
+fn RSAKeyPair_new(bits) {
+  {
+    _type: "RSAKeyPair",
+    algorithm: "RSA",
+    bits: bits,
+    public_key: nil,
+    private_key: nil,
+    generated: false
+  }
 }
 
-// ─── RSA ────────────────────────────────────────────────────
-
-/// An RSA key pair for signing and encryption.
-pub struct RsaKeyPair {
-    private_der: Vec<u8>,
-    public_der: Vec<u8>,
-    key_size: usize,
+// Generate an RSA key pair
+fn rsa_generate(bits) {
+  fn pair() { generate_keypair("RSA", bits) }
+  {
+    _type: "RSAKeyPair",
+    algorithm: "RSA",
+    bits: bits,
+    public_key: get(pair(), "public"),
+    private_key: get(pair(), "private"),
+    generated: true
+  }
 }
 
-impl RsaKeyPair {
-    /// Generate a new RSA key pair.
-    /// `key_size` is in bits (2048, 3072, 4096).
-    pub fn generate(key_size: usize) -> CryptoResult<RsaKeyPair> {
-        if key_size < 2048 {
-            return Err(CryptoError::InvalidKey(String::from("RSA key must be >= 2048 bits")));
-        }
-        extern fn __grey_rsa_generate(bits: usize) -> (Vec<u8>, Vec<u8>);
-        let (priv_der, pub_der) = unsafe { __grey_rsa_generate(key_size) };
-        Ok(RsaKeyPair { private_der: priv_der, public_der: pub_der, key_size })
-    }
-
-    /// Load from DER-encoded private key.
-    pub fn from_private_der(der: &[u8]) -> CryptoResult<RsaKeyPair> {
-        extern fn __grey_rsa_from_private_der(der: &[u8]) -> Option<(Vec<u8>, usize)>;
-        let (pub_der, key_size) = unsafe { __grey_rsa_from_private_der(der) }
-            .ok_or(CryptoError::InvalidKey(String::from("invalid RSA private key")))?;
-        Ok(RsaKeyPair { private_der: der.to_vec(), public_der: pub_der, key_size })
-    }
-
-    /// Load from PEM-encoded private key.
-    pub fn from_pem(pem: &str) -> CryptoResult<RsaKeyPair> {
-        let der = crate::net::tls::decode_pem(pem)
-            .ok_or(CryptoError::InvalidKey(String::from("invalid PEM")))?;
-        Self::from_private_der(&der)
-    }
-
-    /// Sign data using RSA-PSS with the given hash algorithm.
-    pub fn sign(&self, hash_alg: HashAlgorithm, data: &[u8]) -> CryptoResult<Vec<u8>> {
-        let digest = crate::crypto::hash::hash(hash_alg, data);
-        extern fn __grey_rsa_sign_pss(key: &[u8], digest: &[u8], hash: &str) -> Option<Vec<u8>>;
-        unsafe { __grey_rsa_sign_pss(&self.private_der, digest.as_bytes(), hash_alg.name()) }
-            .ok_or(CryptoError::Internal(String::from("RSA signing failed")))
-    }
-
-    /// Verify an RSA-PSS signature.
-    pub fn verify(&self, hash_alg: HashAlgorithm, data: &[u8], signature: &[u8]) -> CryptoResult<bool> {
-        let digest = crate::crypto::hash::hash(hash_alg, data);
-        extern fn __grey_rsa_verify_pss(pub_key: &[u8], digest: &[u8], sig: &[u8], hash: &str) -> bool;
-        Ok(unsafe { __grey_rsa_verify_pss(&self.public_der, digest.as_bytes(), signature, hash_alg.name()) })
-    }
-
-    /// Encrypt data using RSA-OAEP with SHA-256.
-    pub fn encrypt(&self, plaintext: &[u8]) -> CryptoResult<Vec<u8>> {
-        extern fn __grey_rsa_encrypt_oaep(pub_key: &[u8], pt: &[u8]) -> Option<Vec<u8>>;
-        unsafe { __grey_rsa_encrypt_oaep(&self.public_der, plaintext) }
-            .ok_or(CryptoError::Internal(String::from("RSA encryption failed")))
-    }
-
-    /// Decrypt data using RSA-OAEP with SHA-256.
-    pub fn decrypt(&self, ciphertext: &[u8]) -> CryptoResult<Vec<u8>> {
-        extern fn __grey_rsa_decrypt_oaep(priv_key: &[u8], ct: &[u8]) -> Option<Vec<u8>>;
-        unsafe { __grey_rsa_decrypt_oaep(&self.private_der, ciphertext) }
-            .ok_or(CryptoError::DecryptionFailed)
-    }
-
-    /// Get the public key in DER format.
-    pub fn public_key_der(&self) -> &[u8] { &self.public_der }
-
-    /// Get the private key in DER format.
-    pub fn private_key_der(&self) -> &[u8] { &self.private_der }
-
-    /// Key size in bits.
-    pub fn key_size(&self) -> usize { self.key_size }
+// Get public key from key pair
+fn keypair_public(kp) {
+  get(kp, "public_key")
 }
 
-// ─── Ed25519 ────────────────────────────────────────────────
-
-/// An Ed25519 key pair for digital signatures.
-pub struct Ed25519KeyPair {
-    private_key: [u8; 32],
-    public_key: [u8; 32],
+// Get private key from key pair
+fn keypair_private(kp) {
+  get(kp, "private_key")
 }
 
-impl Ed25519KeyPair {
-    /// Generate a new Ed25519 key pair.
-    pub fn generate() -> CryptoResult<Ed25519KeyPair> {
-        let mut seed = [0u8; 32];
-        crate::crypto::random::fill_random(&mut seed)?;
-        Self::from_seed(&seed)
-    }
-
-    /// Create from a 32-byte seed.
-    pub fn from_seed(seed: &[u8]) -> CryptoResult<Ed25519KeyPair> {
-        if seed.len() != 32 {
-            return Err(CryptoError::InvalidKeyLength { expected: 32, got: seed.len() });
-        }
-        extern fn __grey_ed25519_from_seed(seed: &[u8; 32]) -> [u8; 32];
-        let mut private_key = [0u8; 32];
-        private_key.copy_from_slice(seed);
-        let public_key = unsafe { __grey_ed25519_from_seed(&private_key) };
-        Ok(Ed25519KeyPair { private_key, public_key })
-    }
-
-    /// Sign a message.
-    pub fn sign(&self, message: &[u8]) -> Vec<u8> {
-        extern fn __grey_ed25519_sign(priv_key: &[u8; 32], pub_key: &[u8; 32], msg: &[u8]) -> [u8; 64];
-        let sig = unsafe { __grey_ed25519_sign(&self.private_key, &self.public_key, message) };
-        sig.to_vec()
-    }
-
-    /// Verify a signature.
-    pub fn verify(&self, message: &[u8], signature: &[u8]) -> bool {
-        if signature.len() != 64 { return false; }
-        Ed25519KeyPair::verify_with_public_key(&self.public_key, message, signature)
-    }
-
-    /// Verify a signature with just the public key.
-    pub fn verify_with_public_key(public_key: &[u8; 32], message: &[u8], signature: &[u8]) -> bool {
-        if signature.len() != 64 { return false; }
-        extern fn __grey_ed25519_verify(pub_key: &[u8; 32], msg: &[u8], sig: &[u8]) -> bool;
-        unsafe { __grey_ed25519_verify(public_key, message, signature) }
-    }
-
-    pub fn public_key(&self) -> &[u8; 32] { &self.public_key }
-    pub fn private_key(&self) -> &[u8; 32] { &self.private_key }
+// Encrypt with public key
+fn rsa_encrypt(plaintext, public_key) {
+  encrypt_asymmetric(plaintext, public_key, "RSA")
 }
 
-// ─── ECDSA ──────────────────────────────────────────────────
-
-/// Supported elliptic curves. 
-pub enum EcCurve {
-    P256,
-    P384,
-    Secp256k1,
+// Decrypt with private key
+fn rsa_decrypt(ciphertext, private_key) {
+  decrypt_asymmetric(ciphertext, private_key, "RSA")
 }
 
-impl EcCurve {
-    pub fn name(&self) -> &str {
-        match self {
-            EcCurve::P256 => "P-256",
-            EcCurve::P384 => "P-384",
-            EcCurve::Secp256k1 => "secp256k1",
-        }
-    }
-
-    /// Private key size in bytes.
-    pub fn key_size(&self) -> usize {
-        match self {
-            EcCurve::P256 | EcCurve::Secp256k1 => 32,
-            EcCurve::P384 => 48,
-        }
-    }
+// Sign data with private key
+fn rsa_sign(data, private_key) {
+  sign(data, private_key, "RSA-SHA256")
 }
 
-/// An ECDSA key pair.
-pub struct EcdsaKeyPair {
-    curve: EcCurve,
-    private_key: Vec<u8>,
-    public_key: Vec<u8>,
+// Verify signature with public key
+fn rsa_verify(data, signature, public_key) {
+  verify_signature(data, signature, public_key, "RSA-SHA256")
 }
 
-impl EcdsaKeyPair {
-    /// Generate a new ECDSA key pair on the given curve.
-    pub fn generate(curve: EcCurve) -> CryptoResult<EcdsaKeyPair> {
-        extern fn __grey_ecdsa_generate(curve: &str) -> Option<(Vec<u8>, Vec<u8>)>;
-        let (priv_key, pub_key) = unsafe { __grey_ecdsa_generate(curve.name()) }
-            .ok_or(CryptoError::UnsupportedAlgorithm(format!("ECDSA/{}", curve.name())))?;
-        Ok(EcdsaKeyPair { curve, private_key: priv_key, public_key: pub_key })
-    }
-
-    /// Sign a message (hashes with SHA-256 for P-256, SHA-384 for P-384).
-    pub fn sign(&self, message: &[u8]) -> CryptoResult<Vec<u8>> {
-        extern fn __grey_ecdsa_sign(curve: &str, priv_key: &[u8], msg: &[u8]) -> Option<Vec<u8>>;
-        unsafe { __grey_ecdsa_sign(self.curve.name(), &self.private_key, message) }
-            .ok_or(CryptoError::Internal(String::from("ECDSA signing failed")))
-    }
-
-    /// Verify a signature.
-    pub fn verify(&self, message: &[u8], signature: &[u8]) -> bool {
-        extern fn __grey_ecdsa_verify(curve: &str, pub_key: &[u8], msg: &[u8], sig: &[u8]) -> bool;
-        unsafe { __grey_ecdsa_verify(self.curve.name(), &self.public_key, message, signature) }
-    }
-
-    pub fn public_key(&self) -> &[u8] { &self.public_key }
-    pub fn curve(&self) -> &EcCurve { &self.curve }
+// Create an EC key pair (Elliptic Curve)
+fn ec_generate(curve) {
+  fn pair() { generate_keypair("EC", curve) }
+  {
+    _type: "ECKeyPair",
+    algorithm: "EC",
+    curve: curve,
+    public_key: get(pair(), "public"),
+    private_key: get(pair(), "private"),
+    generated: true
+  }
 }
 
-// ─── Diffie-Hellman Key Exchange ────────────────────────────
-
-/// X25519 Diffie-Hellman key exchange.
-pub struct X25519KeyPair {
-    private_key: [u8; 32],
-    public_key: [u8; 32],
+// ECDSA sign
+fn ecdsa_sign(data, private_key) {
+  sign(data, private_key, "ECDSA")
 }
 
-impl X25519KeyPair {
-    /// Generate a new X25519 key pair.
-    pub fn generate() -> CryptoResult<X25519KeyPair> {
-        let mut private_key = [0u8; 32];
-        crate::crypto::random::fill_random(&mut private_key)?;
-        // Clamp
-        private_key[0] &= 248;
-        private_key[31] &= 127;
-        private_key[31] |= 64;
+// ECDSA verify
+fn ecdsa_verify(data, signature, public_key) {
+  verify_signature(data, signature, public_key, "ECDSA")
+}
 
-        extern fn __grey_x25519_base_point_mul(scalar: &[u8; 32]) -> [u8; 32];
-        let public_key = unsafe { __grey_x25519_base_point_mul(&private_key) };
-        Ok(X25519KeyPair { private_key, public_key })
-    }
+// Export public key as PEM-like string
+fn key_to_pem(key, key_type) {
+  fn header() { concat_str("-----BEGIN ", upper(key_type), " KEY-----") }
+  fn footer() { concat_str("-----END ", upper(key_type), " KEY-----") }
+  concat_str(header(), "\n", to_string(key), "\n", footer())
+}
 
-    /// Perform the DH key exchange, returning the shared secret.
-    pub fn diffie_hellman(&self, their_public: &[u8; 32]) -> CryptoResult<[u8; 32]> {
-        extern fn __grey_x25519_scalar_mul(scalar: &[u8; 32], point: &[u8; 32]) -> [u8; 32];
-        Ok(unsafe { __grey_x25519_scalar_mul(&self.private_key, their_public) })
-    }
+// Create a simple digital envelope (encrypt data + key)
+fn seal(plaintext, recipient_public_key) {
+  fn session_key() { random_hex(32) }
+  fn encrypted_data() { encrypt(plaintext, session_key(), "AES-256-CBC") }
+  fn encrypted_key() { rsa_encrypt(session_key(), recipient_public_key) }
+  {
+    _type: "SealedEnvelope",
+    encrypted_data: encrypted_data(),
+    encrypted_key: encrypted_key()
+  }
+}
 
-    pub fn public_key(&self) -> &[u8; 32] { &self.public_key }
+// Open a sealed envelope
+fn unseal(envelope, private_key) {
+  fn session_key() { rsa_decrypt(get(envelope, "encrypted_key"), private_key) }
+  decrypt(get(envelope, "encrypted_data"), session_key(), "AES-256-CBC")
 }

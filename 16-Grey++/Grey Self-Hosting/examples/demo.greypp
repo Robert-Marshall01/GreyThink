@@ -1,0 +1,72 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// Grey++ Demo Source — Test Input for the Self-Hosting Compiler
+// ═══════════════════════════════════════════════════════════════════════════
+// This file contains various Grey++ constructs for testing the self-hosted
+// compiler front-end. Feed it to the self-host pipeline for validation.
+
+// Simple functions
+fn add(a, b) { a + b }
+fn multiply(x, y) { x * y }
+
+// Higher-order function
+fn apply_twice(f, x) {
+    f(f(x))
+}
+
+// Closures
+fn make_counter(start) {
+    fn(step) { start + step }
+}
+
+// Data structures
+fn make_user(name, age) {
+    { name: name, age: age, active: true }
+}
+
+// Array operations
+fn process_data() {
+    fn data() { [1, 2, 3, 4, 5] }
+    fn doubled() { map(data(), fn(x) { x * 2 }) }
+    fn filtered() { filter(doubled(), fn(x) { x > 4 }) }
+    filtered()
+}
+
+// Recursive function
+fn factorial(n) {
+    if_then(n <= 1, 1, fn() { n * factorial(n - 1) })
+}
+
+// String operations
+fn greet(name) {
+    str("Hello, ", name, "!")
+}
+
+// Pattern matching via match()
+fn describe(value) {
+    match(type_of(value),
+        "number", str("Number: ", value),
+        "string", str("String: ", value),
+        "boolean", str("Bool: ", value),
+        "Unknown type"
+    )
+}
+
+// Query expression
+createTable("products", [
+    { id: 1, name: "Widget", price: 29 },
+    { id: 2, name: "Gadget", price: 49 },
+    { id: 3, name: "Doohickey", price: 19 }
+])
+
+fn expensive_products() {
+    query { select name, price from products where price > 20 }
+}
+
+// Main execution
+print(add(10, 20))
+print(factorial(6))
+print(greet("Grey++"))
+print(process_data())
+forEach(expensive_products(), fn(p) {
+    print(str(get(p, "name"), ": $", get(p, "price")))
+})

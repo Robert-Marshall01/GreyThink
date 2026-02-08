@@ -1,92 +1,66 @@
-/// crypto::hmac — HMAC (Hash-based Message Authentication Code).
+// GreyStd Crypto - HMAC
+// Hash-based Message Authentication Code
 
-use crate::core::vec::Vec;
-use crate::crypto::hash::{HashAlgorithm, Hasher, Digest, Sha256Hasher};
-use crate::crypto::CryptoResult;
-
-/// HMAC computation using a given hash algorithm.
-pub struct Hmac {
-    algorithm: HashAlgorithm,
-    key: Vec<u8>,
+// Compute HMAC
+fn hmac(data, key, algorithm) {
+  hmac_sign(data, key, algorithm)
 }
 
-impl Hmac {
-    /// Create a new HMAC instance with the given algorithm and key.
-    pub fn new(algorithm: HashAlgorithm, key: &[u8]) -> Hmac {
-        let block_size = algorithm.block_size();
-        let normalized_key = if key.len() > block_size {
-            crate::crypto::hash::hash(algorithm, key).as_bytes().to_vec()
-        } else {
-            let mut k = key.to_vec();
-            k.resize(block_size, 0x00);
-            k
-        };
-        Hmac { algorithm, key: normalized_key }
-    }
-
-    /// Create HMAC-SHA256.
-    pub fn sha256(key: &[u8]) -> Hmac {
-        Hmac::new(HashAlgorithm::Sha256, key)
-    }
-
-    /// Create HMAC-SHA512.
-    pub fn sha512(key: &[u8]) -> Hmac {
-        Hmac::new(HashAlgorithm::Sha512, key)
-    }
-
-    /// Compute the HMAC of the given data.
-    pub fn sign(&self, data: &[u8]) -> Digest {
-        let block_size = self.algorithm.block_size();
-
-        // Inner padding
-        let mut ipad = Vec::with_capacity(block_size);
-        for i in 0..block_size {
-            ipad.push(self.key[i] ^ 0x36);
-        }
-
-        // Outer padding
-        let mut opad = Vec::with_capacity(block_size);
-        for i in 0..block_size {
-            opad.push(self.key[i] ^ 0x5C);
-        }
-
-        // Inner hash: H(ipad || message)
-        let mut inner = Vec::new();
-        inner.extend_from_slice(&ipad);
-        inner.extend_from_slice(data);
-        let inner_hash = crate::crypto::hash::hash(self.algorithm, &inner);
-
-        // Outer hash: H(opad || inner_hash)
-        let mut outer = Vec::new();
-        outer.extend_from_slice(&opad);
-        outer.extend_from_slice(inner_hash.as_bytes());
-        crate::crypto::hash::hash(self.algorithm, &outer)
-    }
-
-    /// Verify an HMAC tag against expected data.
-    pub fn verify(&self, data: &[u8], expected: &Digest) -> bool {
-        let computed = self.sign(data);
-        computed.ct_eq(expected)
-    }
+// Compute HMAC-SHA256
+fn hmac_sha256(data, key) {
+  hmac(data, key, "sha256")
 }
 
-/// Convenience: compute HMAC-SHA256 in one call.
-pub fn hmac_sha256(key: &[u8], data: &[u8]) -> Digest {
-    Hmac::sha256(key).sign(data)
+// Compute HMAC-SHA512
+fn hmac_sha512(data, key) {
+  hmac(data, key, "sha512")
 }
 
-/// Convenience: compute HMAC-SHA512 in one call.
-pub fn hmac_sha512(key: &[u8], data: &[u8]) -> Digest {
-    Hmac::sha512(key).sign(data)
+// Verify HMAC
+fn hmac_verify(data, key, expected, algorithm) {
+  fn computed() { hmac(data, key, algorithm) }
+  eq(computed(), expected)
 }
 
-/// Verify HMAC-SHA256 in one call. Returns true if valid.
-pub fn verify_hmac_sha256(key: &[u8], data: &[u8], expected: &[u8]) -> bool {
-    let computed = hmac_sha256(key, data);
-    if computed.len() != expected.len() { return false; }
-    let mut diff: u8 = 0;
-    for i in 0..computed.len() {
-        diff |= computed.as_bytes()[i] ^ expected[i];
-    }
-    diff == 0
+// Verify HMAC-SHA256
+fn hmac_verify_sha256(data, key, expected) {
+  hmac_verify(data, key, expected, "sha256")
+}
+
+// Create an HMAC object for incremental computation
+fn HMAC_new(key, algorithm) {
+  {
+    _type: "HMAC",
+    key: key,
+    algorithm: algorithm,
+    parts: []
+  }
+}
+
+// Feed data into HMAC
+fn hmac_update(h, data) {
+  merge(h, { parts: append(get(h, "parts"), data) })
+}
+
+// Finalize HMAC computation
+fn hmac_finish(h) {
+  fn combined() { join(get(h, "parts"), "") }
+  {
+    mac: hmac(combined(), get(h, "key"), get(h, "algorithm")),
+    algorithm: get(h, "algorithm")
+  }
+}
+
+// Create a message with HMAC tag
+fn hmac_tag(message, key) {
+  {
+    _type: "TaggedMessage",
+    message: message,
+    tag: hmac_sha256(message, key)
+  }
+}
+
+// Verify a tagged message
+fn hmac_tag_verify(tagged, key) {
+  hmac_verify_sha256(get(tagged, "message"), key, get(tagged, "tag"))
 }

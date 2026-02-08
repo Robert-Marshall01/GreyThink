@@ -1,278 +1,183 @@
-/// test::runner — Test runner with parallel execution, filtering, and reporting.
+// GreyStd Test - Runner
+// Test runner and suite management
 
-use crate::core::string::String;
-use crate::core::vec::Vec;
-use crate::core::option::Option;
-use crate::time::duration::Duration;
-use crate::time::instant::Instant;
-use crate::test::unit::{TestCase, TestResult, TestStatus, TestSuite};
-
-/// Filter for selecting which tests to run.
-pub struct TestFilter {
-    /// Name patterns to include (substring match).
-    pub include: Vec<String>,
-    /// Name patterns to exclude.
-    pub exclude: Vec<String>,
-    /// Tags to include.
-    pub tags: Vec<String>,
-    /// Whether to run ignored tests.
-    pub run_ignored: bool,
+// Create a test case
+fn TestCase_new(name, test_fn) {
+  {
+    _type: "TestCase",
+    name: name,
+    test_fn: test_fn,
+    tags: [],
+    skip: false
+  }
 }
 
-impl TestFilter {
-    pub fn all() -> TestFilter {
-        TestFilter { include: Vec::new(), exclude: Vec::new(), tags: Vec::new(), run_ignored: false }
-    }
-
-    pub fn name(pattern: &str) -> TestFilter {
-        TestFilter { include: vec![String::from(pattern)], exclude: Vec::new(), tags: Vec::new(), run_ignored: false }
-    }
-
-    pub fn matches(&self, test: &TestCase) -> bool {
-        // Check excludes first
-        for ex in &self.exclude {
-            if test.name.contains(ex.as_str()) { return false; }
-        }
-        // Check includes
-        if !self.include.is_empty() {
-            let included = self.include.iter().any(|p| test.name.contains(p.as_str()));
-            if !included { return false; }
-        }
-        // Check tags
-        if !self.tags.is_empty() {
-            let has_tag = self.tags.iter().any(|t| test.tags.contains(t));
-            if !has_tag { return false; }
-        }
-        // Check ignored
-        if test.ignored && !self.run_ignored { return false; }
-        true
-    }
+// Create a skipped test case
+fn TestCase_skip(name, reason) {
+  {
+    _type: "TestCase",
+    name: name,
+    test_fn: fn() { nil },
+    tags: [],
+    skip: true,
+    skip_reason: reason
+  }
 }
 
-/// Configuration for the test runner.
-pub struct TestRunnerConfig {
-    /// Number of parallel threads (0 = auto-detect).
-    pub parallelism: usize,
-    /// Default timeout per test.
-    pub timeout: Duration,
-    /// Whether to stop on first failure.
-    pub fail_fast: bool,
-    /// Whether to capture stdout/stderr.
-    pub capture_output: bool,
-    /// Whether to show timing for each test.
-    pub show_timing: bool,
-    /// Test filter.
-    pub filter: TestFilter,
-    /// Output format.
-    pub format: OutputFormat,
+// Tag a test case
+fn test_tag(tc, tag) {
+  merge(tc, { tags: append(get(tc, "tags"), tag) })
 }
 
-pub enum OutputFormat {
-    /// Human-readable pretty output.
-    Pretty,
-    /// TAP (Test Anything Protocol).
-    Tap,
-    /// JUnit XML.
-    JUnit,
-    /// JSON.
-    Json,
-    /// Minimal: only failures.
-    Quiet,
+// Create a test suite
+fn TestSuite_new(name) {
+  {
+    _type: "TestSuite",
+    name: name,
+    tests: [],
+    before_each: nil,
+    after_each: nil,
+    before_all: nil,
+    after_all: nil
+  }
 }
 
-impl TestRunnerConfig {
-    pub fn default() -> TestRunnerConfig {
-        TestRunnerConfig {
-            parallelism: 0,
-            timeout: Duration::from_secs(30),
-            fail_fast: false,
-            capture_output: true,
-            show_timing: true,
-            filter: TestFilter::all(),
-            format: OutputFormat::Pretty,
-        }
-    }
+// Add a test to the suite
+fn suite_add(suite, test_case) {
+  merge(suite, { tests: append(get(suite, "tests"), test_case) })
 }
 
-/// Results from a test run.
-pub struct RunResult {
-    pub results: Vec<TestResult>,
-    pub total_duration: Duration,
+// Add a test by name and function
+fn suite_test(suite, name, test_fn) {
+  suite_add(suite, TestCase_new(name, test_fn))
 }
 
-impl RunResult {
-    pub fn passed(&self) -> usize { self.results.iter().filter(|r| r.status.is_pass()).count() }
-    pub fn failed(&self) -> usize { self.results.iter().filter(|r| r.status.is_fail()).count() }
-    pub fn skipped(&self) -> usize { self.results.iter().filter(|r| r.status.is_skip()).count() }
-    pub fn total(&self) -> usize { self.results.len() }
-    pub fn success(&self) -> bool { self.failed() == 0 }
+// Set before-each hook
+fn suite_before_each(suite, f) {
+  merge(suite, { before_each: f })
+}
 
-    /// Format a summary line.
-    pub fn summary(&self) -> String {
-        format!(
-            "test result: {}. {} passed; {} failed; {} skipped; finished in {:.3}s",
-            if self.success() { "ok" } else { "FAILED" },
-            self.passed(), self.failed(), self.skipped(),
-            self.total_duration.as_secs_f64()
+// Set after-each hook
+fn suite_after_each(suite, f) {
+  merge(suite, { after_each: f })
+}
+
+// Set before-all hook
+fn suite_before_all(suite, f) {
+  merge(suite, { before_all: f })
+}
+
+// Set after-all hook
+fn suite_after_all(suite, f) {
+  merge(suite, { after_all: f })
+}
+
+// Run a single test case
+fn run_test(tc) {
+  if_then(get(tc, "skip"),
+    fn() { { name: get(tc, "name"), status: "skipped", reason: get(tc, "skip_reason") } },
+    fn() {
+      fn start() { timestamp() }
+      fn result() {
+        try_catch(
+          fn() {
+            fn assertions() { get(tc, "test_fn")() }
+            // test_fn should return array of TestAssert or single TestAssert
+            if_then(is_array(assertions()),
+              fn() {
+                fn failures() { filter(assertions(), fn(a) { not(get(a, "passed")) }) }
+                if_then(eq(length(failures()), 0),
+                  fn() { { status: "passed", assertions: length(assertions()) } },
+                  fn() { { status: "failed", failures: failures(), assertions: length(assertions()) } }
+                )
+              },
+              fn() {
+                if_then(and(is_object(assertions()), eq(get(assertions(), "_type"), "TestAssert")),
+                  fn() {
+                    if_then(get(assertions(), "passed"),
+                      fn() { { status: "passed", assertions: 1 } },
+                      fn() { { status: "failed", failures: [assertions()], assertions: 1 } }
+                    )
+                  },
+                  fn() { { status: "passed", assertions: 0 } }
+                )
+              }
+            )
+          },
+          fn(err) { { status: "error", error: to_string(err) } },
+          fn(val) { val }
         )
+      }
+      fn elapsed() { sub(timestamp(), start()) }
+      merge(result(), { name: get(tc, "name"), elapsed_ms: elapsed() })
     }
-
-    /// Get all failures.
-    pub fn failures(&self) -> Vec<&TestResult> {
-        self.results.iter().filter(|r| r.status.is_fail()).collect()
-    }
+  )
 }
 
-/// The test runner.
-pub struct TestRunner {
-    config: TestRunnerConfig,
-    tests: Vec<TestCase>,
-    suites: Vec<TestSuite>,
+// Run an entire test suite
+fn run_suite(suite) {
+  // Run before_all
+  when(not(eq(get(suite, "before_all"), nil)), fn() { get(suite, "before_all")() })
+
+  fn results() {
+    map(get(suite, "tests"), fn(tc) {
+      // Run before_each
+      when(not(eq(get(suite, "before_each"), nil)), fn() { get(suite, "before_each")() })
+      fn result() { run_test(tc) }
+      // Run after_each
+      when(not(eq(get(suite, "after_each"), nil)), fn() { get(suite, "after_each")() })
+      result()
+    })
+  }
+
+  // Run after_all
+  when(not(eq(get(suite, "after_all"), nil)), fn() { get(suite, "after_all")() })
+
+  fn passed() { filter(results(), fn(r) { eq(get(r, "status"), "passed") }) }
+  fn failed() { filter(results(), fn(r) { eq(get(r, "status"), "failed") }) }
+  fn errors() { filter(results(), fn(r) { eq(get(r, "status"), "error") }) }
+  fn skipped() { filter(results(), fn(r) { eq(get(r, "status"), "skipped") }) }
+
+  {
+    _type: "SuiteResult",
+    suite: get(suite, "name"),
+    total: length(results()),
+    passed: length(passed()),
+    failed: length(failed()),
+    errors: length(errors()),
+    skipped: length(skipped()),
+    results: results(),
+    success: and(eq(length(failed()), 0), eq(length(errors()), 0))
+  }
 }
 
-impl TestRunner {
-    pub fn new() -> TestRunner {
-        TestRunner {
-            config: TestRunnerConfig::default(),
-            tests: Vec::new(),
-            suites: Vec::new(),
-        }
+// Print suite results
+fn print_suite_results(sr) {
+  println(concat_str("\n=== ", get(sr, "suite"), " ==="))
+  forEach(get(sr, "results"), fn(r) {
+    fn status_icon() {
+      cond(
+        eq(get(r, "status"), "passed"), "[PASS]",
+        eq(get(r, "status"), "failed"), "[FAIL]",
+        eq(get(r, "status"), "error"), "[ERR ]",
+        "[SKIP]"
+      )
     }
-
-    pub fn with_config(config: TestRunnerConfig) -> TestRunner {
-        TestRunner { config, tests: Vec::new(), suites: Vec::new() }
-    }
-
-    /// Add a single test case.
-    pub fn add<F: FnOnce() -> Result<(), String> + Send + 'static>(mut self, name: &str, func: F) -> TestRunner {
-        self.tests.push(TestCase::new(name, func));
-        self
-    }
-
-    /// Add a test case.
-    pub fn add_test(mut self, test: TestCase) -> TestRunner {
-        self.tests.push(test);
-        self
-    }
-
-    /// Add a test suite.
-    pub fn add_suite(mut self, suite: TestSuite) -> TestRunner {
-        self.suites.push(suite);
-        self
-    }
-
-    /// Run all tests.
-    pub fn run(mut self) -> RunResult {
-        let start = Instant::now();
-
-        // Flatten suites into individual tests
-        for suite in self.suites {
-            for test in suite.tests {
-                self.tests.push(test);
-            }
-        }
-
-        // Apply filter
-        let tests: Vec<TestCase> = self.tests.into_iter()
-            .filter(|t| self.config.filter.matches(t))
-            .collect();
-
-        let total = tests.len();
-
-        // Print header
-        match &self.config.format {
-            OutputFormat::Pretty => {
-                eprintln!("\nrunning {} test{}", total, if total == 1 { "" } else { "s" });
-            }
-            OutputFormat::Tap => {
-                println!("TAP version 14");
-                println!("1..{}", total);
-            }
-            _ => {}
-        }
-
-        // Run tests
-        let mut results = Vec::with_capacity(total);
-        for (i, test) in tests.into_iter().enumerate() {
-            let name = test.name.clone();
-            let result = test.run();
-
-            // Print progress
-            match &self.config.format {
-                OutputFormat::Pretty => {
-                    let status_str = match &result.status {
-                        TestStatus::Passed => "ok",
-                        TestStatus::Failed(_) => "FAILED",
-                        TestStatus::Skipped(_) => "skipped",
-                        TestStatus::Panicked(_) => "PANICKED",
-                        TestStatus::TimedOut => "TIMED OUT",
-                    };
-                    let timing = if self.config.show_timing {
-                        format!(" ({:.3}s)", result.duration.as_secs_f64())
-                    } else { String::new() };
-                    eprintln!("test {} ... {}{}", name, status_str, timing);
-                }
-                OutputFormat::Tap => {
-                    let ok = if result.status.is_pass() { "ok" } else { "not ok" };
-                    println!("{} {} - {}", ok, i + 1, name);
-                }
-                OutputFormat::Quiet => {
-                    if result.status.is_fail() {
-                        eprintln!("FAIL: {}", name);
-                    }
-                }
-                _ => {}
-            }
-
-            let failed = result.status.is_fail();
-            results.push(result);
-
-            if failed && self.config.fail_fast {
-                break;
-            }
-        }
-
-        let total_duration = start.elapsed();
-        let run_result = RunResult { results, total_duration };
-
-        // Print summary
-        match &self.config.format {
-            OutputFormat::Pretty => {
-                // Print failure details
-                let failures = run_result.failures();
-                if !failures.is_empty() {
-                    eprintln!("\nfailures:");
-                    for f in &failures {
-                        let msg = match &f.status {
-                            TestStatus::Failed(m) => m.as_str(),
-                            TestStatus::Panicked(m) => m.as_str(),
-                            TestStatus::TimedOut => "timed out",
-                            _ => "",
-                        };
-                        eprintln!("  {}: {}", f.name, msg);
-                    }
-                    eprintln!();
-                }
-                eprintln!("{}", run_result.summary());
-            }
-            _ => {}
-        }
-
-        run_result
-    }
-
-    /// Run and exit with appropriate code.
-    pub fn run_and_exit(self) -> ! {
-        let result = self.run();
-        crate::sys::process::exit(if result.success() { 0 } else { 1 })
-    }
-}
-
-/// Convenience: create test runner, add tests, and run.
-pub fn run_tests(tests: Vec<TestCase>) -> RunResult {
-    let mut runner = TestRunner::new();
-    for t in tests {
-        runner = runner.add_test(t);
-    }
-    runner.run()
+    println(concat_str("  ", status_icon(), " ", get(r, "name")))
+    when(eq(get(r, "status"), "failed"), fn() {
+      forEach(get(r, "failures"), fn(f) {
+        println(concat_str("        ", get(f, "description"), ": ", get(f, "details")))
+      })
+    })
+    when(eq(get(r, "status"), "error"), fn() {
+      println(concat_str("        Error: ", get(r, "error")))
+    })
+  })
+  println(concat_str("\n  Total: ", to_string(get(sr, "total")),
+    " | Passed: ", to_string(get(sr, "passed")),
+    " | Failed: ", to_string(get(sr, "failed")),
+    " | Errors: ", to_string(get(sr, "errors")),
+    " | Skipped: ", to_string(get(sr, "skipped"))
+  ))
+  println(if_then(get(sr, "success"), fn() { "  Result: ALL PASSED" }, fn() { "  Result: SOME FAILURES" }))
 }

@@ -1,608 +1,246 @@
-/// core::iter — Iterator traits, adapters, and generators.
-///
-/// The iterator protocol is the backbone of Grey++'s collection processing.
-/// Iterators are lazy, composable, and zero-cost.
+// core::iter — Iterator protocol and adapters
+//
+// In Grey++, iterators are objects with a next() function that
+// returns either Some(value) or None(). This module provides
+// iterator construction, lazy adapters, and eager consumers.
+//
+// Iterator protocol:
+//   { _type: "Iterator", next: fn() { Some(value) | None() } }
 
-use core::PhantomData;
+// ── Iterator Construction ───────────────────────────────────────
 
-/// Trait for types with a multiplicative identity (1).
-pub trait One {
-    fn one() -> Self;
-}
-
-impl One for i8    { fn one() -> i8    { 1 } }
-impl One for i16   { fn one() -> i16   { 1 } }
-impl One for i32   { fn one() -> i32   { 1 } }
-impl One for i64   { fn one() -> i64   { 1 } }
-impl One for i128  { fn one() -> i128  { 1 } }
-impl One for u8    { fn one() -> u8    { 1 } }
-impl One for u16   { fn one() -> u16   { 1 } }
-impl One for u32   { fn one() -> u32   { 1 } }
-impl One for u64   { fn one() -> u64   { 1 } }
-impl One for u128  { fn one() -> u128  { 1 } }
-impl One for f32   { fn one() -> f32   { 1.0 } }
-impl One for f64   { fn one() -> f64   { 1.0 } }
-
-// ─── Core Traits ────────────────────────────────────────────────────────────
-
-/// The core iterator trait. Any type implementing `next()` is an iterator.
-pub trait Iterator {
-    type Item;
-
-    /// Returns the next element, or None if exhausted.
-    fn next(mut self) -> Option<Self::Item>;
-
-    // ── Size Hints ──────────────────────────────────────────────────
-
-    /// Returns a lower and optional upper bound on remaining elements.
-    fn size_hint(self) -> (usize, Option<usize>) {
-        (0, None)
-    }
-
-    // ── Adapters (lazy) ─────────────────────────────────────────────
-
-    /// Maps each element through a function.
-    fn map<B, F: Fn(Self::Item) -> B>(self, f: F) -> Map<Self, F> {
-        Map { iter: self, f }
-    }
-
-    /// Filters elements by a predicate.
-    fn filter<F: Fn(&Self::Item) -> bool>(self, predicate: F) -> Filter<Self, F> {
-        Filter { iter: self, predicate }
-    }
-
-    /// Maps and flattens the result.
-    fn flat_map<B, I: IntoIterator<Item = B>, F: Fn(Self::Item) -> I>(self, f: F) -> FlatMap<Self, F, I::IntoIter> {
-        FlatMap { iter: self, f, inner: None }
-    }
-
-    /// Flattens nested iterators.
-    fn flatten(self) -> Flatten<Self> where Self::Item: IntoIterator {
-        Flatten { outer: self, inner: None }
-    }
-
-    /// Takes the first `n` elements.
-    fn take(self, n: usize) -> Take<Self> {
-        Take { iter: self, remaining: n }
-    }
-
-    /// Skips the first `n` elements.
-    fn skip(self, n: usize) -> Skip<Self> {
-        Skip { iter: self, remaining: n }
-    }
-
-    /// Takes elements while the predicate holds.
-    fn take_while<F: Fn(&Self::Item) -> bool>(self, predicate: F) -> TakeWhile<Self, F> {
-        TakeWhile { iter: self, predicate, done: false }
-    }
-
-    /// Skips elements while the predicate holds.
-    fn skip_while<F: Fn(&Self::Item) -> bool>(self, predicate: F) -> SkipWhile<Self, F> {
-        SkipWhile { iter: self, predicate, skipping: true }
-    }
-
-    /// Chains two iterators together.
-    fn chain<I: Iterator<Item = Self::Item>>(self, other: I) -> Chain<Self, I> {
-        Chain { first: self, second: other, first_done: false }
-    }
-
-    /// Zips this iterator with another.
-    fn zip<I: Iterator>(self, other: I) -> Zip<Self, I> {
-        Zip { a: self, b: other }
-    }
-
-    /// Attaches an index to each element.
-    fn enumerate(self) -> Enumerate<Self> {
-        Enumerate { iter: self, index: 0 }
-    }
-
-    /// Peeks at the next element without consuming it.
-    fn peekable(self) -> Peekable<Self> {
-        Peekable { iter: self, peeked: None }
-    }
-
-    /// Inspects each element as it passes through.
-    fn inspect<F: Fn(&Self::Item)>(self, f: F) -> Inspect<Self, F> {
-        Inspect { iter: self, f }
-    }
-
-    /// Steps through elements with a stride.
-    fn step_by(self, step: usize) -> StepBy<Self> {
-        assert(step > 0, "step_by: step must be > 0");
-        StepBy { iter: self, step, first: true }
-    }
-
-    /// Interleaves elements with a separator.
-    fn intersperse(self, separator: Self::Item) -> Intersperse<Self> where Self::Item: Clone {
-        Intersperse { iter: self, separator, needs_sep: false }
-    }
-
-    /// Removes consecutive duplicates.
-    fn dedup(self) -> Dedup<Self> where Self::Item: Eq {
-        Dedup { iter: self, last: None }
-    }
-
-    // ── Consumers (eager) ───────────────────────────────────────────
-
-    /// Collects all elements into a Vec.
-    fn collect(self) -> Vec<Self::Item> {
-        let mut result = Vec::new();
-        while let Some(item) = self.next() {
-            result.push(item);
+// Creates an iterator from an array.
+fn iter_from(arr) {
+    fn state() { { pos: 0 } }
+    {
+        _type: "Iterator",
+        next: fn() {
+            fn pos() { get(state(), "pos") }
+            if_then(pos() >= len(arr), fn() { None() },
+                fn() {
+                    fn val() { get(arr, pos()) }
+                    set(state(), "pos", pos() + 1)
+                    Some(val())
+                })
         }
-        result
-    }
-
-    /// Folds all elements into a single value.
-    fn fold<A, F: Fn(A, Self::Item) -> A>(mut self, init: A, f: F) -> A {
-        let mut acc = init;
-        while let Some(item) = self.next() {
-            acc = f(acc, item);
-        }
-        acc
-    }
-
-    /// Reduces elements using a binary operation. Returns None if empty.
-    fn reduce<F: Fn(Self::Item, Self::Item) -> Self::Item>(mut self, f: F) -> Option<Self::Item> {
-        let first = self.next()?;
-        Some(self.fold(first, f))
-    }
-
-    /// Applies a function to each element for side effects.
-    fn for_each<F: Fn(Self::Item)>(mut self, f: F) {
-        while let Some(item) = self.next() {
-            f(item);
-        }
-    }
-
-    /// Returns true if any element satisfies the predicate.
-    fn any<F: Fn(&Self::Item) -> bool>(mut self, predicate: F) -> bool {
-        while let Some(item) = self.next() {
-            if predicate(&item) { return true; }
-        }
-        false
-    }
-
-    /// Returns true if all elements satisfy the predicate.
-    fn all<F: Fn(&Self::Item) -> bool>(mut self, predicate: F) -> bool {
-        while let Some(item) = self.next() {
-            if !predicate(&item) { return false; }
-        }
-        true
-    }
-
-    /// Finds the first element satisfying the predicate.
-    fn find<F: Fn(&Self::Item) -> bool>(mut self, predicate: F) -> Option<Self::Item> {
-        while let Some(item) = self.next() {
-            if predicate(&item) { return Some(item); }
-        }
-        None
-    }
-
-    /// Finds the position of the first element satisfying the predicate.
-    fn position<F: Fn(&Self::Item) -> bool>(mut self, predicate: F) -> Option<usize> {
-        let mut i = 0;
-        while let Some(item) = self.next() {
-            if predicate(&item) { return Some(i); }
-            i += 1;
-        }
-        None
-    }
-
-    /// Counts the number of elements.
-    fn count(mut self) -> usize {
-        let mut n = 0;
-        while self.next().is_some() { n += 1; }
-        n
-    }
-
-    /// Returns the last element.
-    fn last(mut self) -> Option<Self::Item> {
-        let mut last = None;
-        while let Some(item) = self.next() {
-            last = Some(item);
-        }
-        last
-    }
-
-    /// Returns the nth element (0-indexed).
-    fn nth(mut self, n: usize) -> Option<Self::Item> {
-        for _ in 0..n { self.next(); }
-        self.next()
-    }
-
-    /// Returns the minimum element.
-    fn min(self) -> Option<Self::Item> where Self::Item: Ord {
-        self.reduce(|a, b| if a <= b { a } else { b })
-    }
-
-    /// Returns the maximum element.
-    fn max(self) -> Option<Self::Item> where Self::Item: Ord {
-        self.reduce(|a, b| if a >= b { a } else { b })
-    }
-
-    /// Returns the minimum element by a key function.
-    fn min_by_key<K: Ord, F: Fn(&Self::Item) -> K>(self, key: F) -> Option<Self::Item> {
-        self.reduce(|a, b| if key(&a) <= key(&b) { a } else { b })
-    }
-
-    /// Returns the maximum element by a key function.
-    fn max_by_key<K: Ord, F: Fn(&Self::Item) -> K>(self, key: F) -> Option<Self::Item> {
-        self.reduce(|a, b| if key(&a) >= key(&b) { a } else { b })
-    }
-
-    /// Sums all elements.
-    fn sum(self) -> Self::Item where Self::Item: Add<Output = Self::Item> + Default {
-        self.fold(Self::Item::default(), |acc, x| acc + x)
-    }
-
-    /// Multiplies all elements.
-    fn product(self) -> Self::Item where Self::Item: Mul<Output = Self::Item> + One {
-        self.fold(Self::Item::one(), |acc, x| acc * x)
-    }
-
-    /// Partitions elements into two collections.
-    fn partition<F: Fn(&Self::Item) -> bool>(mut self, predicate: F) -> (Vec<Self::Item>, Vec<Self::Item>) {
-        let mut yes = Vec::new();
-        let mut no = Vec::new();
-        while let Some(item) = self.next() {
-            if predicate(&item) { yes.push(item); }
-            else { no.push(item); }
-        }
-        (yes, no)
-    }
-
-    /// Unzips an iterator of pairs into two Vecs.
-    fn unzip<A, B>(self) -> (Vec<A>, Vec<B>) where Self: Iterator<Item = (A, B)> {
-        let mut as_ = Vec::new();
-        let mut bs = Vec::new();
-        for (a, b) in self {
-            as_.push(a);
-            bs.push(b);
-        }
-        (as_, bs)
     }
 }
 
-/// Trait for types that can produce an iterator.
-pub trait IntoIterator {
-    type Item;
-    type IntoIter: Iterator<Item = Self::Item>;
-
-    fn into_iter(self) -> Self::IntoIter;
+// Creates an empty iterator.
+fn iter_empty() {
+    { _type: "Iterator", next: fn() { None() } }
 }
 
-// ─── Adapter Structs ────────────────────────────────────────────────────────
-
-pub struct Map<I, F> { iter: I, f: F }
-impl<B, I: Iterator, F: Fn(I::Item) -> B> Iterator for Map<I, F> {
-    type Item = B;
-    fn next(mut self) -> Option<B> { self.iter.next().map(|x| (self.f)(x)) }
-}
-
-pub struct Filter<I, F> { iter: I, predicate: F }
-impl<I: Iterator, F: Fn(&I::Item) -> bool> Iterator for Filter<I, F> {
-    type Item = I::Item;
-    fn next(mut self) -> Option<I::Item> {
-        while let Some(item) = self.iter.next() {
-            if (self.predicate)(&item) { return Some(item); }
+// Creates an iterator that yields a single value.
+fn iter_once(value) {
+    fn done() { { yielded: false } }
+    {
+        _type: "Iterator",
+        next: fn() {
+            if_then(get(done(), "yielded"), fn() { None() },
+                fn() {
+                    set(done(), "yielded", true)
+                    Some(value)
+                })
         }
-        None
     }
 }
 
-pub struct FlatMap<I, F, Inner> { iter: I, f: F, inner: Option<Inner> }
-impl<B, I: Iterator, Inner: Iterator<Item = B>, F: Fn(I::Item) -> Inner> Iterator for FlatMap<I, F, Inner> {
-    type Item = B;
-    fn next(mut self) -> Option<B> {
-        loop {
-            if let Some(ref mut inner) = self.inner {
-                if let Some(item) = inner.next() { return Some(item); }
+// Creates an iterator from a range [start, end).
+fn iter_range(start, end) { iter_from(range(start, end)) }
+
+// Creates an infinite iterator from a function.
+fn iter_from_fn(f) {
+    { _type: "Iterator", next: f }
+}
+
+// Creates an iterator of successive values: first, f(first), f(f(first)), ...
+fn iter_successors(first, f) {
+    fn state() { { current: first, started: false } }
+    {
+        _type: "Iterator",
+        next: fn() {
+            if_then(not(get(state(), "started")),
+                fn() {
+                    set(state(), "started", true)
+                    Some(first)
+                },
+                fn() {
+                    fn next_val() { f(get(state(), "current")) }
+                    if_then(is_nil(next_val()), fn() { None() },
+                        fn() {
+                            set(state(), "current", next_val())
+                            Some(next_val())
+                        })
+                })
+        }
+    }
+}
+
+// ── Eager Consumers ─────────────────────────────────────────────
+// These operate on arrays directly (Grey++ arrays are the primary
+// iterable type). Use the built-in functions for lazy evaluation.
+
+// Collects an iterator into an array.
+// Since Grey++ iterators are complex, prefer using arrays directly.
+fn iter_collect(arr) { map(arr, fn(x) { x }) }
+
+// Folds array elements into a single value.
+fn iter_fold(arr, init, f) { reduce(arr, f, init) }
+
+// Reduces without initial value.
+fn iter_reduce_no_init(arr, f) {
+    if_then(len(arr) == 0, fn() { nil },
+        fn() { reduce(tail(arr), f, head(arr)) })
+}
+
+// Counts elements.
+fn iter_count(arr) { len(arr) }
+
+// Returns the last element.
+fn iter_last(arr) { last(arr) }
+
+// Returns the first matching element.
+fn iter_find(arr, predicate) { find(arr, predicate) }
+
+// Returns the index of the first match.
+fn iter_position(arr, predicate) {
+    fn search(i) {
+        if_then(i >= len(arr), fn() { -1 },
+            fn() { if_then(predicate(get(arr, i)), fn() { i },
+                fn() { search(i + 1) }) })
+    }
+    search(0)
+}
+
+// Returns true if any element matches.
+fn iter_any(arr, predicate) { some(arr, predicate) }
+
+// Returns true if all elements match.
+fn iter_all(arr, predicate) { every(arr, predicate) }
+
+// Returns the sum of numeric elements.
+fn iter_sum(arr) { sum(arr) }
+
+// Returns the product of numeric elements.
+fn iter_product(arr) { reduce(arr, fn(acc, x) { acc * x }, 1) }
+
+// Returns the minimum.
+fn iter_min(arr) {
+    if_then(len(arr) == 0, fn() { nil },
+        fn() { reduce(tail(arr), fn(a, b) { min(a, b) }, head(arr)) })
+}
+
+// Returns the maximum.
+fn iter_max(arr) {
+    if_then(len(arr) == 0, fn() { nil },
+        fn() { reduce(tail(arr), fn(a, b) { max(a, b) }, head(arr)) })
+}
+
+// Partitions into two arrays based on predicate.
+fn iter_partition(arr, predicate) {
+    {
+        pass: filter(arr, predicate),
+        fail: filter(arr, fn(x) { not(predicate(x)) })
+    }
+}
+
+// Unzips an array of pairs into two arrays.
+fn iter_unzip(pairs) {
+    {
+        first: map(pairs, fn(p) { get(p, 0) }),
+        second: map(pairs, fn(p) { get(p, 1) })
+    }
+}
+
+// ── Lazy Adapters (as array transformations) ────────────────────
+
+// Maps each element.
+fn iter_map(arr, f) { map(arr, f) }
+
+// Filters elements.
+fn iter_filter(arr, predicate) { filter(arr, predicate) }
+
+// Maps then flattens.
+fn iter_flat_map(arr, f) { flat_map(arr, f) }
+
+// Flattens nested arrays.
+fn iter_flatten(arr) { flatten(arr) }
+
+// Takes the first n elements.
+fn iter_take(arr, n) { take(arr, n) }
+
+// Skips the first n elements.
+fn iter_skip(arr, n) { drop(arr, n) }
+
+// Takes while predicate holds.
+fn iter_take_while(arr, predicate) {
+    fn collect(i, acc) {
+        if_then(i >= len(arr), fn() { acc },
+            fn() {
+                fn item() { get(arr, i) }
+                if_then(predicate(item()),
+                    fn() { collect(i + 1, push(acc, item())) },
+                    fn() { acc })
+            })
+    }
+    collect(0, [])
+}
+
+// Skips while predicate holds.
+fn iter_skip_while(arr, predicate) {
+    fn find_start(i) {
+        if_then(i >= len(arr), fn() { i },
+            fn() { if_then(predicate(get(arr, i)),
+                fn() { find_start(i + 1) }, fn() { i }) })
+    }
+    drop(arr, find_start(0))
+}
+
+// Chains two arrays.
+fn iter_chain(a, b) { concat(a, b) }
+
+// Zips two arrays into pairs.
+fn iter_zip(a, b) { zip(a, b) }
+
+// Attaches index to each element.
+fn iter_enumerate(arr) {
+    map(range(0, len(arr)), fn(i) { [i, get(arr, i)] })
+}
+
+// Inserts separator between elements.
+fn iter_intersperse(arr, sep) {
+    if_then(len(arr) <= 1, fn() { arr },
+        fn() {
+            fn build(i, acc) {
+                if_then(i >= len(arr), fn() { acc },
+                    fn() { build(i + 1, push(push(acc, sep), get(arr, i))) })
             }
-            match self.iter.next() {
-                Some(outer) => self.inner = Some((self.f)(outer)),
-                None => return None,
-            }
-        }
-    }
+            build(1, [head(arr)])
+        })
 }
 
-pub struct Flatten<I> { outer: I, inner: Option<<I::Item as IntoIterator>::IntoIter> }
-impl<I: Iterator> Iterator for Flatten<I> where I::Item: IntoIterator {
-    type Item = <I::Item as IntoIterator>::Item;
-    fn next(mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(ref mut inner) = self.inner {
-                if let Some(item) = inner.next() { return Some(item); }
-            }
-            match self.outer.next() {
-                Some(outer) => self.inner = Some(outer.into_iter()),
-                None => return None,
-            }
-        }
-    }
+// Takes every nth element.
+fn iter_step_by(arr, n) {
+    filter(iter_enumerate(arr), fn(pair) { mod(get(pair, 0), n) == 0 })
 }
 
-pub struct Take<I> { iter: I, remaining: usize }
-impl<I: Iterator> Iterator for Take<I> {
-    type Item = I::Item;
-    fn next(mut self) -> Option<I::Item> {
-        if self.remaining == 0 { return None; }
-        self.remaining -= 1;
-        self.iter.next()
-    }
+// Removes consecutive duplicates.
+fn iter_dedup(arr) {
+    if_then(len(arr) == 0, fn() { [] },
+        fn() {
+            reduce(tail(arr), fn(acc, item) {
+                if_then(last(acc) == item, fn() { acc },
+                    fn() { push(acc, item) })
+            }, [head(arr)])
+        })
 }
 
-pub struct Skip<I> { iter: I, remaining: usize }
-impl<I: Iterator> Iterator for Skip<I> {
-    type Item = I::Item;
-    fn next(mut self) -> Option<I::Item> {
-        while self.remaining > 0 { self.iter.next(); self.remaining -= 1; }
-        self.iter.next()
-    }
+// Side-effect inspection without modifying elements.
+fn iter_inspect(arr, f) {
+    forEach(arr, f)
+    arr
 }
 
-pub struct TakeWhile<I, F> { iter: I, predicate: F, done: bool }
-impl<I: Iterator, F: Fn(&I::Item) -> bool> Iterator for TakeWhile<I, F> {
-    type Item = I::Item;
-    fn next(mut self) -> Option<I::Item> {
-        if self.done { return None; }
-        let item = self.iter.next()?;
-        if (self.predicate)(&item) { Some(item) }
-        else { self.done = true; None }
-    }
-}
-
-pub struct SkipWhile<I, F> { iter: I, predicate: F, skipping: bool }
-impl<I: Iterator, F: Fn(&I::Item) -> bool> Iterator for SkipWhile<I, F> {
-    type Item = I::Item;
-    fn next(mut self) -> Option<I::Item> {
-        while self.skipping {
-            let item = self.iter.next()?;
-            if !(self.predicate)(&item) { self.skipping = false; return Some(item); }
-        }
-        self.iter.next()
-    }
-}
-
-pub struct Chain<A, B> { first: A, second: B, first_done: bool }
-impl<T, A: Iterator<Item = T>, B: Iterator<Item = T>> Iterator for Chain<A, B> {
-    type Item = T;
-    fn next(mut self) -> Option<T> {
-        if !self.first_done {
-            match self.first.next() {
-                Some(v) => return Some(v),
-                None => self.first_done = true,
-            }
-        }
-        self.second.next()
-    }
-}
-
-pub struct Zip<A, B> { a: A, b: B }
-impl<A: Iterator, B: Iterator> Iterator for Zip<A, B> {
-    type Item = (A::Item, B::Item);
-    fn next(mut self) -> Option<(A::Item, B::Item)> {
-        let a = self.a.next()?;
-        let b = self.b.next()?;
-        Some((a, b))
-    }
-}
-
-pub struct Enumerate<I> { iter: I, index: usize }
-impl<I: Iterator> Iterator for Enumerate<I> {
-    type Item = (usize, I::Item);
-    fn next(mut self) -> Option<(usize, I::Item)> {
-        let item = self.iter.next()?;
-        let idx = self.index;
-        self.index += 1;
-        Some((idx, item))
-    }
-}
-
-pub struct Peekable<I: Iterator> { iter: I, peeked: Option<Option<I::Item>> }
-impl<I: Iterator> Peekable<I> {
-    pub fn peek(mut self) -> Option<&I::Item> {
-        if self.peeked.is_none() {
-            self.peeked = Some(self.iter.next());
-        }
-        self.peeked.as_ref().unwrap().as_ref()
-    }
-}
-impl<I: Iterator> Iterator for Peekable<I> {
-    type Item = I::Item;
-    fn next(mut self) -> Option<I::Item> {
-        match self.peeked.take() {
-            Some(v) => v,
-            None => self.iter.next(),
-        }
-    }
-}
-
-pub struct Inspect<I, F> { iter: I, f: F }
-impl<I: Iterator, F: Fn(&I::Item)> Iterator for Inspect<I, F> {
-    type Item = I::Item;
-    fn next(mut self) -> Option<I::Item> {
-        let item = self.iter.next()?;
-        (self.f)(&item);
-        Some(item)
-    }
-}
-
-pub struct StepBy<I> { iter: I, step: usize, first: bool }
-impl<I: Iterator> Iterator for StepBy<I> {
-    type Item = I::Item;
-    fn next(mut self) -> Option<I::Item> {
-        if self.first { self.first = false; return self.iter.next(); }
-        for _ in 0..self.step - 1 { self.iter.next(); }
-        self.iter.next()
-    }
-}
-
-pub struct Intersperse<I: Iterator> { iter: I, separator: I::Item, needs_sep: bool }
-impl<I: Iterator> Iterator for Intersperse<I> where I::Item: Clone {
-    type Item = I::Item;
-    fn next(mut self) -> Option<I::Item> {
-        if self.needs_sep {
-            self.needs_sep = false;
-            Some(self.separator.clone())
-        } else {
-            let item = self.iter.next()?;
-            self.needs_sep = true;
-            Some(item)
-        }
-    }
-}
-
-pub struct Dedup<I: Iterator> { iter: I, last: Option<I::Item> }
-impl<I: Iterator> Iterator for Dedup<I> where I::Item: Eq + Clone {
-    type Item = I::Item;
-    fn next(mut self) -> Option<I::Item> {
-        loop {
-            let item = self.iter.next()?;
-            if self.last.as_ref() != Some(&item) {
-                self.last = Some(item.clone());
-                return Some(item);
-            }
-        }
-    }
-}
-
-// ─── Generator ──────────────────────────────────────────────────────────────
-
-/// A generator that produces values lazily via `yield`.
-///
-/// ```grey
-/// let fib = generator {
-///     let (mut a, mut b) = (0, 1);
-///     loop {
-///         yield a;
-///         let next = a + b;
-///         a = b;
-///         b = next;
-///     }
-/// };
-/// ```
-pub trait Generator {
-    type Yield;
-    type Return;
-
-    /// Resumes the generator, producing the next value.
-    fn resume(mut self) -> GeneratorState<Self::Yield, Self::Return>;
-}
-
-/// The state of a generator after resumption.
-pub enum GeneratorState<Y, R> {
-    /// The generator yielded a value.
-    Yielded(Y),
-    /// The generator completed with a return value.
-    Completed(R),
-}
-
-/// Wraps a Generator into an Iterator.
-pub struct GeneratorIter<G> {
-    generator: G,
-}
-
-impl<G: Generator<Return = ()>> Iterator for GeneratorIter<G> {
-    type Item = G::Yield;
-
-    fn next(mut self) -> Option<G::Yield> {
-        match self.generator.resume() {
-            GeneratorState::Yielded(value)  => Some(value),
-            GeneratorState::Completed(())   => None,
-        }
-    }
-}
-
-// ─── Factory Functions ──────────────────────────────────────────────────────
-
-/// Creates an iterator that yields nothing.
-pub fn empty<T>() -> Empty<T> {
-    Empty { _phantom: PhantomData }
-}
-
-pub struct Empty<T> { _phantom: PhantomData<T> }
-impl<T> Iterator for Empty<T> {
-    type Item = T;
-    fn next(self) -> Option<T> { None }
-}
-
-/// Creates an iterator that yields a single element.
-pub fn once<T>(value: T) -> Once<T> {
-    Once { value: Some(value) }
-}
-
-pub struct Once<T> { value: Option<T> }
-impl<T> Iterator for Once<T> {
-    type Item = T;
-    fn next(mut self) -> Option<T> { self.value.take() }
-}
-
-/// Creates an infinite iterator that repeatedly calls a function.
-pub fn repeat_with<T, F: Fn() -> T>(f: F) -> RepeatWith<F> {
-    RepeatWith { f }
-}
-
-pub struct RepeatWith<F> { f: F }
-impl<T, F: Fn() -> T> Iterator for RepeatWith<F> {
-    type Item = T;
-    fn next(self) -> Option<T> { Some((self.f)()) }
-}
-
-/// Creates an iterator that yields values from `start` incrementing by 1.
-pub fn count_from<T: Add<Output = T> + One + Clone>(start: T) -> CountFrom<T> {
-    CountFrom { current: start }
-}
-
-pub struct CountFrom<T> { current: T }
-impl<T: Add<Output = T> + One + Clone> Iterator for CountFrom<T> {
-    type Item = T;
-    fn next(mut self) -> Option<T> {
-        let val = self.current.clone();
-        self.current = self.current.clone() + T::one();
-        Some(val)
-    }
-}
-
-/// Creates a range iterator [start, end).
-pub fn range<T: Add<Output = T> + One + Ord + Clone>(start: T, end: T) -> Range<T> {
-    Range { current: start, end }
-}
-
-pub struct Range<T> { current: T, end: T }
-impl<T: Add<Output = T> + One + Ord + Clone> Iterator for Range<T> {
-    type Item = T;
-    fn next(mut self) -> Option<T> {
-        if self.current >= self.end { return None; }
-        let val = self.current.clone();
-        self.current = self.current.clone() + T::one();
-        Some(val)
-    }
-}
-
-/// Creates an iterator from a function.
-pub fn from_fn<T, F: FnMut() -> Option<T>>(f: F) -> FromFn<F> {
-    FromFn { f }
-}
-
-pub struct FromFn<F> { f: F }
-impl<T, F: FnMut() -> Option<T>> Iterator for FromFn<F> {
-    type Item = T;
-    fn next(mut self) -> Option<T> { (self.f)() }
-}
-
-/// Creates an iterator that successively applies a function.
-pub fn successors<T, F: Fn(&T) -> Option<T>>(first: Option<T>, succ: F) -> Successors<T, F> {
-    Successors { current: first, succ }
-}
-
-pub struct Successors<T, F> { current: Option<T>, succ: F }
-impl<T, F: Fn(&T) -> Option<T>> Iterator for Successors<T, F> {
-    type Item = T;
-    fn next(mut self) -> Option<T> {
-        let current = self.current.take()?;
-        self.current = (self.succ)(&current);
-        Some(current)
-    }
-}
+// Executes fn for each element.
+fn iter_for_each(arr, f) { forEach(arr, f) }

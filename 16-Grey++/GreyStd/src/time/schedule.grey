@@ -1,332 +1,131 @@
-/// time::schedule — Cron expressions, schedulers, and periodic task management.
+// GreyStd Time - Schedule
+// Task scheduling and cron-like utilities
 
-use crate::core::string::String;
-use crate::core::vec::Vec;
-use crate::core::option::Option;
-use crate::time::duration::Duration;
-use crate::time::timezone::DateTime;
-use crate::time::{TimeError, TimeResult};
-
-// ─── Cron Expression ────────────────────────────────────────
-
-/// A parsed cron expression with second-level precision.
-/// Format: "sec min hour day_of_month month day_of_week"
-/// Standard 5-field (without seconds) also supported.
-pub struct CronExpr {
-    seconds: CronField,
-    minutes: CronField,
-    hours: CronField,
-    days_of_month: CronField,
-    months: CronField,
-    days_of_week: CronField,
+// Create a simple interval schedule
+fn Schedule_interval(dur) {
+  {
+    _type: "Schedule",
+    kind: "interval",
+    interval_ms: duration_ms(dur),
+    last_run: 0,
+    run_count: 0
+  }
 }
 
-/// A single cron field representing a set of valid values.
-struct CronField {
-    /// Bitset of allowed values (0–59 for sec/min, 0–23 for hour, etc.)
-    bits: u64,
+// Create a one-shot schedule (runs once after delay)
+fn Schedule_once(dur) {
+  {
+    _type: "Schedule",
+    kind: "once",
+    delay_ms: duration_ms(dur),
+    created_at: timestamp(),
+    fired: false
+  }
 }
 
-impl CronField {
-    fn all(min: u8, max: u8) -> CronField {
-        let mut bits: u64 = 0;
-        for i in min..=max { bits |= 1u64 << i; }
-        CronField { bits }
-    }
-
-    fn single(v: u8) -> CronField { CronField { bits: 1u64 << v } }
-
-    fn contains(&self, v: u8) -> bool { (self.bits & (1u64 << v)) != 0 }
-
-    fn next_from(&self, v: u8, max: u8) -> Option<u8> {
-        for i in v..=max {
-            if self.contains(i) { return Some(i); }
-        }
-        None
-    }
-
-    fn first(&self, min: u8, max: u8) -> Option<u8> {
-        self.next_from(min, max)
-    }
-
-    fn parse(expr: &str, min: u8, max: u8) -> TimeResult<CronField> {
-        if expr == "*" { return Ok(CronField::all(min, max)); }
-        let mut bits: u64 = 0;
-        for part in expr.split(',') {
-            let part = part.trim();
-            if part.contains('/') {
-                // step: */2 or 1-30/5
-                let sp: Vec<&str> = part.split('/').collect();
-                let step = sp[1].parse::<u8>().map_err(|_| TimeError::ParseError(format!("invalid step: {}", sp[1])))?;
-                let (start, end) = if sp[0] == "*" {
-                    (min, max)
-                } else if sp[0].contains('-') {
-                    let rng: Vec<&str> = sp[0].split('-').collect();
-                    (rng[0].parse::<u8>().unwrap_or(min), rng[1].parse::<u8>().unwrap_or(max))
-                } else {
-                    (sp[0].parse::<u8>().unwrap_or(min), max)
-                };
-                let mut v = start;
-                while v <= end {
-                    bits |= 1u64 << v;
-                    v += step;
-                }
-            } else if part.contains('-') {
-                // range: 1-5
-                let rng: Vec<&str> = part.split('-').collect();
-                let start = rng[0].parse::<u8>().map_err(|_| TimeError::ParseError(format!("invalid range start: {}", rng[0])))?;
-                let end = rng[1].parse::<u8>().map_err(|_| TimeError::ParseError(format!("invalid range end: {}", rng[1])))?;
-                for i in start..=end { bits |= 1u64 << i; }
-            } else {
-                // single value
-                let v = part.parse::<u8>().map_err(|_| TimeError::ParseError(format!("invalid value: {}", part)))?;
-                bits |= 1u64 << v;
-            }
-        }
-        Ok(CronField { bits })
-    }
+// Create a fixed-count schedule
+fn Schedule_repeat(dur, count) {
+  {
+    _type: "Schedule",
+    kind: "repeat",
+    interval_ms: duration_ms(dur),
+    max_count: count,
+    run_count: 0,
+    last_run: 0
+  }
 }
 
-impl CronExpr {
-    /// Parse a cron expression string.
-    /// 5 fields: "min hour dom month dow" (seconds default to 0)
-    /// 6 fields: "sec min hour dom month dow"
-    pub fn parse(expr: &str) -> TimeResult<CronExpr> {
-        let fields: Vec<&str> = expr.split_whitespace().collect();
-        match fields.len() {
-            5 => Ok(CronExpr {
-                seconds: CronField::single(0),
-                minutes: CronField::parse(fields[0], 0, 59)?,
-                hours: CronField::parse(fields[1], 0, 23)?,
-                days_of_month: CronField::parse(fields[2], 1, 31)?,
-                months: CronField::parse(fields[3], 1, 12)?,
-                days_of_week: CronField::parse(fields[4], 0, 6)?,
-            }),
-            6 => Ok(CronExpr {
-                seconds: CronField::parse(fields[0], 0, 59)?,
-                minutes: CronField::parse(fields[1], 0, 59)?,
-                hours: CronField::parse(fields[2], 0, 23)?,
-                days_of_month: CronField::parse(fields[3], 1, 31)?,
-                months: CronField::parse(fields[4], 1, 12)?,
-                days_of_week: CronField::parse(fields[5], 0, 6)?,
-            }),
-            _ => Err(TimeError::ParseError(String::from("expected 5 or 6 cron fields"))),
-        }
-    }
-
-    /// Check if the given datetime matches this cron expression.
-    pub fn matches(&self, dt: &DateTime) -> bool {
-        self.seconds.contains(dt.second()) &&
-        self.minutes.contains(dt.minute()) &&
-        self.hours.contains(dt.hour()) &&
-        self.days_of_month.contains(dt.day()) &&
-        self.months.contains(dt.month()) &&
-        self.days_of_week.contains(dt.date().weekday() % 7)
-    }
-
-    /// Find the next occurrence at or after the given datetime.
-    /// Returns None if no occurrence found within 4 years.
-    pub fn next_after(&self, from: &DateTime) -> Option<DateTime> {
-        let max_ts = from.to_unix_timestamp() + 4 * 365 * 86400;
-        let mut ts = from.to_unix_timestamp();
-
-        while ts < max_ts {
-            let dt = DateTime::from_unix_timestamp(ts, from.offset());
-            if self.matches(&dt) {
-                return Some(dt);
-            }
-            ts += 1; // advance by one second
-        }
-        None
-    }
+// Check if a schedule should fire now
+fn schedule_should_fire(sched) {
+  fn kind() { get(sched, "kind") }
+  cond(
+    eq(kind(), "once"),
+      and(not(get(sched, "fired")), gte(sub(timestamp(), get(sched, "created_at")), get(sched, "delay_ms"))),
+    eq(kind(), "interval"),
+      gte(sub(timestamp(), get(sched, "last_run")), get(sched, "interval_ms")),
+    eq(kind(), "repeat"),
+      and(lt(get(sched, "run_count"), get(sched, "max_count")),
+          gte(sub(timestamp(), get(sched, "last_run")), get(sched, "interval_ms"))),
+    false
+  )
 }
 
-// ─── Scheduler ──────────────────────────────────────────────
-
-/// A unique identifier for a scheduled task.
-pub type TaskId = u64;
-
-/// A scheduled task with a cron expression or interval.
-pub struct ScheduledTask {
-    id: TaskId,
-    name: String,
-    schedule: TaskSchedule,
-    callback: Box<dyn FnMut() + Send>,
-    enabled: bool,
-    last_run: Option<DateTime>,
-    run_count: u64,
+// Mark a schedule as fired (returns updated schedule)
+fn schedule_fire(sched) {
+  fn kind() { get(sched, "kind") }
+  cond(
+    eq(kind(), "once"), merge(sched, { fired: true }),
+    eq(kind(), "interval"), merge(sched, { last_run: timestamp(), run_count: add(get(sched, "run_count"), 1) }),
+    eq(kind(), "repeat"), merge(sched, { last_run: timestamp(), run_count: add(get(sched, "run_count"), 1) }),
+    sched
+  )
 }
 
-/// How a task is triggered.
-pub enum TaskSchedule {
-    /// Run on a cron schedule.
-    Cron(CronExpr),
-    /// Run at fixed intervals.
-    Interval(Duration),
-    /// Run once after a delay.
-    Once(Duration),
-    /// Run at a specific datetime.
-    At(DateTime),
+// Check if schedule is complete (no more firings)
+fn schedule_is_done(sched) {
+  fn kind() { get(sched, "kind") }
+  cond(
+    eq(kind(), "once"), get(sched, "fired"),
+    eq(kind(), "repeat"), gte(get(sched, "run_count"), get(sched, "max_count")),
+    false
+  )
 }
 
-/// A scheduler that manages and runs periodic tasks.
-pub struct Scheduler {
-    tasks: Vec<ScheduledTask>,
-    next_id: TaskId,
-    running: bool,
+// Get remaining runs for repeat schedule
+fn schedule_remaining(sched) {
+  if_then(eq(get(sched, "kind"), "repeat"),
+    fn() { sub(get(sched, "max_count"), get(sched, "run_count")) },
+    fn() { nil }
+  )
 }
 
-impl Scheduler {
-    pub fn new() -> Scheduler {
-        Scheduler { tasks: Vec::new(), next_id: 1, running: false }
-    }
+// Create a scheduled task (pairs schedule with action)
+fn ScheduledTask_new(name, schedule, action) {
+  {
+    _type: "ScheduledTask",
+    name: name,
+    schedule: schedule,
+    action: action,
+    enabled: true
+  }
+}
 
-    /// Schedule a task with a cron expression.
-    pub fn cron<F: FnMut() + Send + 'static>(&mut self, name: &str, expr: &str, f: F) -> TimeResult<TaskId> {
-        let cron = CronExpr::parse(expr)?;
-        let id = self.next_id;
-        self.next_id += 1;
-        self.tasks.push(ScheduledTask {
-            id,
-            name: String::from(name),
-            schedule: TaskSchedule::Cron(cron),
-            callback: Box::new(f),
-            enabled: true,
-            last_run: None,
-            run_count: 0,
-        });
-        Ok(id)
-    }
+// Tick a scheduled task (check and maybe run)
+fn task_tick(st) {
+  if_then(and(get(st, "enabled"), schedule_should_fire(get(st, "schedule"))),
+    fn() {
+      get(st, "action")()
+      merge(st, { schedule: schedule_fire(get(st, "schedule")) })
+    },
+    fn() { st }
+  )
+}
 
-    /// Schedule a task to run at fixed intervals.
-    pub fn every<F: FnMut() + Send + 'static>(&mut self, name: &str, interval: Duration, f: F) -> TaskId {
-        let id = self.next_id;
-        self.next_id += 1;
-        self.tasks.push(ScheduledTask {
-            id,
-            name: String::from(name),
-            schedule: TaskSchedule::Interval(interval),
-            callback: Box::new(f),
-            enabled: true,
-            last_run: None,
-            run_count: 0,
-        });
-        id
-    }
+// Enable/disable a scheduled task
+fn task_enable(st) { merge(st, { enabled: true }) }
+fn task_disable(st) { merge(st, { enabled: false }) }
 
-    /// Schedule a task to run once after a delay.
-    pub fn once<F: FnMut() + Send + 'static>(&mut self, name: &str, delay: Duration, f: F) -> TaskId {
-        let id = self.next_id;
-        self.next_id += 1;
-        self.tasks.push(ScheduledTask {
-            id,
-            name: String::from(name),
-            schedule: TaskSchedule::Once(delay),
-            callback: Box::new(f),
-            enabled: true,
-            last_run: None,
-            run_count: 0,
-        });
-        id
-    }
+// Check if task is still active
+fn task_is_active(st) {
+  and(get(st, "enabled"), not(schedule_is_done(get(st, "schedule"))))
+}
 
-    /// Schedule a task to run at a specific datetime.
-    pub fn at<F: FnMut() + Send + 'static>(&mut self, name: &str, when: DateTime, f: F) -> TaskId {
-        let id = self.next_id;
-        self.next_id += 1;
-        self.tasks.push(ScheduledTask {
-            id,
-            name: String::from(name),
-            schedule: TaskSchedule::At(when),
-            callback: Box::new(f),
-            enabled: true,
-            last_run: None,
-            run_count: 0,
-        });
-        id
-    }
+// Create a simple task scheduler
+fn Scheduler_new() {
+  { _type: "Scheduler", tasks: [] }
+}
 
-    /// Cancel a scheduled task by ID.
-    pub fn cancel(&mut self, id: TaskId) -> bool {
-        if let Some(pos) = self.tasks.iter().position(|t| t.id == id) {
-            self.tasks.remove(pos);
-            true
-        } else {
-            false
-        }
-    }
+// Add a task to the scheduler
+fn scheduler_add(sched, task) {
+  merge(sched, { tasks: append(get(sched, "tasks"), task) })
+}
 
-    /// Enable or disable a task.
-    pub fn set_enabled(&mut self, id: TaskId, enabled: bool) {
-        if let Some(task) = self.tasks.iter_mut().find(|t| t.id == id) {
-            task.enabled = enabled;
-        }
-    }
+// Tick all tasks in the scheduler
+fn scheduler_tick(sched) {
+  merge(sched, { tasks: map(get(sched, "tasks"), fn(t) { task_tick(t) }) })
+}
 
-    /// Get a task's run count.
-    pub fn run_count(&self, id: TaskId) -> u64 {
-        self.tasks.iter().find(|t| t.id == id).map(|t| t.run_count).unwrap_or(0)
-    }
-
-    /// Start the scheduler's event loop. Blocks until `stop()` is called.
-    pub async fn run(&mut self) {
-        self.running = true;
-        while self.running {
-            self.tick();
-            crate::concurrent::timer::sleep(Duration::from_millis(100)).await;
-        }
-    }
-
-    /// Stop the scheduler.
-    pub fn stop(&mut self) {
-        self.running = false;
-    }
-
-    /// Perform a single scheduler tick. Check and run due tasks.
-    fn tick(&mut self) {
-        use crate::time::clock::SystemClock;
-        let now = SystemClock::now_utc();
-
-        for task in &mut self.tasks {
-            if !task.enabled { continue; }
-
-            let should_run = match &task.schedule {
-                TaskSchedule::Cron(cron) => cron.matches(&now),
-                TaskSchedule::Interval(interval) => {
-                    match &task.last_run {
-                        Some(last) => now.duration_since(last) >= *interval,
-                        None => true,
-                    }
-                }
-                TaskSchedule::Once(delay) => {
-                    task.run_count == 0 && task.last_run.is_none()
-                }
-                TaskSchedule::At(when) => {
-                    task.run_count == 0 && now.to_unix_timestamp() >= when.to_unix_timestamp()
-                }
-            };
-
-            if should_run {
-                (task.callback)();
-                task.last_run = Some(now);
-                task.run_count += 1;
-
-                // Disable one-shot tasks after execution
-                match &task.schedule {
-                    TaskSchedule::Once(_) | TaskSchedule::At(_) => { task.enabled = false; }
-                    _ => {}
-                }
-            }
-        }
-    }
-
-    /// Number of active tasks.
-    pub fn task_count(&self) -> usize {
-        self.tasks.len()
-    }
-
-    /// Number of enabled tasks.
-    pub fn enabled_count(&self) -> usize {
-        self.tasks.iter().filter(|t| t.enabled).count()
-    }
+// Get active task count
+fn scheduler_active_count(sched) {
+  length(filter(get(sched, "tasks"), fn(t) { task_is_active(t) }))
 }

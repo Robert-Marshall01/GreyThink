@@ -1,23 +1,24 @@
-/// concurrent — Concurrency & Parallelism
-///
-/// Tasks, futures, channels, synchronization primitives,
-/// thread pools, event loop, and timers.
+// concurrent — Concurrency module
+//
+// Async-first concurrency with structured task management.
+// In Grey++, concurrency uses the built-in spawn(), channel(),
+// send(), receive(), mutex(), lock(), unlock() functions.
+// This module provides higher-level abstractions.
+//
+// Submodules:
+//   task        — Task spawning and management
+//   future      — Async computation protocol
+//   mutex       — Mutual exclusion and read-write locks
+//   channel     — Message passing (MPSC)
+//   atomic      — Lock-free atomic operations
+//   pool        — Worker thread pool
+//   event_loop  — Async event loop
+//   timer       — Sleep, delay, interval, timeout
 
-pub mod task;
-pub mod future;
-pub mod channel;
-pub mod mutex;
-pub mod atomic;
-pub mod pool;
-pub mod event_loop;
-pub mod timer;
-
-// Re-exports
-pub use task::{ spawn, spawn_blocking, JoinHandle, Task };
-pub use future::{ Future, Poll, Pending, Ready };
-pub use channel::{ channel, bounded, unbounded, Sender, Receiver };
-pub use mutex::{ Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, Condvar, Once };
-pub use atomic::{ AtomicBool, AtomicI32, AtomicI64, AtomicU32, AtomicU64, AtomicUsize, Ordering };
-pub use pool::ThreadPool;
-pub use event_loop::EventLoop;
-pub use timer::{ sleep, sleep_sync, interval, timeout, Interval, Delay, Debounce, Throttle };
+fn concurrent_info() {
+    {
+        name: "concurrent",
+        version: "1.0.0",
+        modules: ["task", "future", "mutex", "channel", "atomic", "pool", "event_loop", "timer"]
+    }
+}

@@ -1,322 +1,137 @@
-/// core::bytes — Raw byte sequences and byte buffers.
-///
-/// `Bytes` is an immutable reference-counted byte sequence.
-/// `ByteBuffer` is a growable mutable byte buffer.
+// core::bytes — Byte sequence utilities
+//
+// Grey++ represents bytes as arrays of numbers (0-255).
+// This module provides utility functions for working with
+// byte arrays, byte buffers, and binary data.
 
-// ─── Bytes (immutable, reference-counted) ───────────────────────────────────
+// ── Bytes (Immutable byte sequence) ─────────────────────────────
 
-/// An immutable, reference-counted contiguous sequence of bytes.
-/// Cheap to clone (only increments refcount).
-pub struct Bytes {
-    inner: Arc<BytesInner>,
-    start: usize,
-    len: usize,
+// Creates an empty byte sequence.
+fn bytes_new() {
+    { _type: "Bytes", data: [] }
 }
 
-struct BytesInner {
-    data: Vec<u8>,
+// Creates bytes from an array of integers (0-255).
+fn bytes_from(arr) {
+    { _type: "Bytes", data: map(arr, fn(b) { mod(floor(abs(b)), 256) }) }
 }
 
-impl Bytes {
-    /// Creates Bytes from a byte slice (copies the data).
-    pub fn from_slice(data: &[u8]) -> Bytes {
-        Bytes {
-            inner: Arc::new(BytesInner { data: Vec::from_slice(data) }),
-            start: 0,
-            len: data.len(),
-        }
+// Creates bytes from a string (UTF-8 encoding approximation).
+fn bytes_from_string(s) {
+    fn collect(i, acc) {
+        if_then(i >= len(s),
+            fn() { acc },
+            fn() { collect(i + 1, push(acc, char_at(s, i))) })
     }
-
-    /// Creates Bytes from a Vec<u8> (takes ownership, no copy).
-    pub fn from_vec(data: Vec<u8>) -> Bytes {
-        let len = data.len();
-        Bytes {
-            inner: Arc::new(BytesInner { data }),
-            start: 0,
-            len,
-        }
-    }
-
-    /// Creates an empty Bytes.
-    pub fn empty() -> Bytes {
-        Bytes::from_slice(&[])
-    }
-
-    /// Returns the number of bytes.
-    pub fn len(self) -> usize {
-        self.len
-    }
-
-    /// Returns true if there are no bytes.
-    pub fn is_empty(self) -> bool {
-        self.len == 0
-    }
-
-    /// Returns the byte at the given index.
-    pub fn get(self, index: usize) -> Option<u8> {
-        if index >= self.len { return None; }
-        Some(self.inner.data[self.start + index])
-    }
-
-    /// Returns a sub-slice as a new Bytes (zero-copy).
-    pub fn slice(self, start: usize, end: usize) -> Bytes {
-        assert(start <= end && end <= self.len, "Bytes::slice out of bounds");
-        Bytes {
-            inner: self.inner.clone(),
-            start: self.start + start,
-            len: end - start,
-        }
-    }
-
-    /// Returns a raw pointer to the data.
-    pub fn as_ptr(self) -> *const u8 {
-        self.inner.data.as_ptr().offset(self.start)
-    }
-
-    /// Returns a byte slice view.
-    pub fn as_slice(self) -> &[u8] {
-        &self.inner.data[self.start..self.start + self.len]
-    }
-
-    /// Copies the bytes into a new Vec<u8>.
-    pub fn to_vec(self) -> Vec<u8> {
-        Vec::from_slice(self.as_slice())
-    }
-
-    /// Attempts to convert to a UTF-8 string.
-    pub fn to_string(self) -> Result<String, Utf8Error> {
-        String::from_utf8(self.to_vec())
-    }
-
-    /// Returns an iterator over the bytes.
-    pub fn iter(self) -> ByteIterator {
-        ByteIterator { bytes: self, pos: 0 }
-    }
-
-    /// Returns true if the sequence starts with the given prefix.
-    pub fn starts_with(self, prefix: &[u8]) -> bool {
-        if prefix.len() > self.len { return false; }
-        self.as_slice()[..prefix.len()] == *prefix
-    }
-
-    /// Returns true if the sequence ends with the given suffix.
-    pub fn ends_with(self, suffix: &[u8]) -> bool {
-        if suffix.len() > self.len { return false; }
-        self.as_slice()[self.len - suffix.len()..] == *suffix
-    }
-
-    /// Finds the index of the first occurrence of a byte.
-    pub fn find_byte(self, byte: u8) -> Option<usize> {
-        for i in 0..self.len {
-            if self.inner.data[self.start + i] == byte {
-                return Some(i);
-            }
-        }
-        None
-    }
-
-    /// Concatenates two Bytes sequences.
-    pub fn concat(self, other: Bytes) -> Bytes {
-        let mut buf = ByteBuffer::with_capacity(self.len + other.len);
-        buf.put_bytes(self);
-        buf.put_bytes(other);
-        buf.freeze()
-    }
+    { _type: "Bytes", data: collect(0, []) }
 }
 
-impl Clone for Bytes {
-    fn clone(self) -> Bytes {
-        Bytes {
-            inner: self.inner.clone(),
-            start: self.start,
-            len: self.len,
-        }
-    }
+// Returns the length of a byte sequence.
+fn bytes_len(b) { len(get(b, "data")) }
+
+// Returns true if the byte sequence is empty.
+fn bytes_is_empty(b) { bytes_len(b) == 0 }
+
+// Returns the byte at a given index.
+fn bytes_get(b, index) {
+    fn data() { get(b, "data") }
+    if_then(index >= 0, fn() {
+        if_then(index < len(data()), fn() { get(data(), index) }, fn() { nil })
+    }, fn() { nil })
 }
 
-impl Eq for Bytes {
-    fn eq(self, other: Bytes) -> bool {
-        self.as_slice() == other.as_slice()
-    }
+// Returns a sub-slice of bytes.
+fn bytes_slice(b, start, end) {
+    { _type: "Bytes", data: slice(get(b, "data"), start, end) }
 }
 
-impl Index<usize> for Bytes {
-    type Output = u8;
-    fn index(self, idx: usize) -> u8 {
-        self.get(idx).expect("Bytes index out of bounds")
-    }
+// Concatenates two byte sequences.
+fn bytes_concat(a, b) {
+    { _type: "Bytes", data: concat(get(a, "data"), get(b, "data")) }
 }
 
-// ─── ByteBuffer (growable, mutable) ─────────────────────────────────────────
-
-/// A growable buffer for building byte sequences.
-/// Supports cursor-based reads and writes.
-pub struct ByteBuffer {
-    data: Vec<u8>,
-    read_pos: usize,
+// Compares two byte sequences for equality.
+fn bytes_eq(a, b) {
+    fn data_a() { get(a, "data") }
+    fn data_b() { get(b, "data") }
+    if_then(len(data_a()) != len(data_b()), false,
+        fn() { every(range(0, len(data_a())), fn(i) {
+            get(data_a(), i) == get(data_b(), i)
+        }) })
 }
 
-impl ByteBuffer {
-    /// Creates a new empty buffer.
-    pub fn new() -> ByteBuffer {
-        ByteBuffer { data: Vec::new(), read_pos: 0 }
+// Converts bytes to a hex string.
+fn bytes_to_hex(b) {
+    fn hex_digit(n) {
+        fn digits() { "0123456789abcdef" }
+        char_at(digits(), n)
     }
-
-    /// Creates a buffer with pre-allocated capacity.
-    pub fn with_capacity(cap: usize) -> ByteBuffer {
-        ByteBuffer { data: Vec::with_capacity(cap), read_pos: 0 }
-    }
-
-    /// Returns the number of written bytes.
-    pub fn len(self) -> usize {
-        self.data.len()
-    }
-
-    /// Returns the number of unread bytes.
-    pub fn remaining(self) -> usize {
-        self.data.len() - self.read_pos
-    }
-
-    /// Returns true if there are no remaining bytes to read.
-    pub fn is_empty(self) -> bool {
-        self.remaining() == 0
-    }
-
-    /// Writes a single byte.
-    pub fn put_u8(mut self, value: u8) {
-        self.data.push(value);
-    }
-
-    /// Writes a u16 in big-endian byte order.
-    pub fn put_u16_be(mut self, value: u16) {
-        self.data.push((value >> 8) as u8);
-        self.data.push(value as u8);
-    }
-
-    /// Writes a u16 in little-endian byte order.
-    pub fn put_u16_le(mut self, value: u16) {
-        self.data.push(value as u8);
-        self.data.push((value >> 8) as u8);
-    }
-
-    /// Writes a u32 in big-endian byte order.
-    pub fn put_u32_be(mut self, value: u32) {
-        self.data.push((value >> 24) as u8);
-        self.data.push((value >> 16) as u8);
-        self.data.push((value >> 8) as u8);
-        self.data.push(value as u8);
-    }
-
-    /// Writes a u32 in little-endian byte order.
-    pub fn put_u32_le(mut self, value: u32) {
-        self.data.push(value as u8);
-        self.data.push((value >> 8) as u8);
-        self.data.push((value >> 16) as u8);
-        self.data.push((value >> 24) as u8);
-    }
-
-    /// Writes a u64 in big-endian byte order.
-    pub fn put_u64_be(mut self, value: u64) {
-        self.put_u32_be((value >> 32) as u32);
-        self.put_u32_be(value as u32);
-    }
-
-    /// Writes a u64 in little-endian byte order.
-    pub fn put_u64_le(mut self, value: u64) {
-        self.put_u32_le(value as u32);
-        self.put_u32_le((value >> 32) as u32);
-    }
-
-    /// Writes a byte slice.
-    pub fn put_slice(mut self, data: &[u8]) {
-        self.data.extend_from_slice(data);
-    }
-
-    /// Writes the content of a Bytes value.
-    pub fn put_bytes(mut self, bytes: Bytes) {
-        self.data.extend_from_slice(bytes.as_slice());
-    }
-
-    /// Reads a single byte and advances the cursor.
-    pub fn read_u8(mut self) -> Option<u8> {
-        if self.remaining() < 1 { return None; }
-        let v = self.data[self.read_pos];
-        self.read_pos += 1;
-        Some(v)
-    }
-
-    /// Reads a u16 in big-endian byte order.
-    pub fn read_u16_be(mut self) -> Option<u16> {
-        if self.remaining() < 2 { return None; }
-        let v = ((self.data[self.read_pos] as u16) << 8)
-              | (self.data[self.read_pos + 1] as u16);
-        self.read_pos += 2;
-        Some(v)
-    }
-
-    /// Reads a u32 in big-endian byte order.
-    pub fn read_u32_be(mut self) -> Option<u32> {
-        if self.remaining() < 4 { return None; }
-        let v = ((self.data[self.read_pos] as u32) << 24)
-              | ((self.data[self.read_pos + 1] as u32) << 16)
-              | ((self.data[self.read_pos + 2] as u32) << 8)
-              | (self.data[self.read_pos + 3] as u32);
-        self.read_pos += 4;
-        Some(v)
-    }
-
-    /// Reads a u64 in big-endian byte order.
-    pub fn read_u64_be(mut self) -> Option<u64> {
-        let hi = self.read_u32_be()? as u64;
-        let lo = self.read_u32_be()? as u64;
-        Some((hi << 32) | lo)
-    }
-
-    /// Reads `n` bytes into a new Vec.
-    pub fn read_bytes(mut self, n: usize) -> Option<Vec<u8>> {
-        if self.remaining() < n { return None; }
-        let slice = &self.data[self.read_pos..self.read_pos + n];
-        let result = Vec::from_slice(slice);
-        self.read_pos += n;
-        Some(result)
-    }
-
-    /// Resets the read cursor to the beginning.
-    pub fn reset_read(mut self) {
-        self.read_pos = 0;
-    }
-
-    /// Clears all written data and resets the read cursor.
-    pub fn clear(mut self) {
-        self.data.clear();
-        self.read_pos = 0;
-    }
-
-    /// Converts the buffer into an immutable Bytes (consuming the buffer).
-    pub fn freeze(self) -> Bytes {
-        Bytes::from_vec(self.data)
-    }
-
-    /// Returns a slice view of all written data.
-    pub fn as_slice(self) -> &[u8] {
-        &self.data[..]
-    }
+    join(map(get(b, "data"), fn(byte) {
+        str(hex_digit(floor(byte / 16)), hex_digit(mod(byte, 16)))
+    }), "")
 }
 
-// ─── ByteIterator ───────────────────────────────────────────────────────────
+// ── ByteBuffer (Mutable byte buffer) ────────────────────────────
 
-pub struct ByteIterator {
-    bytes: Bytes,
-    pos: usize,
+// Creates a new empty byte buffer.
+fn ByteBuffer_new() {
+    { _type: "ByteBuffer", data: [], pos: 0 }
 }
 
-impl Iterator for ByteIterator {
-    type Item = u8;
+// Creates a byte buffer with a given capacity hint.
+fn ByteBuffer_with_capacity(cap) {
+    { _type: "ByteBuffer", data: [], pos: 0, capacity: cap }
+}
 
-    fn next(mut self) -> Option<u8> {
-        if self.pos >= self.bytes.len { return None; }
-        let b = self.bytes.inner.data[self.bytes.start + self.pos];
-        self.pos += 1;
-        Some(b)
+// Writes a single byte (u8) to the buffer.
+fn buf_write_u8(buf, value) {
+    set(buf, "data", push(get(buf, "data"), mod(floor(abs(value)), 256)))
+}
+
+// Writes a 16-bit unsigned integer (big-endian).
+fn buf_write_u16_be(buf, value) {
+    fn v() { mod(floor(abs(value)), 65536) }
+    fn b() { buf_write_u8(buf, floor(v() / 256)) }
+    buf_write_u8(b(), mod(v(), 256))
+}
+
+// Writes a 32-bit unsigned integer (big-endian).
+fn buf_write_u32_be(buf, value) {
+    fn v() { mod(floor(abs(value)), 4294967296) }
+    fn b1() { buf_write_u16_be(buf, floor(v() / 65536)) }
+    buf_write_u16_be(b1(), mod(v(), 65536))
+}
+
+// Writes a string directly into the buffer.
+fn buf_write_string(buf, s) {
+    fn write_chars(b, i) {
+        if_then(i >= len(s),
+            fn() { b },
+            fn() { write_chars(buf_write_u8(b, char_at(s, i)), i + 1) })
     }
+    write_chars(buf, 0)
+}
+
+// Returns the current size of the buffer.
+fn buf_len(buf) { len(get(buf, "data")) }
+
+// Freezes the buffer into an immutable Bytes object.
+fn buf_freeze(buf) {
+    { _type: "Bytes", data: get(buf, "data") }
+}
+
+// Clears the buffer.
+fn buf_clear(buf) {
+    set(buf, "data", [])
+}
+
+// Reads a byte from the current position and advances.
+fn buf_read_u8(buf) {
+    fn pos() { get(buf, "pos") }
+    fn data() { get(buf, "data") }
+    if_then(pos() >= len(data()), nil,
+        fn() {
+            fn value() { get(data(), pos()) }
+            { value: value(), buf: set(buf, "pos", pos() + 1) }
+        })
 }

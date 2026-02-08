@@ -1,429 +1,80 @@
-/// mem::smart_ptr — Smart pointer types.
-///
-/// `Box<T>`  — unique ownership, heap-allocated.
-/// `Rc<T>`   — reference-counted, single-threaded.
-/// `Arc<T>`  — atomically reference-counted, thread-safe.
-/// `Weak<T>` / `WeakArc<T>` — non-owning references.
+// mem::smart_ptr — Smart pointer patterns (Box, Rc, Arc)
+//
+// In Grey++, all values are reference-counted by the runtime.
+// These abstractions provide explicit ownership semantics
+// for documentation and pattern matching purposes.
 
-// ─── Box<T> — Unique Ownership ──────────────────────────────────────────────
+// ── Box — Unique ownership ──────────────────────────────────────
 
-/// A heap-allocated value with unique ownership.
-/// When the Box is dropped, the value is dropped and memory is freed.
-pub struct Box<T> {
-    ptr: *mut T,
+// Creates a boxed value (unique ownership marker).
+fn Box_new(value) {
+    { _type: "Box", value: value, owned: true }
 }
 
-impl<T> Box<T> {
-    /// Allocates a value on the heap.
-    pub fn new(value: T) -> Box<T> {
-        let ptr = alloc::allocate::<T>(1);
-        unsafe { ptr.write(value); }
-        Box { ptr }
-    }
+// Unwraps the boxed value.
+fn box_unwrap(b) { get(b, "value") }
 
-    /// Returns a reference to the contained value.
-    pub fn as_ref(self) -> &T {
-        unsafe { &*self.ptr }
-    }
+// Maps a function over the boxed value.
+fn box_map(b, f) { Box_new(f(box_unwrap(b))) }
 
-    /// Returns a mutable reference to the contained value.
-    pub fn as_mut(mut self) -> &mut T {
-        unsafe { &mut *self.ptr }
-    }
+// Returns true if this is a Box.
+fn is_box(v) { get(v, "_type") == "Box" }
 
-    /// Consumes the Box, returning the value.
-    pub fn into_inner(self) -> T {
-        let value = unsafe { self.ptr.read() };
-        alloc::deallocate(self.ptr, 1);
-        mem::forget(self);
-        value
-    }
+// ── Rc — Reference counted (single-thread) ─────────────────────
 
-    /// Leaks the Box, returning a static reference. Memory is never freed.
-    pub fn leak(self) -> &'static mut T {
-        let r = unsafe { &mut *self.ptr };
-        mem::forget(self);
-        r
-    }
-
-    /// Returns the raw pointer without consuming the Box.
-    pub fn as_ptr(self) -> *const T {
-        self.ptr
-    }
-
-    /// Creates a Box from a raw pointer. UNSAFE.
-    pub unsafe fn from_raw(ptr: *mut T) -> Box<T> {
-        Box { ptr }
-    }
-
-    /// Consumes the Box, returning the raw pointer.
-    pub fn into_raw(self) -> *mut T {
-        let ptr = self.ptr;
-        mem::forget(self);
-        ptr
-    }
+// Creates a reference-counted value.
+fn Rc_new(value) {
+    { _type: "Rc", value: value, ref_count: 1 }
 }
 
-impl<T> Drop for Box<T> {
-    fn drop(mut self) {
-        unsafe {
-            self.ptr.drop_in_place();
-            alloc::deallocate(self.ptr, 1);
-        }
-    }
+// Clones (increments reference count).
+fn rc_clone(rc) {
+    set(rc, "ref_count", get(rc, "ref_count") + 1)
 }
 
-impl<T: Clone> Clone for Box<T> {
-    fn clone(self) -> Box<T> {
-        Box::new(self.as_ref().clone())
-    }
+// Returns the current reference count.
+fn rc_count(rc) { get(rc, "ref_count") }
+
+// Unwraps the inner value.
+fn rc_unwrap(rc) { get(rc, "value") }
+
+// Returns true if this Rc is the only reference.
+fn rc_is_unique(rc) { get(rc, "ref_count") == 1 }
+
+// Creates a weak reference (non-owning).
+fn rc_downgrade(rc) {
+    { _type: "Weak", value: get(rc, "value"), alive: true }
 }
 
-impl<T: Eq> Eq for Box<T> {
-    fn eq(self, other: Box<T>) -> bool {
-        self.as_ref() == other.as_ref()
-    }
+// Attempts to upgrade a weak reference.
+fn weak_upgrade(w) {
+    if_then(get(w, "alive"),
+        fn() { Some(Rc_new(get(w, "value"))) },
+        fn() { None() })
 }
 
-impl<T: Debug> Debug for Box<T> {
-    fn debug_fmt(self, f: &mut Formatter) -> Result<(), FormatError> {
-        self.as_ref().debug_fmt(f)
-    }
+// ── Arc — Atomically reference counted (thread-safe) ────────────
+
+// Creates an atomically reference-counted value.
+fn Arc_new(value) {
+    { _type: "Arc", value: value, ref_count: 1 }
 }
 
-impl<T: Display> Display for Box<T> {
-    fn fmt(self, f: &mut Formatter) -> Result<(), FormatError> {
-        self.as_ref().fmt(f)
-    }
+// Clones an Arc (increments reference count).
+fn arc_clone(arc) {
+    set(arc, "ref_count", get(arc, "ref_count") + 1)
 }
 
-impl<T> Deref for Box<T> {
-    type Target = T;
-    fn deref(self) -> &T { self.as_ref() }
+// Returns the current reference count.
+fn arc_count(arc) { get(arc, "ref_count") }
+
+// Unwraps the inner value.
+fn arc_unwrap(arc) { get(arc, "value") }
+
+// Returns true if this is the only reference.
+fn arc_is_unique(arc) { get(arc, "ref_count") == 1 }
+
+// Creates a weak reference from an Arc.
+fn arc_downgrade(arc) {
+    { _type: "Weak", value: get(arc, "value"), alive: true }
 }
-
-impl<T> DerefMut for Box<T> {
-    fn deref_mut(mut self) -> &mut T { self.as_mut() }
-}
-
-// ─── Rc<T> — Reference Counted (single-threaded) ───────────────────────────
-
-/// A single-threaded reference-counted pointer.
-/// Multiple `Rc<T>` values can share ownership of the same data.
-pub struct Rc<T> {
-    inner: *mut RcInner<T>,
-}
-
-struct RcInner<T> {
-    value: T,
-    strong_count: usize,
-    weak_count: usize,
-}
-
-impl<T> Rc<T> {
-    /// Creates a new Rc wrapping the given value.
-    pub fn new(value: T) -> Rc<T> {
-        let inner = alloc::allocate::<RcInner<T>>(1);
-        unsafe {
-            inner.write(RcInner {
-                value,
-                strong_count: 1,
-                weak_count: 0,
-            });
-        }
-        Rc { inner }
-    }
-
-    /// Returns the number of strong references.
-    pub fn strong_count(self) -> usize {
-        unsafe { (*self.inner).strong_count }
-    }
-
-    /// Returns the number of weak references.
-    pub fn weak_count(self) -> usize {
-        unsafe { (*self.inner).weak_count }
-    }
-
-    /// Returns true if this is the only strong reference.
-    pub fn is_unique(self) -> bool {
-        self.strong_count() == 1
-    }
-
-    /// Returns a reference to the contained value.
-    pub fn as_ref(self) -> &T {
-        unsafe { &(*self.inner).value }
-    }
-
-    /// Returns a mutable reference if this is the only strong reference.
-    pub fn get_mut(mut self) -> Option<&mut T> {
-        if self.is_unique() && self.weak_count() == 0 {
-            Some(unsafe { &mut (*self.inner).value })
-        } else {
-            None
-        }
-    }
-
-    /// Makes a mutable reference, cloning the data if there are other references.
-    pub fn make_mut(mut self) -> &mut T where T: Clone {
-        if !self.is_unique() {
-            let new_value = self.as_ref().clone();
-            *self = Rc::new(new_value);
-        }
-        unsafe { &mut (*self.inner).value }
-    }
-
-    /// Creates a Weak reference.
-    pub fn downgrade(self) -> Weak<T> {
-        unsafe { (*self.inner).weak_count += 1; }
-        Weak { inner: self.inner }
-    }
-
-    /// Attempts to unwrap the Rc, returning the inner value if unique.
-    pub fn try_unwrap(self) -> Result<T, Rc<T>> {
-        if self.strong_count() == 1 {
-            let value = unsafe { ptr::read(&(*self.inner).value) };
-            unsafe {
-                if (*self.inner).weak_count == 0 {
-                    alloc::deallocate(self.inner, 1);
-                }
-            }
-            mem::forget(self);
-            Ok(value)
-        } else {
-            Err(self)
-        }
-    }
-}
-
-impl<T> Clone for Rc<T> {
-    fn clone(self) -> Rc<T> {
-        unsafe { (*self.inner).strong_count += 1; }
-        Rc { inner: self.inner }
-    }
-}
-
-impl<T> Drop for Rc<T> {
-    fn drop(mut self) {
-        unsafe {
-            (*self.inner).strong_count -= 1;
-            if (*self.inner).strong_count == 0 {
-                ptr::drop_in_place(&mut (*self.inner).value);
-                if (*self.inner).weak_count == 0 {
-                    alloc::deallocate(self.inner, 1);
-                }
-            }
-        }
-    }
-}
-
-impl<T: Eq> Eq for Rc<T> {
-    fn eq(self, other: Rc<T>) -> bool {
-        self.as_ref() == other.as_ref()
-    }
-}
-
-impl<T> Deref for Rc<T> {
-    type Target = T;
-    fn deref(self) -> &T { self.as_ref() }
-}
-
-/// A non-owning reference to an Rc-managed value.
-pub struct Weak<T> {
-    inner: *mut RcInner<T>,
-}
-
-impl<T> Weak<T> {
-    /// Attempts to upgrade to a strong Rc. Returns None if the value was dropped.
-    pub fn upgrade(self) -> Option<Rc<T>> {
-        unsafe {
-            if (*self.inner).strong_count > 0 {
-                (*self.inner).strong_count += 1;
-                Some(Rc { inner: self.inner })
-            } else {
-                None
-            }
-        }
-    }
-
-    /// Returns the number of strong references, or 0 if dropped.
-    pub fn strong_count(self) -> usize {
-        unsafe { (*self.inner).strong_count }
-    }
-}
-
-impl<T> Clone for Weak<T> {
-    fn clone(self) -> Weak<T> {
-        unsafe { (*self.inner).weak_count += 1; }
-        Weak { inner: self.inner }
-    }
-}
-
-impl<T> Drop for Weak<T> {
-    fn drop(mut self) {
-        unsafe {
-            (*self.inner).weak_count -= 1;
-            if (*self.inner).strong_count == 0 && (*self.inner).weak_count == 0 {
-                alloc::deallocate(self.inner, 1);
-            }
-        }
-    }
-}
-
-// ─── Arc<T> — Atomically Reference Counted (thread-safe) ───────────────────
-
-/// A thread-safe reference-counted pointer.
-/// Uses atomic operations for the reference count.
-pub struct Arc<T> {
-    inner: *mut ArcInner<T>,
-}
-
-struct ArcInner<T> {
-    value: T,
-    strong_count: AtomicUsize,
-    weak_count: AtomicUsize,
-}
-
-impl<T> Arc<T> {
-    /// Creates a new Arc wrapping the given value.
-    pub fn new(value: T) -> Arc<T> {
-        let inner = alloc::allocate::<ArcInner<T>>(1);
-        unsafe {
-            inner.write(ArcInner {
-                value,
-                strong_count: AtomicUsize::new(1),
-                weak_count: AtomicUsize::new(0),
-            });
-        }
-        Arc { inner }
-    }
-
-    /// Returns the number of strong references.
-    pub fn strong_count(self) -> usize {
-        unsafe { (*self.inner).strong_count.load(Ordering::Acquire) }
-    }
-
-    /// Returns the number of weak references.
-    pub fn weak_count(self) -> usize {
-        unsafe { (*self.inner).weak_count.load(Ordering::Acquire) }
-    }
-
-    /// Returns a reference to the contained value.
-    pub fn as_ref(self) -> &T {
-        unsafe { &(*self.inner).value }
-    }
-
-    /// Returns a mutable reference if this is the only reference.
-    pub fn get_mut(mut self) -> Option<&mut T> {
-        if self.strong_count() == 1 && self.weak_count() == 0 {
-            Some(unsafe { &mut (*self.inner).value })
-        } else {
-            None
-        }
-    }
-
-    /// Makes a mutable reference, cloning if shared.
-    pub fn make_mut(mut self) -> &mut T where T: Clone {
-        if self.strong_count() != 1 {
-            let new_value = self.as_ref().clone();
-            *self = Arc::new(new_value);
-        }
-        unsafe { &mut (*self.inner).value }
-    }
-
-    /// Creates a WeakArc reference.
-    pub fn downgrade(self) -> WeakArc<T> {
-        unsafe { (*self.inner).weak_count.fetch_add(1, Ordering::Relaxed); }
-        WeakArc { inner: self.inner }
-    }
-
-    /// Attempts to unwrap the Arc, returning the inner value if unique.
-    pub fn try_unwrap(self) -> Result<T, Arc<T>> {
-        if self.strong_count() == 1 {
-            let value = unsafe { ptr::read(&(*self.inner).value) };
-            mem::forget(self);
-            Ok(value)
-        } else {
-            Err(self)
-        }
-    }
-}
-
-// Arc is Send + Sync when T is Send + Sync
-unsafe impl<T: Send + Sync> Send for Arc<T> {}
-unsafe impl<T: Send + Sync> Sync for Arc<T> {}
-
-impl<T> Clone for Arc<T> {
-    fn clone(self) -> Arc<T> {
-        unsafe { (*self.inner).strong_count.fetch_add(1, Ordering::Relaxed); }
-        Arc { inner: self.inner }
-    }
-}
-
-impl<T> Drop for Arc<T> {
-    fn drop(mut self) {
-        unsafe {
-            if (*self.inner).strong_count.fetch_sub(1, Ordering::Release) == 1 {
-                atomic::fence(Ordering::Acquire);
-                ptr::drop_in_place(&mut (*self.inner).value);
-                if (*self.inner).weak_count.load(Ordering::Acquire) == 0 {
-                    alloc::deallocate(self.inner, 1);
-                }
-            }
-        }
-    }
-}
-
-impl<T: Eq> Eq for Arc<T> {
-    fn eq(self, other: Arc<T>) -> bool {
-        self.as_ref() == other.as_ref()
-    }
-}
-
-impl<T> Deref for Arc<T> {
-    type Target = T;
-    fn deref(self) -> &T { self.as_ref() }
-}
-
-/// A non-owning reference to an Arc-managed value.
-pub struct WeakArc<T> {
-    inner: *mut ArcInner<T>,
-}
-
-impl<T> WeakArc<T> {
-    /// Attempts to upgrade to a strong Arc.
-    pub fn upgrade(self) -> Option<Arc<T>> {
-        unsafe {
-            loop {
-                let count = (*self.inner).strong_count.load(Ordering::Acquire);
-                if count == 0 { return None; }
-                if (*self.inner).strong_count.compare_exchange(
-                    count, count + 1, Ordering::AcqRel, Ordering::Relaxed
-                ).is_ok() {
-                    return Some(Arc { inner: self.inner });
-                }
-            }
-        }
-    }
-}
-
-impl<T> Clone for WeakArc<T> {
-    fn clone(self) -> WeakArc<T> {
-        unsafe { (*self.inner).weak_count.fetch_add(1, Ordering::Relaxed); }
-        WeakArc { inner: self.inner }
-    }
-}
-
-impl<T> Drop for WeakArc<T> {
-    fn drop(mut self) {
-        unsafe {
-            if (*self.inner).weak_count.fetch_sub(1, Ordering::Release) == 1 {
-                if (*self.inner).strong_count.load(Ordering::Acquire) == 0 {
-                    alloc::deallocate(self.inner, 1);
-                }
-            }
-        }
-    }
-}
-
-unsafe impl<T: Send + Sync> Send for WeakArc<T> {}
-unsafe impl<T: Send + Sync> Sync for WeakArc<T> {}

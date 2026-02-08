@@ -1,0 +1,150 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// Self-Parse Stress Test
+// ═══════════════════════════════════════════════════════════════════════════
+// This file uses the self-hosted lexer and parser (from selfhost.greypp)
+// to parse increasingly complex Grey++ programs, validating each phase.
+//
+// Run: node <grey++>/src/index.js run examples/self_parse_test.greypp
+// (Requires selfhost.greypp to be loaded or combined)
+// ═══════════════════════════════════════════════════════════════════════════
+
+banner("Grey++ Self-Parse Stress Test")
+
+// ── Test 1: Empty program ────────────────────────────────────────────────
+fn test_empty() {
+    section("Test 1: Empty source")
+    fn tokens() { tokenize("") }
+    fn ast() { parse("") }
+    assert(len(tokens()) == 1, "Empty source should produce 1 token (EOF)")
+    assert(get(ast(), "kind") == "Program", "Should produce Program node")
+    assert(len(get(ast(), "body")) == 0, "Program body should be empty")
+    print("  PASS")
+}
+
+// ── Test 2: Single expression ────────────────────────────────────────────
+fn test_single_expr() {
+    section("Test 2: Single expression")
+    fn ast() { parse("42") }
+    fn body() { get(ast(), "body") }
+    assert(len(body()) == 1, "Should have 1 node")
+    assert(get(head(body()), "kind") == "NumberLit", "Should be NumberLit")
+    assert(get(head(body()), "value") == 42, "Value should be 42")
+    print("  PASS")
+}
+
+// ── Test 3: String with escapes ──────────────────────────────────────────
+fn test_strings() {
+    section("Test 3: Strings with escape sequences")
+    fn ast() { parse("\"hello\\nworld\"") }
+    fn node() { head(get(ast(), "body")) }
+    assert(get(node(), "kind") == "StringLit", "Should be StringLit")
+    assert(includes(get(node(), "value"), "\n"), "Should contain newline escape")
+    print("  PASS")
+}
+
+// ── Test 4: Function declaration ─────────────────────────────────────────
+fn test_fn_decl() {
+    section("Test 4: Function declaration")
+    fn source() { "fn greet(name) { str(\"Hello, \", name) }" }
+    fn ast() { parse(source()) }
+    fn node() { head(get(ast(), "body")) }
+    assert(get(node(), "kind") == "FnDecl", "Should be FnDecl")
+    assert(get(node(), "name") == "greet", "Name should be 'greet'")
+    assert(len(get(node(), "params")) == 1, "Should have 1 param")
+    print("  PASS")
+}
+
+// ── Test 5: Binary expression precedence ─────────────────────────────────
+fn test_precedence() {
+    section("Test 5: Operator precedence")
+    fn ast() { parse("2 + 3 * 4") }
+    fn node() { head(get(ast(), "body")) }
+    // Should be BinaryExpr(+, 2, BinaryExpr(*, 3, 4))
+    assert(get(node(), "kind") == "BinaryExpr", "Should be BinaryExpr")
+    assert(get(node(), "op") == "+", "Top operator should be +")
+    fn right() { get(node(), "right") }
+    assert(get(right(), "op") == "*", "Right child should be *")
+    print("  PASS")
+}
+
+// ── Test 6: Chained calls ────────────────────────────────────────────────
+fn test_chained_calls() {
+    section("Test 6: Chained function calls")
+    fn ast() { parse("make_adder(5)(10)") }
+    fn node() { head(get(ast(), "body")) }
+    // Outer call: CallExpr(<inner call>, [10])
+    assert(get(node(), "kind") == "CallExpr", "Should be CallExpr")
+    // Inner callee should also be a CallExpr
+    fn callee() { get(node(), "callee") }
+    assert(get(callee(), "kind") == "CallExpr", "Callee should be CallExpr (chained)")
+    print("  PASS")
+}
+
+// ── Test 7: Anonymous function ───────────────────────────────────────────
+fn test_anon_fn() {
+    section("Test 7: Anonymous function (lambda)")
+    fn ast() { parse("fn(x) { x * 2 }") }
+    fn node() { head(get(ast(), "body")) }
+    assert(get(node(), "kind") == "FnDecl", "Should be FnDecl")
+    assert(is_nil(get(node(), "name")), "Name should be nil (anonymous)")
+    assert(len(get(node(), "params")) == 1, "Should have 1 param")
+    print("  PASS")
+}
+
+// ── Test 8: Array and object literals ────────────────────────────────────
+fn test_data_literals() {
+    section("Test 8: Array and object literals")
+    fn ast() { parse("[1, 2, 3]") }
+    fn arr() { head(get(ast(), "body")) }
+    assert(get(arr(), "kind") == "ArrayLit", "Should be ArrayLit")
+    assert(len(get(arr(), "elements")) == 3, "Should have 3 elements")
+
+    fn ast2() { parse("{ name: \"Alice\", age: 30 }") }
+    fn obj() { head(get(ast2(), "body")) }
+    assert(get(obj(), "kind") == "ObjectLit", "Should be ObjectLit")
+    assert(len(get(obj(), "entries")) == 2, "Should have 2 entries")
+    print("  PASS")
+}
+
+// ── Test 9: Query expression ─────────────────────────────────────────────
+fn test_query() {
+    section("Test 9: Query expression")
+    fn source() { "query { select name, age from users where age > 18 }" }
+    fn ast() { parse(source()) }
+    fn node() { head(get(ast(), "body")) }
+    assert(get(node(), "kind") == "Query", "Should be Query")
+    assert(not(is_nil(get(node(), "select"))), "Should have select clause")
+    assert(not(is_nil(get(node(), "from"))), "Should have from clause")
+    assert(not(is_nil(get(node(), "where"))), "Should have where clause")
+    print("  PASS")
+}
+
+// ── Test 10: Semantic analysis ───────────────────────────────────────────
+fn test_semantics() {
+    section("Test 10: Semantic analysis")
+    fn good_source() { "fn foo(x) { print(x) }" }
+    fn good_result() { analyze(parse(good_source())) }
+    assert(get(good_result(), "valid") == true, "Valid code should pass analysis")
+
+    fn bad_source() { "fn foo(x) { unknown_fn(x) }" }
+    fn bad_result() { analyze(parse(bad_source())) }
+    assert(len(get(bad_result(), "errors")) > 0, "Should detect undefined function")
+    print("  PASS")
+}
+
+// ── Run all tests ────────────────────────────────────────────────────────
+test_empty()
+test_single_expr()
+test_strings()
+test_fn_decl()
+test_precedence()
+test_chained_calls()
+test_anon_fn()
+test_data_literals()
+test_query()
+test_semantics()
+
+divider()
+banner("All Self-Parse Tests Passed")
+print("The self-hosted Grey++ compiler front-end correctly tokenizes, parses,")
+print("and analyzes Grey++ source code written in Grey++ itself.")

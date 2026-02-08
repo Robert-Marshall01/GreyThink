@@ -1,262 +1,108 @@
-/// deterministic::scheduler — Deterministic task scheduler.
-///
-/// Executes async tasks in a fully deterministic, reproducible order.
-/// Given the same inputs and the same seed, the scheduler will always
-/// make the same scheduling decisions in the same order.
+// GreyStd Deterministic - Scheduler
+// Deterministic task scheduler for reproducible execution order
 
-use crate::core::string::String;
-use crate::core::vec::Vec;
-use crate::core::option::Option;
-use crate::core::result::Result;
-use crate::time::duration::Duration;
-use crate::time::instant::Instant;
-
-/// Scheduling order strategy.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum ScheduleOrder {
-    /// Tasks execute in strict FIFO order of submission.
-    Fifo,
-    /// Tasks execute in priority order (lower number = higher priority).
-    Priority,
-    /// Tasks execute in a seeded pseudo-random order for fuzz testing.
-    SeededRandom(u64),
-    /// Round-robin across task groups.
-    RoundRobin,
+// Create a deterministic scheduler
+fn DetScheduler_new(seed) {
+  {
+    _type: "DetScheduler",
+    seed: seed,
+    tick: 0,
+    queue: [],
+    completed: [],
+    rng_state: seed
+  }
 }
 
-/// State of a deterministic task.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum DetTaskState {
-    Ready,
-    Running,
-    Blocked(String),
-    Completed,
-    Failed(String),
+// Add a task to the scheduler with priority
+fn det_schedule(sched, name, priority, action) {
+  fn task() {
+    {
+      name: name,
+      priority: priority,
+      action: action,
+      scheduled_at: get(sched, "tick"),
+      status: "pending"
+    }
+  }
+  merge(sched, {
+    queue: append(get(sched, "queue"), task())
+  })
 }
 
-/// A deterministic task handle.
-pub struct DetTask {
-    /// Unique task ID (monotonically increasing).
-    pub id: u64,
-    /// Human-readable name.
-    pub name: String,
-    /// Priority (0 = highest).
-    pub priority: u32,
-    /// Current state.
-    pub state: DetTaskState,
-    /// Group for round-robin scheduling.
-    pub group: String,
-    /// Logical clock tick when this task was submitted.
-    pub submitted_at: u64,
-    /// The task body.
-    body: Box<dyn FnOnce() -> Result<(), String>>,
+// Add a task with default priority
+fn det_schedule_default(sched, name, action) {
+  det_schedule(sched, name, 0, action)
 }
 
-/// Record of a scheduling decision for replay.
-#[derive(Debug, Clone)]
-pub struct ScheduleDecision {
-    /// Logical tick.
-    pub tick: u64,
-    /// Which task ID was selected.
-    pub task_id: u64,
-    /// Why this task was chosen.
-    pub reason: String,
+// Execute the next task (highest priority, then FIFO)
+fn det_step(sched) {
+  fn q() { get(sched, "queue") }
+  if_then(eq(length(q()), 0), fn() { sched }, fn() {
+    // Find highest priority task
+    fn sorted_q() {
+      sort_by(q(), fn(a, b) { sub(get(b, "priority"), get(a, "priority")) })
+    }
+    fn next_task() { get(sorted_q(), 0) }
+    fn remaining() { slice(sorted_q(), 1) }
+    // Execute the task
+    fn result() { get(next_task(), "action")() }
+    fn completed_task() { merge(next_task(), { status: "completed", completed_at: add(get(sched, "tick"), 1), result: result() }) }
+    merge(sched, {
+      tick: add(get(sched, "tick"), 1),
+      queue: remaining(),
+      completed: append(get(sched, "completed"), completed_task())
+    })
+  })
 }
 
-/// The deterministic scheduler.
-pub struct DetScheduler {
-    /// Scheduling strategy.
-    order: ScheduleOrder,
-    /// Monotonic task ID counter.
-    next_id: u64,
-    /// Logical clock tick counter.
-    tick: u64,
-    /// Ready queue.
-    ready: Vec<DetTask>,
-    /// Completed task results.
-    completed: Vec<(u64, Result<(), String>)>,
-    /// Decision log for replay.
-    decisions: Vec<ScheduleDecision>,
-    /// Seeded PRNG state (for SeededRandom).
-    rng_state: u64,
-    /// Current round-robin index.
-    rr_index: usize,
+// Execute all tasks
+fn det_run_all(sched) {
+  fn step(s) {
+    if_then(eq(length(get(s, "queue")), 0),
+      fn() { s },
+      fn() { step(det_step(s)) }
+    )
+  }
+  step(sched)
 }
 
-impl DetScheduler {
-    pub fn new(order: ScheduleOrder) -> DetScheduler {
-        let rng_state = match &order {
-            ScheduleOrder::SeededRandom(seed) => *seed,
-            _ => 0,
-        };
-        DetScheduler {
-            order,
-            next_id: 0,
-            tick: 0,
-            ready: Vec::new(),
-            completed: Vec::new(),
-            decisions: Vec::new(),
-            rng_state,
-            rr_index: 0,
-        }
-    }
-
-    /// Current logical tick.
-    pub fn current_tick(&self) -> u64 { self.tick }
-
-    /// Number of pending tasks.
-    pub fn pending(&self) -> usize { self.ready.len() }
-
-    /// Submit a task for execution.
-    pub fn submit<F: FnOnce() -> Result<(), String> + 'static>(
-        &mut self,
-        name: &str,
-        func: F,
-    ) -> u64 {
-        self.submit_with_priority(name, 100, "", func)
-    }
-
-    /// Submit a task with priority and group.
-    pub fn submit_with_priority<F: FnOnce() -> Result<(), String> + 'static>(
-        &mut self,
-        name: &str,
-        priority: u32,
-        group: &str,
-        func: F,
-    ) -> u64 {
-        let id = self.next_id;
-        self.next_id += 1;
-        self.ready.push(DetTask {
-            id,
-            name: String::from(name),
-            priority,
-            state: DetTaskState::Ready,
-            group: String::from(group),
-            submitted_at: self.tick,
-            body: Box::new(func),
-        });
-        id
-    }
-
-    /// Execute the next task according to the scheduling order.
-    /// Returns the task ID and result, or None if no tasks are ready.
-    pub fn step(&mut self) -> Option<(u64, Result<(), String>)> {
-        if self.ready.is_empty() { return Option::None; }
-
-        let idx = self.select_next();
-        let mut task = self.ready.remove(idx);
-        let task_id = task.id;
-
-        self.decisions.push(ScheduleDecision {
-            tick: self.tick,
-            task_id,
-            reason: format!("{:?} selected '{}'", self.order, task.name),
-        });
-
-        task.state = DetTaskState::Running;
-        let result = (task.body)();
-        task.state = match &result {
-            Result::Ok(()) => DetTaskState::Completed,
-            Result::Err(e) => DetTaskState::Failed(e.clone()),
-        };
-
-        self.completed.push((task_id, result.clone()));
-        self.tick += 1;
-
-        Option::Some((task_id, result))
-    }
-
-    /// Run all tasks until the queue is empty.
-    pub fn run_all(&mut self) -> Vec<(u64, Result<(), String>)> {
-        let mut results = Vec::new();
-        while let Option::Some(r) = self.step() {
-            results.push(r);
-        }
-        results
-    }
-
-    /// Run up to `n` steps.
-    pub fn run_steps(&mut self, n: usize) -> Vec<(u64, Result<(), String>)> {
-        let mut results = Vec::new();
-        for _ in 0..n {
-            match self.step() {
-                Option::Some(r) => results.push(r),
-                Option::None => break,
-            }
-        }
-        results
-    }
-
-    /// Select which task index to run next based on the strategy.
-    fn select_next(&mut self) -> usize {
-        match &self.order {
-            ScheduleOrder::Fifo => 0,
-            ScheduleOrder::Priority => {
-                let mut best = 0;
-                for i in 1..self.ready.len() {
-                    if self.ready[i].priority < self.ready[best].priority {
-                        best = i;
-                    }
-                }
-                best
-            }
-            ScheduleOrder::SeededRandom(_) => {
-                // xorshift64
-                self.rng_state ^= self.rng_state << 13;
-                self.rng_state ^= self.rng_state >> 7;
-                self.rng_state ^= self.rng_state << 17;
-                (self.rng_state as usize) % self.ready.len()
-            }
-            ScheduleOrder::RoundRobin => {
-                // Group round-robin: collect unique groups, pick next group, pick first task in that group
-                let groups: Vec<String> = {
-                    let mut g = Vec::new();
-                    for task in &self.ready {
-                        if !g.contains(&task.group) { g.push(task.group.clone()); }
-                    }
-                    g
-                };
-                if groups.is_empty() { return 0; }
-                let group = &groups[self.rr_index % groups.len()];
-                self.rr_index += 1;
-                self.ready.iter().position(|t| &t.group == group).unwrap_or(0)
-            }
-        }
-    }
-
-    /// Get the full decision log for replay verification.
-    pub fn decision_log(&self) -> &[ScheduleDecision] {
-        &self.decisions
-    }
-
-    /// Verify that a replay log matches the current decision log.
-    pub fn verify_replay(&self, expected: &[ScheduleDecision]) -> bool {
-        if self.decisions.len() != expected.len() { return false; }
-        self.decisions.iter().zip(expected.iter()).all(|(a, b)| {
-            a.tick == b.tick && a.task_id == b.task_id
-        })
-    }
-
-    /// Reset the scheduler state for a new run.
-    pub fn reset(&mut self) {
-        self.ready.clear();
-        self.completed.clear();
-        self.decisions.clear();
-        self.tick = 0;
-        self.next_id = 0;
-        self.rr_index = 0;
-        if let ScheduleOrder::SeededRandom(seed) = &self.order {
-            self.rng_state = *seed;
-        }
-    }
+// Execute n tasks
+fn det_run_n(sched, n) {
+  fn step(s, remaining) {
+    if_then(or(eq(remaining, 0), eq(length(get(s, "queue")), 0)),
+      fn() { s },
+      fn() { step(det_step(s), sub(remaining, 1)) }
+    )
+  }
+  step(sched, n)
 }
 
-/// Create a FIFO deterministic scheduler.
-pub fn fifo_scheduler() -> DetScheduler {
-    DetScheduler::new(ScheduleOrder::Fifo)
+// Get current tick
+fn det_tick(sched) {
+  get(sched, "tick")
 }
 
-/// Create a seeded random scheduler for fuzz testing.
-pub fn fuzz_scheduler(seed: u64) -> DetScheduler {
-    DetScheduler::new(ScheduleOrder::SeededRandom(seed))
+// Get pending count
+fn det_pending(sched) {
+  length(get(sched, "queue"))
+}
+
+// Get completed tasks
+fn det_completed(sched) {
+  get(sched, "completed")
+}
+
+// Get execution log
+fn det_log(sched) {
+  map(get(sched, "completed"), fn(t) {
+    { name: get(t, "name"), tick: get(t, "completed_at") }
+  })
+}
+
+// Deterministic pseudo-random number from scheduler state
+fn det_random(sched) {
+  fn state() { get(sched, "rng_state") }
+  fn next_state() { mod(add(mul(state(), 1103515245), 12345), 2147483648) }
+  fn value() { div(next_state(), 2147483648) }
+  { value: value(), scheduler: merge(sched, { rng_state: next_state() }) }
 }

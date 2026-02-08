@@ -7,6 +7,13 @@ authors = ["Grey++ Core Team"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/greylang/greystd"
 
+[language]
+name = "Grey++"
+syntax = "greypp"
+file_extensions = [".grey", ".greypp", ".gpp"]
+interpreter = "node src/index.js run"
+interpreter_path = "../Grey++"
+
 [modules]
 core       = { path = "src/core",          description = "Core language primitives" }
 mem        = { path = "src/mem",           description = "Memory & ownership utilities" }

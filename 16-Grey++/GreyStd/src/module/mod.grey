@@ -1,9 +1,12 @@
-/// module — Module metadata, dynamic loading, and semantic versioning.
+// GreyStd Module Module
+// Module system utilities for package management
+// Submodules: loader, version, metadata
 
-pub mod metadata;
-pub mod loader;
-pub mod version;
-
-pub use metadata::{ModuleMeta, Dependency};
-pub use loader::{DynLib, Symbol};
-pub use version::{Version, VersionReq};
+fn module_info() {
+  {
+    _type: "Module",
+    name: "module",
+    submodules: ["loader", "version", "metadata"],
+    description: "Module loading, versioning, and metadata management"
+  }
+}

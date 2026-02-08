@@ -32,35 +32,36 @@ Warning: contains instability, always verify stability before deploying.
 ## Quick Start
 
 ```grey
-use greystd::core::{ String, Vec, HashMap, Option, Result };
-use greystd::io::File;
-use greystd::concurrent::{ spawn, channel };
+// ── Read a config file and parse it ──
+fn content() { file_read("config.toml") }
+fn config() { toml_parse(content()) }
 
-fn main() -> Result<(), Error> {
-    // Read a file
-    let content = File::read_to_string("config.toml")?;
+// ── Use Option and Result ──
+fn port() { option_unwrap_or(map_get(config(), "port"), 3000) }
+fn name() { result_unwrap(Ok("Grey++ App")) }
 
-    // Parse into a map
-    let config = greystd::serial::toml::parse(&content)?;
+// ── Spawn concurrent tasks with channels ──
+fn ch() { Channel_new(10) }
+fn sender() { get(ch(), "sender") }
+fn receiver() { get(ch(), "receiver") }
 
-    // Spawn concurrent tasks with channels
-    let (tx, rx) = channel::<String>();
+fn send_msg() { channel_send(sender(), "Hello from Grey++!") }
+fn msg() { channel_recv(receiver()) }
 
-    spawn(async {
-        tx.send("Hello from Grey++!").await;
-    });
-
-    let msg = rx.recv().await?;
-    println("{}", msg);
-
-    Ok(())
+// ── Print the result ──
+fn main() {
+  send_msg()
+  print(msg())
 }
 ```
 
+> **File extension:** GreyStd source files use `.grey`, which is a supported Grey++ extension
+> alongside `.greypp` and `.gpp`. All `.grey` files in this library are valid Grey++ code.
+
 ## Design Principles
 
-1. **Safety by default** — `Option` and `Result` for error-safe programming; no null pointers.
-2. **Zero-cost abstractions** — Iterators, generics, and smart pointers compile down to optimal code.
+1. **Safety by default** — `Option` and `Result` for error-safe programming; `nil`-aware helpers throughout.
+2. **Pure functions everywhere** — All operations return new values; no mutation, no side effects in core logic.
 3. **Async-first concurrency** — Built-in event loop, tasks, and channels with structured concurrency.
 4. **Deterministic execution** — Replay-safe collections, scheduling, and IO for verifiable computation.
 5. **Batteries included** — Crypto, networking, serialization, and testing out of the box.

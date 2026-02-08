@@ -1,211 +1,123 @@
-/// reflect::invoke — Dynamic method invocation and dispatch.
+// GreyStd Reflect - Invoke
+// Dynamic function invocation and dispatch
 
-use crate::core::string::String;
-use crate::core::vec::Vec;
-use crate::core::option::Option;
-use crate::core::result::Result;
-use crate::reflect::inspect::Value;
-use crate::reflect::type_meta::{TypeId, TypeMeta, Reflect};
-
-/// Error during dynamic invocation.
-#[derive(Debug, Clone)]
-pub enum InvokeError {
-    /// Method not found on the type.
-    MethodNotFound { type_name: String, method: String },
-    /// Wrong number of arguments.
-    ArityMismatch { expected: usize, got: usize },
-    /// Argument type mismatch.
-    TypeMismatch { param_index: usize, expected: String, got: String },
-    /// Method panicked during execution.
-    Panicked(String),
-    /// Method is not accessible (private).
-    NotAccessible { method: String },
-    /// Custom error.
-    Other(String),
+// Create a function descriptor
+fn FuncDescriptor_new(name, arity, func) {
+  {
+    _type: "FuncDescriptor",
+    name: name,
+    arity: arity,
+    func: func,
+    doc: nil,
+    tags: []
+  }
 }
 
-impl Display for InvokeError {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        match self {
-            InvokeError::MethodNotFound { type_name, method } =>
-                write!(f, "method '{}' not found on type '{}'", method, type_name),
-            InvokeError::ArityMismatch { expected, got } =>
-                write!(f, "expected {} arguments, got {}", expected, got),
-            InvokeError::TypeMismatch { param_index, expected, got } =>
-                write!(f, "argument {} type mismatch: expected '{}', got '{}'", param_index, expected, got),
-            InvokeError::Panicked(msg) =>
-                write!(f, "method panicked: {}", msg),
-            InvokeError::NotAccessible { method } =>
-                write!(f, "method '{}' is not accessible", method),
-            InvokeError::Other(msg) =>
-                write!(f, "{}", msg),
-        }
-    }
+// Set documentation for function
+fn func_set_doc(fd, doc_str) {
+  merge(fd, { doc: doc_str })
 }
 
-/// Trait for types that support dynamic method calling.
-pub trait DynCall: Reflect {
-    /// Call a method by name with dynamic arguments.
-    fn call(&self, method: &str, args: Vec<Value>) -> Result<Value, InvokeError>;
-
-    /// Call a mutable method by name.
-    fn call_mut(&mut self, method: &str, args: Vec<Value>) -> Result<Value, InvokeError>;
-
-    /// List available method names.
-    fn methods(&self) -> Vec<String> {
-        Self::type_meta().methods.iter()
-            .filter(|m| m.is_public)
-            .map(|m| m.name.clone())
-            .collect()
-    }
-
-    /// Check if a method exists and is callable.
-    fn has_method(&self, name: &str) -> bool {
-        Self::type_meta().method(name)
-            .map(|m| m.is_public)
-            .unwrap_or(false)
-    }
+// Tag a function
+fn func_tag(fd, tag) {
+  merge(fd, { tags: append(get(fd, "tags"), tag) })
 }
 
-/// A boxed dynamic method that can be stored and called later.
-pub struct DynMethod {
-    /// Method name.
-    pub name: String,
-    /// Type this method belongs to.
-    pub type_id: TypeId,
-    /// Number of expected parameters (excluding self).
-    pub arity: usize,
-    /// The invocation closure.
-    invoker: Box<dyn Fn(&dyn DynCall, Vec<Value>) -> Result<Value, InvokeError>>,
+// Invoke a function descriptor with arguments array
+fn func_invoke(fd, args) {
+  fn f() { get(fd, "func") }
+  fn n() { length(args) }
+  cond(
+    eq(n(), 0), f()(),
+    eq(n(), 1), f()(get(args, 0)),
+    eq(n(), 2), f()(get(args, 0), get(args, 1)),
+    eq(n(), 3), f()(get(args, 0), get(args, 1), get(args, 2)),
+    eq(n(), 4), f()(get(args, 0), get(args, 1), get(args, 2), get(args, 3)),
+    eq(n(), 5), f()(get(args, 0), get(args, 1), get(args, 2), get(args, 3), get(args, 4)),
+    apply(f(), args)
+  )
 }
 
-impl DynMethod {
-    /// Create a new dynamic method wrapper.
-    pub fn new<T, F>(name: &str, arity: usize, func: F) -> DynMethod
-    where
-        T: DynCall + 'static,
-        F: Fn(&T, Vec<Value>) -> Result<Value, InvokeError> + 'static,
-    {
-        DynMethod {
-            name: String::from(name),
-            type_id: TypeId::of::<T>(),
-            arity,
-            invoker: Box::new(move |obj: &dyn DynCall, args: Vec<Value>| {
-                // Downcast the trait object to concrete type
-                let concrete = unsafe { &*(obj as *const dyn DynCall as *const T) };
-                func(concrete, args)
-            }),
-        }
-    }
-
-    /// Invoke the method on a target with arguments.
-    pub fn invoke(&self, target: &dyn DynCall, args: Vec<Value>) -> Result<Value, InvokeError> {
-        if args.len() != self.arity {
-            return Result::Err(InvokeError::ArityMismatch {
-                expected: self.arity,
-                got: args.len(),
-            });
-        }
-        (self.invoker)(target, args)
-    }
+// Create a dispatch table (name → function)
+fn DispatchTable_new() {
+  { _type: "DispatchTable", entries: {} }
 }
 
-/// Registry for dynamic methods, allowing late-bound dispatch.
-pub struct MethodRegistry {
-    methods: Vec<DynMethod>,
+// Register a function in the dispatch table
+fn dispatch_register(dt, name, func) {
+  merge(dt, {
+    entries: merge(get(dt, "entries"), fromEntries([[name, func]]))
+  })
 }
 
-impl MethodRegistry {
-    pub fn new() -> MethodRegistry {
-        MethodRegistry { methods: Vec::new() }
-    }
-
-    /// Register a dynamic method.
-    pub fn register(&mut self, method: DynMethod) {
-        self.methods.push(method);
-    }
-
-    /// Look up a method by type and name.
-    pub fn lookup(&self, type_id: TypeId, name: &str) -> Option<&DynMethod> {
-        self.methods.iter().find(|m| m.type_id == type_id && m.name == name)
-    }
-
-    /// Invoke a method by type and name.
-    pub fn invoke(
-        &self,
-        type_id: TypeId,
-        name: &str,
-        target: &dyn DynCall,
-        args: Vec<Value>,
-    ) -> Result<Value, InvokeError> {
-        match self.lookup(type_id, name) {
-            Option::Some(method) => method.invoke(target, args),
-            Option::None => Result::Err(InvokeError::MethodNotFound {
-                type_name: format!("TypeId(0x{:016x})", type_id.as_u64()),
-                method: String::from(name),
-            }),
-        }
-    }
+// Call a function from the dispatch table
+fn dispatch_call(dt, name, args) {
+  fn func() { get(get(dt, "entries"), name) }
+  if_then(eq(func(), nil),
+    fn() { Err(concat_str("Unknown function: ", name)) },
+    fn() { Ok(func_invoke(FuncDescriptor_new(name, length(args), func()), args)) }
+  )
 }
 
-/// Helper to convert a concrete value to a Value for dynamic calling.
-pub trait IntoValue {
-    fn into_value(self) -> Value;
+// List all registered names
+fn dispatch_names(dt) {
+  keys(get(dt, "entries"))
 }
 
-impl IntoValue for bool { fn into_value(self) -> Value { Value::Bool(self) } }
-impl IntoValue for i32  { fn into_value(self) -> Value { Value::Int(self as i128) } }
-impl IntoValue for i64  { fn into_value(self) -> Value { Value::Int(self as i128) } }
-impl IntoValue for i128 { fn into_value(self) -> Value { Value::Int(self) } }
-impl IntoValue for u32  { fn into_value(self) -> Value { Value::Uint(self as u128) } }
-impl IntoValue for u64  { fn into_value(self) -> Value { Value::Uint(self as u128) } }
-impl IntoValue for u128 { fn into_value(self) -> Value { Value::Uint(self) } }
-impl IntoValue for f64  { fn into_value(self) -> Value { Value::Float(self) } }
-impl IntoValue for String { fn into_value(self) -> Value { Value::Str(self) } }
-impl IntoValue for &str  { fn into_value(self) -> Value { Value::Str(String::from(self)) } }
-
-/// Helper to convert a Value back to a concrete type.
-pub trait FromValue: Sized {
-    fn from_value(value: &Value) -> Result<Self, String>;
+// Check if function exists
+fn dispatch_has(dt, name) {
+  not(eq(get(get(dt, "entries"), name), nil))
 }
 
-impl FromValue for bool {
-    fn from_value(value: &Value) -> Result<bool, String> {
-        match value { Value::Bool(b) => Result::Ok(*b), _ => Result::Err(String::from("expected Bool")) }
-    }
+// Create a method dispatcher (type-based dispatch)
+fn MethodDispatcher_new() {
+  { _type: "MethodDispatcher", methods: {} }
 }
 
-impl FromValue for i64 {
-    fn from_value(value: &Value) -> Result<i64, String> {
-        match value { Value::Int(n) => Result::Ok(*n as i64), _ => Result::Err(String::from("expected Int")) }
-    }
+// Register a method for a type
+fn method_register(md, type_name, method_name, func) {
+  fn key() { concat_str(type_name, ".", method_name) }
+  merge(md, {
+    methods: merge(get(md, "methods"), fromEntries([[key(), func]]))
+  })
 }
 
-impl FromValue for u64 {
-    fn from_value(value: &Value) -> Result<u64, String> {
-        match value { Value::Uint(n) => Result::Ok(*n as u64), _ => Result::Err(String::from("expected Uint")) }
-    }
+// Dispatch a method call on an object
+fn method_call(md, obj, method_name, args) {
+  fn type_name() { get(obj, "_type") }
+  fn key() { concat_str(type_name(), ".", method_name) }
+  fn func() { get(get(md, "methods"), key()) }
+  if_then(eq(func(), nil),
+    fn() { Err(concat_str("No method '", method_name, "' for type '", type_name(), "'")) },
+    fn() { Ok(func_invoke(FuncDescriptor_new(method_name, add(length(args), 1), func()), concat([obj], args))) }
+  )
 }
 
-impl FromValue for f64 {
-    fn from_value(value: &Value) -> Result<f64, String> {
-        match value {
-            Value::Float(f) => Result::Ok(*f),
-            Value::Int(n) => Result::Ok(*n as f64),
-            Value::Uint(n) => Result::Ok(*n as f64),
-            _ => Result::Err(String::from("expected Float")),
-        }
-    }
+// Create a curried function
+fn curry(f, arity) {
+  fn collect(args) {
+    if_then(gte(length(args), arity),
+      fn() { func_invoke(FuncDescriptor_new("curried", arity, f), args) },
+      fn() { fn(x) { collect(append(args, x)) } }
+    )
+  }
+  collect([])
 }
 
-impl FromValue for String {
-    fn from_value(value: &Value) -> Result<String, String> {
-        match value { Value::Str(s) => Result::Ok(s.clone()), _ => Result::Err(String::from("expected Str")) }
-    }
+// Partial application
+fn partial(f, fixed_args) {
+  fn(remaining) {
+    fn all_args() { concat(fixed_args, [remaining]) }
+    func_invoke(FuncDescriptor_new("partial", length(all_args()), f), all_args())
+  }
 }
 
-/// Dynamic constructor — create instances of types by name.
-pub trait DynConstruct: Reflect + Sized {
-    /// Construct from a map of field name -> value.
-    fn construct(fields: Vec<(String, Value)>) -> Result<Self, InvokeError>;
+// Compose two functions
+fn compose(f, g) {
+  fn(x) { f(g(x)) }
+}
+
+// Pipe a value through functions
+fn pipe(value, fns) {
+  fold(fns, value, fn(acc, f) { f(acc) })
 }

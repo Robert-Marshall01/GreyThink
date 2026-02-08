@@ -1,188 +1,126 @@
-/// core::set — Hash set implementation.
-///
-/// `HashSet<T>` is an unordered collection of unique elements,
-/// backed by a `HashMap<T, ()>`.
+// core::set — Hash set utilities
+//
+// In Grey++, sets are represented as objects where keys are the
+// set elements and values are true. This module provides
+// set operations like union, intersection, and difference.
 
-/// An unordered set of unique elements.
-pub struct HashSet<T> {
-    map: HashMap<T, ()>,
+// ── Set Construction ────────────────────────────────────────────
+
+// Creates an empty set.
+fn set_new() { { _type: "Set", items: {} } }
+
+// Creates a set from an array of values.
+fn set_from(arr) {
+    fn build(i, items) {
+        if_then(i >= len(arr),
+            fn() { { _type: "Set", items: items } },
+            fn() { build(i + 1, set(items, to_string(get(arr, i)), true)) })
+    }
+    build(0, {})
 }
 
-impl<T: Hash + Eq> HashSet<T> {
-    /// Creates a new empty set.
-    pub fn new() -> HashSet<T> {
-        HashSet { map: HashMap::new() }
-    }
+// ── Set Inspection ──────────────────────────────────────────────
 
-    /// Creates a set with at least the given capacity.
-    pub fn with_capacity(cap: usize) -> HashSet<T> {
-        HashSet { map: HashMap::with_capacity(cap) }
-    }
+// Returns the number of elements.
+fn set_len(s) { len(keys(get(s, "items"))) }
 
-    /// Creates a set from an iterator.
-    pub fn from_iter<I: Iterator<Item = T>>(iter: I) -> HashSet<T> {
-        let mut set = HashSet::new();
-        for item in iter {
-            set.insert(item);
-        }
-        set
-    }
+// Returns true if the set is empty.
+fn set_is_empty(s) { set_len(s) == 0 }
 
-    /// Returns the number of elements.
-    pub fn len(self) -> usize {
-        self.map.len()
-    }
+// Returns true if the set contains value.
+fn set_contains(s, value) { has_key(get(s, "items"), to_string(value)) }
 
-    /// Returns true if the set is empty.
-    pub fn is_empty(self) -> bool {
-        self.map.is_empty()
-    }
+// Returns the elements as an array.
+fn set_to_array(s) { keys(get(s, "items")) }
 
-    /// Inserts an element. Returns true if the element was not already present.
-    pub fn insert(mut self, value: T) -> bool {
-        self.map.insert(value, ()).is_none()
-    }
+// ── Set Modification ────────────────────────────────────────────
 
-    /// Removes an element. Returns true if the element was present.
-    pub fn remove(mut self, value: &T) -> bool {
-        self.map.remove(value).is_some()
-    }
-
-    /// Returns true if the set contains the given element.
-    pub fn contains(self, value: &T) -> bool {
-        self.map.contains_key(value)
-    }
-
-    /// Clears all elements.
-    pub fn clear(mut self) {
-        self.map.clear();
-    }
-
-    /// Returns an iterator over the elements.
-    pub fn iter(self) -> HashSetIter<T> {
-        HashSetIter { inner: self.map.iter() }
-    }
-
-    // ── Set Operations ──────────────────────────────────────────────
-
-    /// Returns a new set containing elements in both `self` and `other`.
-    pub fn intersection(self, other: &HashSet<T>) -> HashSet<T> where T: Clone {
-        let mut result = HashSet::new();
-        for item in self.iter() {
-            if other.contains(item) {
-                result.insert(item.clone());
-            }
-        }
-        result
-    }
-
-    /// Returns a new set containing elements in either `self` or `other`.
-    pub fn union(self, other: &HashSet<T>) -> HashSet<T> where T: Clone {
-        let mut result = self.clone();
-        for item in other.iter() {
-            result.insert(item.clone());
-        }
-        result
-    }
-
-    /// Returns a new set containing elements in `self` but not in `other`.
-    pub fn difference(self, other: &HashSet<T>) -> HashSet<T> where T: Clone {
-        let mut result = HashSet::new();
-        for item in self.iter() {
-            if !other.contains(item) {
-                result.insert(item.clone());
-            }
-        }
-        result
-    }
-
-    /// Returns a new set containing elements in either `self` or `other` but not both.
-    pub fn symmetric_difference(self, other: &HashSet<T>) -> HashSet<T> where T: Clone {
-        let mut result = HashSet::new();
-        for item in self.iter() {
-            if !other.contains(item) {
-                result.insert(item.clone());
-            }
-        }
-        for item in other.iter() {
-            if !self.contains(item) {
-                result.insert(item.clone());
-            }
-        }
-        result
-    }
-
-    /// Returns true if `self` is a subset of `other`.
-    pub fn is_subset(self, other: &HashSet<T>) -> bool {
-        for item in self.iter() {
-            if !other.contains(item) {
-                return false;
-            }
-        }
-        true
-    }
-
-    /// Returns true if `self` is a superset of `other`.
-    pub fn is_superset(self, other: &HashSet<T>) -> bool {
-        other.is_subset(self)
-    }
-
-    /// Returns true if `self` and `other` have no elements in common.
-    pub fn is_disjoint(self, other: &HashSet<T>) -> bool {
-        for item in self.iter() {
-            if other.contains(item) {
-                return false;
-            }
-        }
-        true
-    }
-
-    /// Retains only elements satisfying the predicate.
-    pub fn retain(mut self, predicate: fn(&T) -> bool) {
-        let to_remove: Vec<T> = self.iter()
-            .filter(|item| !predicate(item))
-            .cloned()
-            .collect();
-        for item in to_remove {
-            self.remove(&item);
-        }
-    }
-
-    /// Converts the set into a Vec.
-    pub fn to_vec(self) -> Vec<T> where T: Clone {
-        self.iter().cloned().collect()
-    }
+// Adds a value to the set (non-mutating).
+fn set_add(s, value) {
+    { _type: "Set", items: set(get(s, "items"), to_string(value), true) }
 }
 
-impl<T: Clone + Hash + Eq> Clone for HashSet<T> {
-    fn clone(self) -> HashSet<T> {
-        HashSet { map: self.map.clone() }
-    }
+// Removes a value from the set (non-mutating).
+fn set_remove(s, value) {
+    { _type: "Set", items: omit(get(s, "items"), to_string(value)) }
 }
 
-impl<T: Debug + Hash + Eq> Debug for HashSet<T> {
-    fn debug_fmt(self, f: &mut Formatter) -> Result<(), FormatError> {
-        f.write_str("{")?;
-        let mut first = true;
-        for item in self.iter() {
-            if !first { f.write_str(", ")?; }
-            item.debug_fmt(f)?;
-            first = false;
-        }
-        f.write_str("}")
-    }
+// Clears the set.
+fn set_clear(s) { set_new() }
+
+// ── Set Operations ──────────────────────────────────────────────
+
+// Returns the union of two sets.
+fn set_union(a, b) {
+    { _type: "Set", items: merge(get(a, "items"), get(b, "items")) }
 }
 
-// ─── Iterator ───────────────────────────────────────────────────────────────
-
-pub struct HashSetIter<T> {
-    inner: HashMapIter<T, ()>,
+// Returns the intersection of two sets.
+fn set_intersection(a, b) {
+    fn items_a() { get(a, "items") }
+    fn items_b() { get(b, "items") }
+    fn common() {
+        filter(keys(items_a()), fn(k) { has_key(items_b(), k) })
+    }
+    set_from(common())
 }
 
-impl<T> Iterator for HashSetIter<T> {
-    type Item = &T;
-
-    fn next(mut self) -> Option<&T> {
-        self.inner.next().map(|(k, _)| k)
+// Returns the difference (a - b).
+fn set_difference(a, b) {
+    fn items_a() { get(a, "items") }
+    fn items_b() { get(b, "items") }
+    fn only_a() {
+        filter(keys(items_a()), fn(k) { not(has_key(items_b(), k)) })
     }
+    set_from(only_a())
+}
+
+// Returns the symmetric difference (elements in either but not both).
+fn set_symmetric_difference(a, b) {
+    set_union(set_difference(a, b), set_difference(b, a))
+}
+
+// Returns true if a is a subset of b.
+fn set_is_subset(a, b) {
+    every(set_to_array(a), fn(item) { set_contains(b, item) })
+}
+
+// Returns true if a is a superset of b.
+fn set_is_superset(a, b) { set_is_subset(b, a) }
+
+// Returns true if two sets have no elements in common.
+fn set_is_disjoint(a, b) {
+    not(some(set_to_array(a), fn(item) { set_contains(b, item) }))
+}
+
+// ── Set Iteration ───────────────────────────────────────────────
+
+// Iterates over each element.
+fn set_for_each(s, f) {
+    forEach(set_to_array(s), f)
+}
+
+// Maps set elements through a function, returning a new set.
+fn set_map(s, f) {
+    set_from(map(set_to_array(s), f))
+}
+
+// Filters set elements by predicate.
+fn set_filter(s, predicate) {
+    set_from(filter(set_to_array(s), predicate))
+}
+
+// Reduces set elements.
+fn set_reduce(s, f, init) {
+    reduce(set_to_array(s), f, init)
+}
+
+// Returns true if any element matches.
+fn set_any(s, predicate) {
+    some(set_to_array(s), predicate)
+}
+
+// Returns true if all elements match.
+fn set_all(s, predicate) {
+    every(set_to_array(s), predicate)
 }

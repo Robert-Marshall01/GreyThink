@@ -1,229 +1,190 @@
-/// core::array — Fixed-size arrays.
-///
-/// `Array<T, N>` is a stack-allocated, fixed-length collection.
+// core::array — Fixed-size array utilities
+//
+// In Grey++, arrays are native dynamic collections.
+// This module provides additional utility functions for arrays
+// beyond the built-in map, filter, reduce, sort, etc.
 
-/// A fixed-size array of `N` elements of type `T`.
-/// Allocated inline (on the stack or inside another struct).
-pub struct Array<T, const N: usize> {
-    data: [T; N],
+// ── Array Construction ──────────────────────────────────────────
+
+// Creates an empty array.
+fn array_new() { [] }
+
+// Creates an array filled with n copies of value.
+fn array_filled(value, n) { repeat(n, fn(i) { value }) }
+
+// Creates an array from a range of numbers.
+fn array_range(start, end) { range(start, end) }
+
+// Creates an array from a range with step.
+fn array_range_step(start, end, step) {
+    fn collect(i, acc) {
+        if_then(i >= end,
+            fn() { acc },
+            fn() { collect(i + step, push(acc, i)) })
+    }
+    collect(start, [])
 }
 
-impl<T, const N: usize> Array<T, N> {
-    /// Creates an array filled with a default value.
-    pub fn filled(value: T) -> Array<T, N> where T: Clone {
-        let mut data: [T; N] = uninit();
-        for i in 0..N {
-            data[i] = value.clone();
-        }
-        Array { data }
-    }
+// ── Array Inspection ────────────────────────────────────────────
 
-    /// Creates an array by calling a function with each index.
-    pub fn from_fn(f: fn(usize) -> T) -> Array<T, N> {
-        let mut data: [T; N] = uninit();
-        for i in 0..N {
-            data[i] = f(i);
-        }
-        Array { data }
-    }
+// Returns the length of an array.
+fn array_len(arr) { len(arr) }
 
-    /// Returns the fixed length of the array.
-    pub fn len(self) -> usize {
-        N
-    }
+// Returns true if the array is empty.
+fn array_is_empty(arr) { len(arr) == 0 }
 
-    /// Always returns false for a non-zero-length array.
-    pub fn is_empty(self) -> bool {
-        N == 0
-    }
+// Returns the first element or nil.
+fn array_first(arr) { head(arr) }
 
-    /// Returns a reference to the element at `index`, or None if out of bounds.
-    pub fn get(self, index: usize) -> Option<&T> {
-        if index >= N { return None; }
-        Some(&self.data[index])
-    }
+// Returns the last element or nil.
+fn array_last(arr) { last(arr) }
 
-    /// Returns a mutable reference to the element at `index`.
-    pub fn get_mut(mut self, index: usize) -> Option<&mut T> {
-        if index >= N { return None; }
-        Some(&mut self.data[index])
-    }
-
-    /// Returns a reference to the first element.
-    pub fn first(self) -> Option<&T> {
-        if N == 0 { None } else { Some(&self.data[0]) }
-    }
-
-    /// Returns a reference to the last element.
-    pub fn last(self) -> Option<&T> {
-        if N == 0 { None } else { Some(&self.data[N - 1]) }
-    }
-
-    /// Returns an iterator over references to the elements.
-    pub fn iter(self) -> ArrayIter<T, N> {
-        ArrayIter { array: self, pos: 0 }
-    }
-
-    /// Returns a mutable iterator.
-    pub fn iter_mut(mut self) -> ArrayIterMut<T, N> {
-        ArrayIterMut { array: self, pos: 0 }
-    }
-
-    /// Returns a slice view.
-    pub fn as_slice(self) -> &[T] {
-        &self.data[..]
-    }
-
-    /// Returns a mutable slice view.
-    pub fn as_mut_slice(mut self) -> &mut [T] {
-        &mut self.data[..]
-    }
-
-    /// Maps each element through a function, producing a new Array.
-    pub fn map<U>(self, f: fn(&T) -> U) -> Array<U, N> {
-        Array::from_fn(|i| f(&self.data[i]))
-    }
-
-    /// Returns true if any element satisfies the predicate.
-    pub fn any(self, predicate: fn(&T) -> bool) -> bool {
-        for i in 0..N {
-            if predicate(&self.data[i]) { return true; }
-        }
-        false
-    }
-
-    /// Returns true if all elements satisfy the predicate.
-    pub fn all(self, predicate: fn(&T) -> bool) -> bool {
-        for i in 0..N {
-            if !predicate(&self.data[i]) { return false; }
-        }
-        true
-    }
-
-    /// Reverses the array in-place.
-    pub fn reverse(mut self) {
-        let mut lo = 0;
-        let mut hi = N - 1;
-        while lo < hi {
-            self.data.swap(lo, hi);
-            lo += 1;
-            hi -= 1;
-        }
-    }
-
-    /// Sorts the array in-place using the natural ordering.
-    pub fn sort(mut self) where T: Ord {
-        // Insertion sort for small arrays; use Vec sort for larger
-        for i in 1..N {
-            let mut j = i;
-            while j > 0 && self.data[j] < self.data[j - 1] {
-                self.data.swap(j, j - 1);
-                j -= 1;
-            }
-        }
-    }
-
-    /// Converts the fixed array to a growable Vec<T>.
-    pub fn to_vec(self) -> Vec<T> where T: Clone {
-        let mut v = Vec::with_capacity(N);
-        for i in 0..N {
-            v.push(self.data[i].clone());
-        }
-        v
-    }
-
-    /// Swaps two elements by index.
-    pub fn swap(mut self, a: usize, b: usize) {
-        assert(a < N && b < N, "Array::swap index out of bounds");
-        self.data.swap(a, b);
-    }
-
-    /// Returns true if the array contains the given value.
-    pub fn contains(self, value: &T) -> bool where T: Eq {
-        for i in 0..N {
-            if self.data[i] == *value { return true; }
-        }
-        false
-    }
-
-    /// Finds the index of the first occurrence of `value`.
-    pub fn position(self, value: &T) -> Option<usize> where T: Eq {
-        for i in 0..N {
-            if self.data[i] == *value { return Some(i); }
-        }
-        None
-    }
+// Returns the element at index i.
+fn array_get(arr, i) {
+    if_then(i >= 0, fn() {
+        if_then(i < len(arr), fn() { get(arr, i) }, fn() { nil })
+    }, fn() { nil })
 }
 
-impl<T: Eq, const N: usize> Eq for Array<T, N> {
-    fn eq(self, other: Array<T, N>) -> bool {
-        for i in 0..N {
-            if self.data[i] != other.data[i] { return false; }
-        }
-        true
+// ── Array Search ────────────────────────────────────────────────
+
+// Returns true if the array contains value.
+fn array_contains(arr, value) { includes(arr, value) }
+
+// Returns the index of value, or -1.
+fn array_index_of(arr, value) { index_of(arr, value) }
+
+// Finds the first element matching predicate.
+fn array_find(arr, predicate) { find(arr, predicate) }
+
+// Finds the index of the first element matching predicate.
+fn array_find_index(arr, predicate) {
+    fn search(i) {
+        if_then(i >= len(arr), fn() { -1 },
+            fn() { if_then(predicate(get(arr, i)), fn() { i },
+                fn() { search(i + 1) }) })
     }
+    search(0)
 }
 
-impl<T: Clone, const N: usize> Clone for Array<T, N> {
-    fn clone(self) -> Array<T, N> {
-        Array::from_fn(|i| self.data[i].clone())
+// Returns true if any element matches predicate.
+fn array_any(arr, predicate) { some(arr, predicate) }
+
+// Returns true if all elements match predicate.
+fn array_all(arr, predicate) { every(arr, predicate) }
+
+// Counts elements matching predicate.
+fn array_count(arr, predicate) { count(arr, predicate) }
+
+// ── Array Transformation ────────────────────────────────────────
+
+// Maps each element through fn.
+fn array_map(arr, f) { map(arr, f) }
+
+// Filters elements by predicate.
+fn array_filter(arr, predicate) { filter(arr, predicate) }
+
+// Reduces array to a single value.
+fn array_reduce(arr, f, init) { reduce(arr, f, init) }
+
+// Sorts the array with comparator.
+fn array_sort(arr, comparator) { sort(arr, comparator) }
+
+// Reverses the array.
+fn array_reverse(arr) { reverse(arr) }
+
+// Flattens one level of nesting.
+fn array_flat(arr) { flat(arr) }
+
+// Flattens all levels of nesting.
+fn array_flatten(arr) { flatten(arr) }
+
+// Maps then flattens.
+fn array_flat_map(arr, f) { flat_map(arr, f) }
+
+// Removes duplicates.
+fn array_unique(arr) { uniq(arr) }
+
+// Groups by key function.
+fn array_group_by(arr, key_fn) { group_by(arr, key_fn) }
+
+// Zips two arrays together.
+fn array_zip(a, b) { zip(a, b) }
+
+// ── Array Slicing ───────────────────────────────────────────────
+
+// Returns a sub-array.
+fn array_slice(arr, start, end) { slice(arr, start, end) }
+
+// Returns the first n elements.
+fn array_take(arr, n) { take(arr, n) }
+
+// Drops the first n elements.
+fn array_drop(arr, n) { drop(arr, n) }
+
+// Returns all except the first element.
+fn array_tail(arr) { tail(arr) }
+
+// ── Array Building ──────────────────────────────────────────────
+
+// Appends a value (non-mutating).
+fn array_push(arr, value) { push(arr, value) }
+
+// Concatenates two arrays.
+fn array_concat(a, b) { concat(a, b) }
+
+// Inserts a value at index (non-mutating).
+fn array_insert(arr, index, value) {
+    concat(concat(take(arr, index), [value]), drop(arr, index))
+}
+
+// Removes an element at index (non-mutating).
+fn array_remove(arr, index) {
+    concat(take(arr, index), drop(arr, index + 1))
+}
+
+// Replaces an element at index (non-mutating).
+fn array_set(arr, index, value) {
+    map(range(0, len(arr)), fn(i) {
+        if_then(i == index, value, fn() { get(arr, i) })
+    })
+}
+
+// ── Array Iteration ─────────────────────────────────────────────
+
+// Executes fn for each element.
+fn array_for_each(arr, f) { forEach(arr, f) }
+
+// Partitions array into two based on predicate.
+fn array_partition(arr, predicate) {
+    {
+        pass: filter(arr, predicate),
+        fail: filter(arr, fn(x) { not(predicate(x)) })
     }
 }
 
-impl<T: Debug, const N: usize> Debug for Array<T, N> {
-    fn debug_fmt(self, f: &mut Formatter) -> Result<(), FormatError> {
-        f.write_str("[")?;
-        for i in 0..N {
-            if i > 0 { f.write_str(", ")?; }
-            self.data[i].debug_fmt(f)?;
-        }
-        f.write_str("]")
+// Chunks array into sub-arrays of given size.
+fn array_chunk(arr, size) { chunk(arr, size) }
+
+// Sliding windows of given size.
+fn array_windows(arr, size) {
+    if_then(size > len(arr), fn() { [] },
+        fn() { map(range(0, len(arr) - size + 1), fn(i) {
+            slice(arr, i, i + size)
+        }) })
+}
+
+// Interleaves two arrays.
+fn array_interleave(a, b) {
+    fn weave(i, acc) {
+        if_then(i >= len(a), fn() {
+            if_then(i >= len(b), fn() { acc },
+                fn() { concat(acc, drop(b, i)) })
+        }, fn() {
+            if_then(i >= len(b),
+                fn() { concat(acc, drop(a, i)) },
+                fn() { weave(i + 1, push(push(acc, get(a, i)), get(b, i))) })
+        })
     }
-}
-
-impl<T, const N: usize> Index<usize> for Array<T, N> {
-    type Output = T;
-    fn index(self, idx: usize) -> &T {
-        assert(idx < N, "Array index out of bounds");
-        &self.data[idx]
-    }
-}
-
-impl<T, const N: usize> IndexMut<usize> for Array<T, N> {
-    fn index_mut(mut self, idx: usize) -> &mut T {
-        assert(idx < N, "Array index out of bounds");
-        &mut self.data[idx]
-    }
-}
-
-// ─── Array Iterators ────────────────────────────────────────────────────────
-
-pub struct ArrayIter<T, const N: usize> {
-    array: &Array<T, N>,
-    pos: usize,
-}
-
-impl<T, const N: usize> Iterator for ArrayIter<T, N> {
-    type Item = &T;
-    fn next(mut self) -> Option<&T> {
-        if self.pos >= N { return None; }
-        let item = &self.array.data[self.pos];
-        self.pos += 1;
-        Some(item)
-    }
-}
-
-pub struct ArrayIterMut<T, const N: usize> {
-    array: &mut Array<T, N>,
-    pos: usize,
-}
-
-impl<T, const N: usize> Iterator for ArrayIterMut<T, N> {
-    type Item = &mut T;
-    fn next(mut self) -> Option<&mut T> {
-        if self.pos >= N { return None; }
-        let item = &mut self.array.data[self.pos];
-        self.pos += 1;
-        Some(item)
-    }
+    weave(0, [])
 }

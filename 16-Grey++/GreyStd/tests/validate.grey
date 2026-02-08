@@ -1,1263 +1,330 @@
-/// tests/validate.grey — Comprehensive GreyStd validation suite.
-///
-/// This test suite exercises every module in the Grey++ standard library
-/// to verify that types, traits, functions, and cross-module references
-/// are structurally sound and behave as expected.
-
-use greystd::prelude::*;
-use greystd::test::{ TestCase, TestSuite, assert_eq, assert_ne, assert };
-use greystd::io::{ print, println, eprint, eprintln, read_line };
-use greystd::io::file::{ File, OpenMode, Metadata };
-use greystd::io::stream::{ InputStream, OutputStream, BufReader, BufWriter };
-use greystd::core::string::{ String, StringSlice, StringBuilder, Formatter, FormatError };
-use greystd::core::vec::Vec;
-use greystd::core::map::HashMap;
-use greystd::core::set::HashSet;
-use greystd::core::option::Option::{ Some, None };
-use greystd::core::result::Result::{ Ok, Err };
-use greystd::core::iter::{ Iterator, IntoIterator, empty, once, range, repeat_with, from_fn, successors };
-use greystd::core::math;
-use greystd::core::bytes::{ Bytes, ByteBuffer };
-use greystd::core::array::Array;
-use greystd::core::tuple::Tuple;
-use greystd::mem::{ Box, Rc, Arc, Weak };
-use greystd::mem::pin::Pin;
-use greystd::concurrent::{ spawn, sleep, Mutex, RwLock, Channel, Semaphore };
-use greystd::concurrent::timer::{ sleep_sync, Delay, Interval, Timeout };
-use greystd::concurrent::atomic::{ AtomicBool, AtomicI64, AtomicPtr, Ordering };
-use greystd::concurrent::once::Once;
-use greystd::net::{ TcpStream, TcpListener, UdpSocket };
-use greystd::net::http::{ HttpClient, HttpRequest, HttpResponse, HttpMethod };
-use greystd::net::url::Url;
-use greystd::serial::{ Serialize, Deserialize, SerializeError, DeserializeError };
-use greystd::serial::json::{ to_json, from_json, JsonValue };
-use greystd::serial::yaml::{ YamlValue, YamlParser };
-use greystd::serial::toml::{ TomlValue, TomlParser };
-use greystd::serial::binary::{ base64_encode, base64_decode, hex_encode, hex_decode };
-use greystd::serial::msgpack::{ MsgPackValue, MsgPackEncoder, MsgPackDecoder };
-use greystd::time::{ Duration, Instant };
-use greystd::time::clock::{ SystemClock, MonotonicClock, FakeClock, Stopwatch };
-use greystd::time::date::{ Date, DateTime, TimeZone };
-use greystd::time::schedule::{ CronExpr, Scheduler };
-use greystd::crypto::hash::{ Sha256, Sha512, Md5, Hasher as CryptoHasher };
-use greystd::crypto::aes::{ Aes256, AesKey, AesIv };
-use greystd::crypto::random::SecureRandom;
-use greystd::sys::process::{ Process, Command, ExitStatus };
-use greystd::sys::env;
-use greystd::sys::ffi::{ CString, CPtr };
-use greystd::module::{ ModuleInfo, Version };
-use greystd::error::{ Error, ErrorKind, AnyError };
-use greystd::reflect::{ TypeInfo, TypeId, FieldInfo, MethodInfo, EnumVariantInfo };
-use greystd::deterministic::{ DeterministicRuntime, ReplayIo };
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 1. CORE MODULE
-// ═══════════════════════════════════════════════════════════════════════════
-
-// ── 1.1 Option<T> ───────────────────────────────────────────────────────
-
-fn test_option_some_none() {
-    let some_val: Option<i32> = Some(42);
-    let none_val: Option<i32> = None;
-
-    assert(some_val.is_some(), "Some should be some");
-    assert(!some_val.is_none(), "Some should not be none");
-    assert(none_val.is_none(), "None should be none");
-    assert(!none_val.is_some(), "None should not be some");
-}
-
-fn test_option_unwrap() {
-    let val = Some(10);
-    assert_eq(val.unwrap(), 10, "unwrap Some(10) == 10");
-
-    let with_default = None::<i32>.unwrap_or(99);
-    assert_eq(with_default, 99, "unwrap_or None == default");
-
-    let lazy = None::<i32>.unwrap_or_else(|| 100);
-    assert_eq(lazy, 100, "unwrap_or_else None == closure result");
-}
-
-fn test_option_map_and_then() {
-    let mapped = Some(5).map(|x| x * 2);
-    assert_eq(mapped, Some(10), "map Some(5) * 2 == Some(10)");
-
-    let none_mapped = None::<i32>.map(|x| x * 2);
-    assert(none_mapped.is_none(), "map None == None");
-
-    let chained = Some(3).and_then(|x| if x > 0 { Some(x + 1) } else { None });
-    assert_eq(chained, Some(4), "and_then Some(3) > 0 == Some(4)");
-
-    let filtered = Some(7).filter(|x| *x > 10);
-    assert(filtered.is_none(), "filter Some(7) > 10 == None");
-}
-
-fn test_option_flatten() {
-    let nested: Option<Option<i32>> = Some(Some(42));
-    let flat = nested.flatten();
-    assert_eq(flat, Some(42), "flatten Some(Some(42)) == Some(42)");
-
-    let nested_none: Option<Option<i32>> = Some(None);
-    let flat_none = nested_none.flatten();
-    assert(flat_none.is_none(), "flatten Some(None) == None");
-}
-
-fn test_option_into_iterator() {
-    let some = Some(42);
-    let mut count = 0;
-    for val in some {
-        assert_eq(val, 42, "IntoIterator Some yields 42");
-        count += 1;
-    }
-    assert_eq(count, 1, "IntoIterator Some yields exactly 1 element");
-
-    let none = None::<i32>;
-    let mut none_count = 0;
-    for _ in none {
-        none_count += 1;
-    }
-    assert_eq(none_count, 0, "IntoIterator None yields 0 elements");
-}
-
-fn test_option_iter() {
-    let val = Some(10);
-    let collected: Vec<&i32> = val.iter().collect();
-    assert_eq(collected.len(), 1, "iter on Some yields 1 element");
-}
-
-// ── 1.2 Result<T, E> ───────────────────────────────────────────────────
-
-fn test_result_ok_err() {
-    let ok_val: Result<i32, String> = Ok(100);
-    let err_val: Result<i32, String> = Err(String::from("oops"));
-
-    assert(ok_val.is_ok(), "Ok is_ok");
-    assert(!ok_val.is_err(), "Ok not is_err");
-    assert(err_val.is_err(), "Err is_err");
-    assert(!err_val.is_ok(), "Err not is_ok");
-}
-
-fn test_result_unwrap_and_map() {
-    let ok: Result<i32, String> = Ok(5);
-    assert_eq(ok.unwrap(), 5, "unwrap Ok(5) == 5");
-
-    let mapped = Ok::<i32, String>(3).map(|x| x * 10);
-    assert_eq(mapped.unwrap(), 30, "map Ok(3) * 10 == 30");
-
-    let err_mapped = Err::<i32, String>(String::from("e")).map(|x| x * 10);
-    assert(err_mapped.is_err(), "map Err remains Err");
-}
-
-fn test_result_and_then() {
-    let chained = Ok::<i32, String>(2)
-        .and_then(|x| Ok(x + 1))
-        .and_then(|x| Ok(x * 2));
-    assert_eq(chained.unwrap(), 6, "and_then chain Ok(2)->3->6");
-
-    let short_circuit = Ok::<i32, String>(2)
-        .and_then(|_| Err::<i32, String>(String::from("fail")))
-        .and_then(|x| Ok(x * 2));
-    assert(short_circuit.is_err(), "and_then short-circuits on Err");
-}
-
-fn test_result_transpose() {
-    let r: Result<Option<i32>, String> = Ok(Some(42));
-    let transposed: Option<Result<i32, String>> = r.transpose();
-    assert(transposed.is_some(), "transpose Ok(Some) == Some(Ok)");
-    assert_eq(transposed.unwrap().unwrap(), 42, "transpose value preserved");
-
-    let r_none: Result<Option<i32>, String> = Ok(None);
-    let transposed_none = r_none.transpose();
-    assert(transposed_none.is_none(), "transpose Ok(None) == None");
-}
-
-fn test_result_flatten() {
-    let nested: Result<Result<i32, String>, String> = Ok(Ok(99));
-    let flat = nested.flatten();
-    assert_eq(flat.unwrap(), 99, "flatten Ok(Ok(99)) == Ok(99)");
-
-    let nested_err: Result<Result<i32, String>, String> = Ok(Err(String::from("inner")));
-    let flat_err = nested_err.flatten();
-    assert(flat_err.is_err(), "flatten Ok(Err) == Err");
-}
-
-fn test_result_into_iterator() {
-    let ok: Result<i32, String> = Ok(42);
-    let mut count = 0;
-    for v in ok {
-        count += 1;
-        assert_eq(v, 42, "IntoIterator Ok yields 42");
-    }
-    assert_eq(count, 1, "IntoIterator Ok yields 1 element");
-}
-
-fn test_result_convert_to_option() {
-    let ok: Result<i32, String> = Ok(10);
-    assert_eq(ok.ok(), Some(10), "Ok(10).ok() == Some(10)");
-    assert(ok.err().is_none(), "Ok(10).err() == None");
-
-    let err: Result<i32, String> = Err(String::from("e"));
-    assert(err.ok().is_none(), "Err.ok() == None");
-    assert(err.err().is_some(), "Err.err() == Some");
-}
-
-// ── 1.3 String ──────────────────────────────────────────────────────────
-
-fn test_string_basic() {
-    let s = String::from("Hello, Grey++!");
-    assert_eq(s.len(), 14, "string length");
-    assert(!s.is_empty(), "string not empty");
-    assert(String::new().is_empty(), "empty string is empty");
-}
-
-fn test_string_operations() {
-    let s = String::from("hello");
-    assert_eq(s.to_uppercase(), "HELLO", "to_uppercase");
-    assert_eq(String::from("WORLD").to_lowercase(), "world", "to_lowercase");
-    assert(s.contains("ell"), "contains 'ell'");
-    assert(s.starts_with("hel"), "starts_with 'hel'");
-    assert(s.ends_with("llo"), "ends_with 'llo'");
-}
-
-fn test_string_split_and_join() {
-    let csv = String::from("a,b,c,d");
-    let parts = csv.split(",");
-    assert_eq(parts.len(), 4, "split produces 4 parts");
-    assert_eq(parts[0], "a", "first split part is 'a'");
-
-    let joined = parts.join("-");
-    assert_eq(joined, "a-b-c-d", "join with '-'");
-}
-
-fn test_string_trim() {
-    let padded = String::from("  hello  ");
-    assert_eq(padded.trim(), "hello", "trim");
-    assert_eq(padded.trim_start(), "hello  ", "trim_start");
-    assert_eq(padded.trim_end(), "  hello", "trim_end");
-}
-
-fn test_string_debug() {
-    let s = String::from("hello\nworld");
-    let mut fmt = Formatter::new();
-    s.debug_fmt(&mut fmt).unwrap();
-    let output = fmt.finish();
-    // Debug should produce: "hello\nworld" (with escaped newline)
-    assert(output.contains("\\n"), "Debug for String escapes newline");
-    assert(output.starts_with("\""), "Debug for String starts with quote");
-    assert(output.ends_with("\""), "Debug for String ends with quote");
-}
-
-fn test_string_builder() {
-    let mut sb = StringBuilder::new();
-    sb.push_str("Hello");
-    sb.push_str(", ");
-    sb.push_str("World!");
-    let result = sb.build();
-    assert_eq(result, "Hello, World!", "StringBuilder concatenation");
-}
-
-// ── 1.4 Vec<T> ──────────────────────────────────────────────────────────
-
-fn test_vec_basic() {
-    let mut v: Vec<i32> = Vec::new();
-    assert(v.is_empty(), "new vec is empty");
-    assert_eq(v.len(), 0, "new vec len == 0");
-
-    v.push(1);
-    v.push(2);
-    v.push(3);
-    assert_eq(v.len(), 3, "push 3 elements");
-    assert_eq(v[0], 1, "first element");
-    assert_eq(v[2], 3, "third element");
-}
-
-fn test_vec_pop_and_remove() {
-    let mut v = Vec::from_slice(&[10, 20, 30, 40]);
-    let popped = v.pop();
-    assert_eq(popped, Some(40), "pop last element");
-    assert_eq(v.len(), 3, "len after pop == 3");
-
-    let removed = v.remove(1);
-    assert_eq(removed, 20, "remove index 1");
-    assert_eq(v.len(), 2, "len after remove == 2");
-    assert_eq(v[1], 30, "element shifted");
-}
-
-fn test_vec_insert_and_splice() {
-    let mut v = Vec::from_slice(&[1, 2, 5]);
-    v.insert(2, 3);
-    assert_eq(v[2], 3, "insert at index 2");
-    assert_eq(v.len(), 4, "len after insert");
-
-    let mut v2 = Vec::from_slice(&[1, 2, 3, 4, 5]);
-    v2.splice(1, 3, once(99));
-    // After splicing: [1, 99, 4, 5]
-    assert_eq(v2[0], 1, "splice: first unchanged");
-    assert_eq(v2[1], 99, "splice: inserted element");
-}
-
-fn test_vec_iter_and_collect() {
-    let v = Vec::from_slice(&[1, 2, 3, 4, 5]);
-    let doubled: Vec<i32> = v.iter().map(|x| x * 2).collect();
-    assert_eq(doubled.len(), 5, "mapped vec has 5 elements");
-    assert_eq(doubled[0], 2, "first doubled");
-    assert_eq(doubled[4], 10, "last doubled");
-}
-
-fn test_vec_into_iterator() {
-    let v = Vec::from_slice(&[10, 20, 30]);
-    let mut sum = 0;
-    for val in v {
-        sum += val;
-    }
-    assert_eq(sum, 60, "IntoIterator Vec sums to 60");
-}
-
-fn test_vec_sort() {
-    let mut v = Vec::from_slice(&[5, 3, 1, 4, 2]);
-    v.sort();
-    assert_eq(v[0], 1, "sorted first");
-    assert_eq(v[4], 5, "sorted last");
-}
-
-fn test_vec_dedup() {
-    let mut v = Vec::from_slice(&[1, 1, 2, 2, 3, 1]);
-    v.dedup();
-    assert_eq(v, Vec::from_slice(&[1, 2, 3, 1]), "dedup removes consecutive dups");
-}
-
-fn test_vec_contains_and_find() {
-    let v = Vec::from_slice(&[10, 20, 30]);
-    assert(v.contains(&20), "contains 20");
-    assert(!v.contains(&99), "does not contain 99");
-}
-
-fn test_vec_capacity() {
-    let v = Vec::with_capacity(100);
-    assert(v.capacity() >= 100, "with_capacity reserves at least 100");
-    assert(v.is_empty(), "with_capacity starts empty");
-}
-
-// ── 1.5 HashMap<K, V> ──────────────────────────────────────────────────
-
-fn test_hashmap_basic() {
-    let mut m: HashMap<String, i32> = HashMap::new();
-    m.insert(String::from("a"), 1);
-    m.insert(String::from("b"), 2);
-    m.insert(String::from("c"), 3);
-
-    assert_eq(m.len(), 3, "hashmap has 3 entries");
-    assert_eq(*m.get(&String::from("b")).unwrap(), 2, "get 'b' == 2");
-    assert(m.contains_key(&String::from("c")), "contains_key 'c'");
-    assert(!m.contains_key(&String::from("z")), "not contains_key 'z'");
-}
-
-fn test_hashmap_remove() {
-    let mut m: HashMap<String, i32> = HashMap::new();
-    m.insert(String::from("x"), 42);
-    let removed = m.remove(&String::from("x"));
-    assert_eq(removed, Some(42), "remove returns old value");
-    assert_eq(m.len(), 0, "len after remove == 0");
-}
-
-fn test_hashmap_iter() {
-    let mut m: HashMap<i32, i32> = HashMap::new();
-    m.insert(1, 10);
-    m.insert(2, 20);
-
-    let mut sum_keys = 0;
-    let mut sum_vals = 0;
-    for (k, v) in m.iter() {
-        sum_keys += *k;
-        sum_vals += *v;
-    }
-    assert_eq(sum_keys, 3, "sum keys == 3");
-    assert_eq(sum_vals, 30, "sum vals == 30");
-}
-
-// ── 1.6 HashSet<T> ─────────────────────────────────────────────────────
-
-fn test_hashset_basic() {
-    let mut s: HashSet<i32> = HashSet::new();
-    s.insert(1);
-    s.insert(2);
-    s.insert(3);
-    s.insert(2); // duplicate
-
-    assert_eq(s.len(), 3, "set has 3 unique elements");
-    assert(s.contains(&2), "set contains 2");
-    assert(!s.contains(&99), "set does not contain 99");
-}
-
-fn test_hashset_operations() {
-    let mut a: HashSet<i32> = HashSet::new();
-    a.insert(1); a.insert(2); a.insert(3);
-
-    let mut b: HashSet<i32> = HashSet::new();
-    b.insert(2); b.insert(3); b.insert(4);
-
-    let union = a.union(&b);
-    assert_eq(union.len(), 4, "union has 4 elements");
-
-    let intersection = a.intersection(&b);
-    assert_eq(intersection.len(), 2, "intersection has 2 elements");
-
-    let diff = a.difference(&b);
-    assert_eq(diff.len(), 1, "difference has 1 element");
-    assert(diff.contains(&1), "difference is {1}");
-}
-
-// ── 1.7 Iterator Chains ────────────────────────────────────────────────
-
-fn test_iterator_map_filter_collect() {
-    let nums = Vec::from_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-    let evens_doubled: Vec<i32> = nums.iter()
-        .filter(|x| *x % 2 == 0)
-        .map(|x| x * 2)
-        .collect();
-    assert_eq(evens_doubled.len(), 5, "5 even numbers");
-    assert_eq(evens_doubled[0], 4, "first even doubled: 4");
-    assert_eq(evens_doubled[4], 20, "last even doubled: 20");
-}
-
-fn test_iterator_chain_and_zip() {
-    let a = Vec::from_slice(&[1, 2, 3]);
-    let b = Vec::from_slice(&[4, 5, 6]);
-
-    let chained: Vec<i32> = a.iter().chain(b.iter()).collect();
-    assert_eq(chained.len(), 6, "chained iterator has 6 elements");
-    assert_eq(chained[3], 4, "chain boundary correct");
-
-    let zipped: Vec<(i32, i32)> = a.iter().zip(b.iter()).collect();
-    assert_eq(zipped.len(), 3, "zip produces 3 pairs");
-    assert_eq(zipped[1], (2, 5), "zip pair correct");
-}
-
-fn test_iterator_fold_reduce() {
-    let nums = Vec::from_slice(&[1, 2, 3, 4, 5]);
-    let sum = nums.iter().fold(0, |acc, x| acc + x);
-    assert_eq(sum, 15, "fold sum == 15");
-
-    let product = nums.iter().reduce(|a, b| a * b);
-    assert_eq(product, Some(120), "reduce product == 120");
-}
-
-fn test_iterator_enumerate_take_skip() {
-    let v = Vec::from_slice(&[10, 20, 30, 40, 50]);
-
-    let taken: Vec<i32> = v.iter().take(3).collect();
-    assert_eq(taken.len(), 3, "take 3 elements");
-
-    let skipped: Vec<i32> = v.iter().skip(2).collect();
-    assert_eq(skipped.len(), 3, "skip 2 leaves 3");
-    assert_eq(skipped[0], 30, "skip starts at 30");
-
-    let enumerated: Vec<(usize, i32)> = v.iter().enumerate().collect();
-    assert_eq(enumerated[2], (2, 30), "enumerate index 2");
-}
-
-fn test_iterator_flatten() {
-    let nested: Vec<Vec<i32>> = Vec::from_slice(&[
-        Vec::from_slice(&[1, 2]),
-        Vec::from_slice(&[3, 4]),
-        Vec::from_slice(&[5]),
-    ]);
-    let flat: Vec<i32> = nested.into_iter().flatten().collect();
-    assert_eq(flat.len(), 5, "flatten produces 5 elements");
-    assert_eq(flat[0], 1, "flatten first");
-    assert_eq(flat[4], 5, "flatten last");
-}
-
-fn test_iterator_flat_map() {
-    let words = Vec::from_slice(&["hello", "world"]);
-    let chars: Vec<char> = words.iter().flat_map(|w| w.chars()).collect();
-    assert_eq(chars.len(), 10, "flat_map chars: 10 total");
-}
-
-fn test_iterator_partition() {
-    let nums = Vec::from_slice(&[1, 2, 3, 4, 5, 6]);
-    let (evens, odds) = nums.iter().partition(|x| *x % 2 == 0);
-    assert_eq(evens.len(), 3, "3 even numbers");
-    assert_eq(odds.len(), 3, "3 odd numbers");
-}
-
-fn test_iterator_any_all_find() {
-    let nums = Vec::from_slice(&[2, 4, 6, 8]);
-    assert(nums.iter().all(|x| *x % 2 == 0), "all even");
-    assert(nums.iter().any(|x| *x > 5), "any > 5");
-
-    let found = nums.iter().find(|x| *x == 6);
-    assert_eq(found, Some(6), "find 6");
-
-    let not_found = nums.iter().find(|x| *x == 7);
-    assert(not_found.is_none(), "find 7 == None");
-}
-
-fn test_iterator_min_max_sum() {
-    let nums = Vec::from_slice(&[3, 1, 4, 1, 5, 9]);
-    assert_eq(nums.iter().min(), Some(1), "min == 1");
-    assert_eq(nums.iter().max(), Some(9), "max == 9");
-    assert_eq(nums.iter().sum(), 23, "sum == 23");
-    assert_eq(nums.iter().count(), 6, "count == 6");
-}
-
-fn test_iterator_factory_functions() {
-    // empty
-    let e: Vec<i32> = empty().collect();
-    assert(e.is_empty(), "empty iterator collects to empty vec");
-
-    // once
-    let o: Vec<i32> = once(42).collect();
-    assert_eq(o.len(), 1, "once produces 1 element");
-    assert_eq(o[0], 42, "once value == 42");
-
-    // range
-    let r: Vec<i32> = range(0, 5).collect();
-    assert_eq(r, Vec::from_slice(&[0, 1, 2, 3, 4]), "range(0,5)");
-
-    // repeat_with
-    let rw: Vec<i32> = repeat_with(|| 7).take(3).collect();
-    assert_eq(rw, Vec::from_slice(&[7, 7, 7]), "repeat_with 7 x 3");
-
-    // from_fn
-    let mut counter = 0;
-    let ff: Vec<i32> = from_fn(|| {
-        counter += 1;
-        if counter <= 3 { Some(counter) } else { None }
-    }).collect();
-    assert_eq(ff, Vec::from_slice(&[1, 2, 3]), "from_fn 1..3");
-
-    // successors
-    let powers: Vec<i32> = successors(Some(1), |x| if *x < 100 { Some(x * 2) } else { None }).collect();
-    assert_eq(powers[0], 1, "successors starts at 1");
-    assert_eq(powers[powers.len() - 1], 64, "successors last power of 2 < 128");
-}
-
-fn test_iterator_peekable() {
-    let mut iter = Vec::from_slice(&[1, 2, 3]).iter().peekable();
-    assert_eq(*iter.peek().unwrap(), 1, "peek sees 1");
-    assert_eq(iter.next(), Some(1), "next returns 1");
-    assert_eq(*iter.peek().unwrap(), 2, "peek sees 2 after consuming 1");
-}
-
-fn test_iterator_step_by() {
-    let v: Vec<i32> = range(0, 10).step_by(3).collect();
-    assert_eq(v, Vec::from_slice(&[0, 3, 6, 9]), "step_by(3)");
-}
-
-fn test_iterator_dedup() {
-    let v = Vec::from_slice(&[1, 1, 2, 2, 2, 3, 3, 1]);
-    let deduped: Vec<i32> = v.iter().dedup().collect();
-    assert_eq(deduped, Vec::from_slice(&[1, 2, 3, 1]), "dedup removes consecutive");
-}
-
-fn test_iterator_intersperse() {
-    let v = Vec::from_slice(&[1, 2, 3]);
-    let interspersed: Vec<i32> = v.iter().intersperse(0).collect();
-    assert_eq(interspersed, Vec::from_slice(&[1, 0, 2, 0, 3]), "intersperse with 0");
-}
-
-fn test_iterator_unzip() {
-    let pairs = Vec::from_slice(&[(1, "a"), (2, "b"), (3, "c")]);
-    let (nums, letters): (Vec<i32>, Vec<&str>) = pairs.iter().unzip();
-    assert_eq(nums, Vec::from_slice(&[1, 2, 3]), "unzip numbers");
-    assert_eq(letters.len(), 3, "unzip letters length");
-}
-
-fn test_iterator_product() {
-    let nums = Vec::from_slice(&[1, 2, 3, 4]);
-    let prod = nums.iter().product();
-    assert_eq(prod, 24, "product == 24");
-}
-
-// ── 1.8 Math ────────────────────────────────────────────────────────────
-
-fn test_math_basic() {
-    assert_eq(math::abs(-5), 5, "abs(-5) == 5");
-    assert_eq(math::min(3, 7), 3, "min(3,7) == 3");
-    assert_eq(math::max(3, 7), 7, "max(3,7) == 7");
-    assert_eq(math::clamp(15, 0, 10), 10, "clamp(15,0,10) == 10");
-    assert_eq(math::clamp(-5, 0, 10), 0, "clamp(-5,0,10) == 0");
-}
-
-// ── 1.9 Bytes & ByteBuffer ──────────────────────────────────────────────
-
-fn test_bytes_basic() {
-    let b = Bytes::from_slice(&[0x48, 0x65, 0x6C, 0x6C, 0x6F]);
-    assert_eq(b.len(), 5, "bytes length");
-    assert_eq(b[0], 0x48, "first byte");
-}
-
-fn test_byte_buffer() {
-    let mut buf = ByteBuffer::new();
-    buf.write_u8(0xFF);
-    buf.write_u16_be(0x1234);
-    assert_eq(buf.len(), 3, "byte buffer has 3 bytes");
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 2. MEMORY MODULE
-// ═══════════════════════════════════════════════════════════════════════════
-
-fn test_box_basic() {
-    let b = Box::new(42);
-    assert_eq(*b, 42, "deref Box == 42");
-}
-
-fn test_rc_basic() {
-    let rc1 = Rc::new(100);
-    let rc2 = rc1.clone();
-    assert_eq(*rc1, 100, "deref Rc == 100");
-    assert_eq(Rc::strong_count(&rc1), 2, "strong_count == 2 after clone");
-    drop(rc2);
-    assert_eq(Rc::strong_count(&rc1), 1, "strong_count == 1 after drop");
-}
-
-fn test_arc_basic() {
-    let arc1 = Arc::new(String::from("shared"));
-    let arc2 = arc1.clone();
-    assert_eq(*arc1, String::from("shared"), "deref Arc");
-    assert_eq(Arc::strong_count(&arc1), 2, "Arc strong_count == 2");
-}
-
-fn test_weak_ref() {
-    let rc = Rc::new(42);
-    let weak = Rc::downgrade(&rc);
-    assert(weak.upgrade().is_some(), "weak upgrade succeeds while alive");
-    drop(rc);
-    assert(weak.upgrade().is_none(), "weak upgrade fails after drop");
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 3. IO MODULE
-// ═══════════════════════════════════════════════════════════════════════════
-
-fn test_io_print_functions_exist() {
-    // Verify that print functions are callable (they exist and are properly typed)
-    // In a real runtime these would write to stdout/stderr
-    let _print_fn: fn(&str) = print;
-    let _println_fn: fn(&str) = println;
-    let _eprint_fn: fn(&str) = eprint;
-    let _eprintln_fn: fn(&str) = eprintln;
-    // If this compiles, the functions exist
-    assert(true, "print function references are valid");
-}
-
-fn test_file_metadata_types() {
-    // Ensure Metadata uses u64 timestamps, not SystemTime
-    let meta = Metadata {
-        size: 1024,
-        is_dir: false,
-        is_file: true,
-        is_symlink: false,
-        readonly: false,
-        modified: Some(1700000000),
-        accessed: Some(1700000001),
-        created: Some(1699999000),
-    };
-    assert_eq(meta.size(), 1024, "metadata size");
-    assert(meta.is_file(), "metadata is_file");
-    assert(!meta.is_dir(), "metadata not is_dir");
-    assert_eq(meta.modified(), Some(1700000000), "modified timestamp");
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 4. SERIALIZATION MODULE
-// ═══════════════════════════════════════════════════════════════════════════
-
-fn test_json_round_trip() {
-    let value = JsonValue::Object(HashMap::from([
-        (String::from("name"), JsonValue::String(String::from("Grey++"))),
-        (String::from("version"), JsonValue::Number(1.0)),
-        (String::from("active"), JsonValue::Bool(true)),
-    ]));
-
-    let json_str = to_json(&value);
-    let parsed = from_json(&json_str);
-    assert(parsed.is_ok(), "JSON round-trip parses successfully");
-}
-
-fn test_base64_round_trip() {
-    let original = "Hello, Grey++!";
-    let encoded = base64_encode(original.as_bytes());
-    let decoded = base64_decode(&encoded);
-    assert(decoded.is_ok(), "base64 decode succeeds");
-    let decoded_str = String::from_utf8(decoded.unwrap());
-    assert_eq(decoded_str.unwrap(), original, "base64 round-trip preserves data");
-}
-
-fn test_hex_round_trip() {
-    let bytes: &[u8] = &[0xDE, 0xAD, 0xBE, 0xEF];
-    let hex = hex_encode(bytes);
-    assert_eq(hex, "deadbeef", "hex encode");
-    let decoded = hex_decode(&hex);
-    assert(decoded.is_ok(), "hex decode succeeds");
-    assert_eq(decoded.unwrap(), Vec::from_slice(bytes), "hex round-trip");
-}
-
-fn test_serialize_primitives() {
-    // Test that primitive Serialize impls exist and can be referenced
-    fn assert_serializable<T: Serialize>() {}
-    assert_serializable::<bool>();
-    assert_serializable::<i8>();
-    assert_serializable::<i16>();
-    assert_serializable::<i32>();
-    assert_serializable::<i64>();
-    assert_serializable::<u8>();
-    assert_serializable::<u16>();
-    assert_serializable::<u32>();
-    assert_serializable::<u64>();
-    assert_serializable::<f32>();
-    assert_serializable::<f64>();
-    assert_serializable::<String>();
-    assert_serializable::<Vec<i32>>();
-    assert_serializable::<Option<String>>();
-    assert_serializable::<HashMap<String, i32>>();
-    assert(true, "all primitive Serialize impls exist");
-}
-
-fn test_deserialize_primitives() {
-    fn assert_deserializable<T: Deserialize>() {}
-    assert_deserializable::<bool>();
-    assert_deserializable::<i32>();
-    assert_deserializable::<i64>();
-    assert_deserializable::<u32>();
-    assert_deserializable::<u64>();
-    assert_deserializable::<f64>();
-    assert_deserializable::<String>();
-    assert_deserializable::<Vec<String>>();
-    assert_deserializable::<Option<i32>>();
-    assert_deserializable::<HashMap<String, i32>>();
-    assert(true, "all primitive Deserialize impls exist");
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 5. TIME MODULE
-// ═══════════════════════════════════════════════════════════════════════════
-
-fn test_duration_basic() {
-    let d = Duration::from_secs(5);
-    assert_eq(d.as_secs(), 5, "duration 5 secs");
-    assert_eq(d.as_millis(), 5000, "duration 5000 millis");
-
-    let d2 = Duration::from_millis(1500);
-    assert_eq(d2.as_secs(), 1, "1500ms == 1 sec");
-    assert_eq(d2.subsec_millis(), 500, "1500ms subsec == 500ms");
-}
-
-fn test_duration_arithmetic() {
-    let a = Duration::from_secs(3);
-    let b = Duration::from_secs(2);
-    let sum = a + b;
-    assert_eq(sum.as_secs(), 5, "duration add");
-
-    let diff = a - b;
-    assert_eq(diff.as_secs(), 1, "duration sub");
-}
-
-fn test_fake_clock() {
-    let mut clock = FakeClock::new(1000);
-    assert_eq(clock.unix_timestamp(), 1000, "initial unix_timestamp");
-
-    clock.advance(Duration::from_secs(60));
-    assert_eq(clock.unix_timestamp(), 1060, "after advance 60s");
-
-    clock.advance(Duration::from_millis(500));
-    assert_eq(clock.unix_timestamp(), 1060, "subsecond doesn't change seconds");
-    assert_eq(clock.unix_timestamp_millis(), 1060500, "subsecond reflected in millis");
-    assert_eq(clock.unix_timestamp_nanos(), 1060500000000, "subsecond reflected in nanos");
-
-    // Advance to carry nanos into seconds
-    clock.advance(Duration::from_millis(600));
-    assert_eq(clock.unix_timestamp(), 1061, "nanos carried over to seconds");
-    assert_eq(clock.unix_timestamp_millis(), 1061100, "remaining millis after carry");
-}
-
-fn test_stopwatch() {
-    let mut sw = Stopwatch::new();
-    sw.start();
-    // In a real runtime this would accumulate time;
-    // structurally we verify the API exists
-    sw.stop();
-    let _elapsed = sw.elapsed();
-    sw.reset();
-    assert(true, "Stopwatch API compiles");
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 6. CONCURRENCY MODULE
-// ═══════════════════════════════════════════════════════════════════════════
-
-fn test_mutex_api() {
-    let m = Mutex::new(0);
-    {
-        let mut guard = m.lock();
-        *guard = 42;
-    }
-    let guard = m.lock();
-    assert_eq(*guard, 42, "Mutex lock/unlock preserves value");
-}
-
-fn test_rwlock_api() {
-    let rw = RwLock::new(String::from("initial"));
-    {
-        let read = rw.read();
-        assert_eq(*read, String::from("initial"), "RwLock read");
-    }
-    {
-        let mut write = rw.write();
-        *write = String::from("modified");
-    }
-    let read = rw.read();
-    assert_eq(*read, String::from("modified"), "RwLock read after write");
-}
-
-fn test_channel_api() {
-    let (tx, rx) = Channel::new();
-    tx.send(42);
-    let received = rx.recv();
-    assert_eq(received, Ok(42), "Channel send/recv");
-}
-
-fn test_atomic_types() {
-    let ab = AtomicBool::new(false);
-    ab.store(true, Ordering::SeqCst);
-    assert_eq(ab.load(Ordering::SeqCst), true, "AtomicBool store/load");
-
-    let ai = AtomicI64::new(0);
-    ai.fetch_add(10, Ordering::SeqCst);
-    assert_eq(ai.load(Ordering::SeqCst), 10, "AtomicI64 fetch_add");
-}
-
-fn test_semaphore_api() {
-    let sem = Semaphore::new(2);
-    let p1 = sem.acquire();
-    let p2 = sem.acquire();
-    assert(p1.is_ok(), "first acquire succeeds");
-    assert(p2.is_ok(), "second acquire succeeds");
-    // Third would block in a real runtime
-}
-
-fn test_sleep_sync_exists() {
-    // Verify sleep_sync is importable and callable
-    let _fn_ref: fn(Duration) = sleep_sync;
-    assert(true, "sleep_sync function exists");
-}
-
-fn test_once_api() {
-    let once = Once::new();
-    let mut called = 0;
-    once.call_once(|| { called += 1; });
-    once.call_once(|| { called += 1; }); // Should not call again
-    assert_eq(called, 1, "Once::call_once runs exactly once");
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 7. CRYPTO MODULE
-// ═══════════════════════════════════════════════════════════════════════════
-
-fn test_sha256_hash() {
-    let mut hasher = Sha256::new();
-    hasher.update(b"hello");
-    let digest = hasher.finalize();
-    assert_eq(digest.len(), 32, "SHA-256 produces 32 bytes");
-}
-
-fn test_sha512_hash() {
-    let mut hasher = Sha512::new();
-    hasher.update(b"hello");
-    let digest = hasher.finalize();
-    assert_eq(digest.len(), 64, "SHA-512 produces 64 bytes");
-}
-
-fn test_secure_random() {
-    let mut rng = SecureRandom::new();
-    let bytes = rng.bytes(32);
-    assert_eq(bytes.len(), 32, "SecureRandom produces 32 bytes");
-
-    // Not all zeros (probabilistically)
-    let all_zero = bytes.iter().all(|b| *b == 0);
-    assert(!all_zero, "SecureRandom should not be all zeros");
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 8. ERROR MODULE
-// ═══════════════════════════════════════════════════════════════════════════
-
-fn test_error_kind_clone_copy() {
-    let kind = ErrorKind::NotFound;
-    let kind2 = kind; // Copy
-    let kind3 = kind.clone(); // Clone
-    assert_eq(kind, kind2, "ErrorKind Copy");
-    assert_eq(kind, kind3, "ErrorKind Clone");
-}
-
-fn test_any_error() {
-    let err = AnyError::new(String::from("something went wrong"));
-    let msg = err.message();
-    assert(msg.contains("something went wrong"), "AnyError message");
-}
-
-fn test_error_chain() {
-    let root = AnyError::new(String::from("root cause"));
-    let wrapped = AnyError::with_source(String::from("operation failed"), Box::new(root));
-    assert(wrapped.source().is_some(), "wrapped error has source");
-    assert(wrapped.message().contains("operation failed"), "outer message");
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 9. REFLECTION MODULE
-// ═══════════════════════════════════════════════════════════════════════════
-
-fn test_type_info_basic() {
-    let info = TypeInfo::of::<Vec<i32>>();
-    assert(!info.name().is_empty(), "TypeInfo has a name");
-    let _id = info.id();
-    let _size = info.size();
-    assert(true, "TypeInfo API compiles");
-}
-
-fn test_type_id_equality() {
-    let id1 = TypeId::of::<i32>();
-    let id2 = TypeId::of::<i32>();
-    let id3 = TypeId::of::<String>();
-    assert_eq(id1, id2, "same type == same TypeId");
-    assert_ne(id1, id3, "different type != different TypeId");
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 10. DETERMINISTIC MODULE
-// ═══════════════════════════════════════════════════════════════════════════
-
-fn test_deterministic_runtime_api() {
-    let rt = DeterministicRuntime::new(42); // seed
-    let _io = rt.io();
-    assert(true, "DeterministicRuntime API accessible");
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 11. NETWORK MODULE (structural)
-// ═══════════════════════════════════════════════════════════════════════════
-
-fn test_url_parse() {
-    let url = Url::parse("https://example.com:8080/path?q=1#frag");
-    assert(url.is_ok(), "URL parse succeeds");
-    let u = url.unwrap();
-    assert_eq(u.scheme(), "https", "URL scheme");
-    assert_eq(u.host(), "example.com", "URL host");
-    assert_eq(u.port(), Some(8080), "URL port");
-    assert_eq(u.path(), "/path", "URL path");
-}
-
-fn test_http_request_build() {
-    let req = HttpRequest::new(HttpMethod::Get, "https://api.example.com/data");
-    assert_eq(req.method(), HttpMethod::Get, "request method");
-    assert(req.url().contains("api.example.com"), "request url");
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 12. SYSTEM MODULE (structural)
-// ═══════════════════════════════════════════════════════════════════════════
-
-fn test_command_build() {
-    let cmd = Command::new("echo");
-    let cmd = cmd.arg("hello");
-    assert(true, "Command builder API compiles");
-}
-
-fn test_env_api() {
-    let _path = env::current_dir();
-    let _vars = env::vars();
-    assert(true, "env API compiles");
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 13. MODULE MODULE (structural)
-// ═══════════════════════════════════════════════════════════════════════════
-
-fn test_version_parse() {
-    let v = Version::parse("1.2.3");
-    assert(v.is_ok(), "version parse succeeds");
-    let ver = v.unwrap();
-    assert_eq(ver.major(), 1, "major version");
-    assert_eq(ver.minor(), 2, "minor version");
-    assert_eq(ver.patch(), 3, "patch version");
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 14. TEST MODULE (meta — testing the test framework itself)
-// ═══════════════════════════════════════════════════════════════════════════
-
-fn test_assert_eq_passes() {
-    assert_eq(1 + 1, 2, "basic arithmetic");
-}
-
-fn test_assert_ne_passes() {
-    assert_ne(1, 2, "1 != 2");
-}
-
-fn test_assert_passes() {
-    assert(true, "true is true");
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 15. CROSS-MODULE INTEGRATION
-// ═══════════════════════════════════════════════════════════════════════════
-
-fn test_prelude_types_available() {
-    // All these types should be available via the prelude
-    let _s: String = String::new();
-    let _v: Vec<i32> = Vec::new();
-    let _m: HashMap<String, i32> = HashMap::new();
-    let _h: HashSet<i32> = HashSet::new();
-    let _o: Option<i32> = Some(42);
-    let _r: Result<i32, String> = Ok(1);
-    let _b: Box<i32> = Box::new(1);
-    let _rc: Rc<i32> = Rc::new(1);
-    let _arc: Arc<i32> = Arc::new(1);
-    assert(true, "all prelude types are available");
-}
-
-fn test_error_into_result() {
-    fn might_fail(x: i32) -> Result<i32, AnyError> {
-        if x > 0 {
-            Ok(x * 2)
-        } else {
-            Err(AnyError::new(String::from("negative input")))
-        }
-    }
-
-    let ok = might_fail(5);
-    assert_eq(ok.unwrap(), 10, "success path");
-
-    let err = might_fail(-1);
-    assert(err.is_err(), "error path");
-}
-
-fn test_option_result_interop() {
-    fn lookup(key: &str) -> Option<i32> {
-        if key == "found" { Some(42) } else { None }
-    }
-
-    let r: Result<i32, String> = lookup("found").ok_or(String::from("not found"));
-    assert_eq(r.unwrap(), 42, "Option::ok_or success");
-
-    let r2: Result<i32, String> = lookup("missing").ok_or(String::from("not found"));
-    assert(r2.is_err(), "Option::ok_or failure");
-}
-
-fn test_iterator_with_option_and_result() {
-    // filter_map with Options
-    let data = Vec::from_slice(&["1", "two", "3", "four", "5"]);
-    let nums: Vec<i32> = data.iter()
-        .filter_map(|s| s.parse::<i32>().ok())
-        .collect();
-    assert_eq(nums, Vec::from_slice(&[1, 3, 5]), "filter_map parse");
-
-    // collect Results
-    let strings = Vec::from_slice(&["1", "2", "3"]);
-    let all_parsed: Result<Vec<i32>, _> = strings.iter()
-        .map(|s| s.parse::<i32>())
-        .collect();
-    assert(all_parsed.is_ok(), "collect all Ok results");
-}
-
-fn test_hashmap_with_vec_values() {
-    let mut m: HashMap<String, Vec<i32>> = HashMap::new();
-    m.insert(String::from("evens"), Vec::from_slice(&[2, 4, 6]));
-    m.insert(String::from("odds"), Vec::from_slice(&[1, 3, 5]));
-
-    let evens = m.get(&String::from("evens")).unwrap();
-    assert_eq(evens.len(), 3, "evens has 3 elements");
-    assert_eq(evens.iter().sum(), 12, "evens sum == 12");
-}
-
-fn test_shared_concurrent_state() {
-    let counter = Arc::new(Mutex::new(0));
-    let counter2 = counter.clone();
-
-    // Simulate what concurrent access looks like
-    {
-        let mut guard = counter.lock();
-        *guard += 1;
-    }
-    {
-        let mut guard = counter2.lock();
-        *guard += 1;
-    }
-    let final_val = *counter.lock();
-    assert_eq(final_val, 2, "Arc<Mutex<i32>> concurrent increment");
-}
-
-fn test_serialize_roundtrip_flow() {
-    // End-to-end: create data → JSON serialize → base64 encode → decode → parse
-    let data = JsonValue::Object(HashMap::from([
-        (String::from("key"), JsonValue::String(String::from("value"))),
-    ]));
-    let json_str = to_json(&data);
-    let encoded = base64_encode(json_str.as_bytes());
-    let decoded_bytes = base64_decode(&encoded).unwrap();
-    let decoded_str = String::from_utf8(decoded_bytes).unwrap();
-    let reparsed = from_json(&decoded_str);
-    assert(reparsed.is_ok(), "full serialize round-trip succeeds");
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// TEST SUITE REGISTRATION
-// ═══════════════════════════════════════════════════════════════════════════
-
-pub fn main() {
-    let mut suite = TestSuite::new("GreyStd Validation Suite");
-
-    // ── Core: Option ────
-    suite.add(TestCase::new("option_some_none", test_option_some_none));
-    suite.add(TestCase::new("option_unwrap", test_option_unwrap));
-    suite.add(TestCase::new("option_map_and_then", test_option_map_and_then));
-    suite.add(TestCase::new("option_flatten", test_option_flatten));
-    suite.add(TestCase::new("option_into_iterator", test_option_into_iterator));
-    suite.add(TestCase::new("option_iter", test_option_iter));
-
-    // ── Core: Result ────
-    suite.add(TestCase::new("result_ok_err", test_result_ok_err));
-    suite.add(TestCase::new("result_unwrap_and_map", test_result_unwrap_and_map));
-    suite.add(TestCase::new("result_and_then", test_result_and_then));
-    suite.add(TestCase::new("result_transpose", test_result_transpose));
-    suite.add(TestCase::new("result_flatten", test_result_flatten));
-    suite.add(TestCase::new("result_into_iterator", test_result_into_iterator));
-    suite.add(TestCase::new("result_convert_to_option", test_result_convert_to_option));
-
-    // ── Core: String ────
-    suite.add(TestCase::new("string_basic", test_string_basic));
-    suite.add(TestCase::new("string_operations", test_string_operations));
-    suite.add(TestCase::new("string_split_and_join", test_string_split_and_join));
-    suite.add(TestCase::new("string_trim", test_string_trim));
-    suite.add(TestCase::new("string_debug", test_string_debug));
-    suite.add(TestCase::new("string_builder", test_string_builder));
-
-    // ── Core: Vec ────
-    suite.add(TestCase::new("vec_basic", test_vec_basic));
-    suite.add(TestCase::new("vec_pop_and_remove", test_vec_pop_and_remove));
-    suite.add(TestCase::new("vec_insert_and_splice", test_vec_insert_and_splice));
-    suite.add(TestCase::new("vec_iter_and_collect", test_vec_iter_and_collect));
-    suite.add(TestCase::new("vec_into_iterator", test_vec_into_iterator));
-    suite.add(TestCase::new("vec_sort", test_vec_sort));
-    suite.add(TestCase::new("vec_dedup", test_vec_dedup));
-    suite.add(TestCase::new("vec_contains_and_find", test_vec_contains_and_find));
-    suite.add(TestCase::new("vec_capacity", test_vec_capacity));
-
-    // ── Core: HashMap ────
-    suite.add(TestCase::new("hashmap_basic", test_hashmap_basic));
-    suite.add(TestCase::new("hashmap_remove", test_hashmap_remove));
-    suite.add(TestCase::new("hashmap_iter", test_hashmap_iter));
-
-    // ── Core: HashSet ────
-    suite.add(TestCase::new("hashset_basic", test_hashset_basic));
-    suite.add(TestCase::new("hashset_operations", test_hashset_operations));
-
-    // ── Core: Iterator ────
-    suite.add(TestCase::new("iter_map_filter_collect", test_iterator_map_filter_collect));
-    suite.add(TestCase::new("iter_chain_and_zip", test_iterator_chain_and_zip));
-    suite.add(TestCase::new("iter_fold_reduce", test_iterator_fold_reduce));
-    suite.add(TestCase::new("iter_enumerate_take_skip", test_iterator_enumerate_take_skip));
-    suite.add(TestCase::new("iter_flatten", test_iterator_flatten));
-    suite.add(TestCase::new("iter_flat_map", test_iterator_flat_map));
-    suite.add(TestCase::new("iter_partition", test_iterator_partition));
-    suite.add(TestCase::new("iter_any_all_find", test_iterator_any_all_find));
-    suite.add(TestCase::new("iter_min_max_sum", test_iterator_min_max_sum));
-    suite.add(TestCase::new("iter_factory_functions", test_iterator_factory_functions));
-    suite.add(TestCase::new("iter_peekable", test_iterator_peekable));
-    suite.add(TestCase::new("iter_step_by", test_iterator_step_by));
-    suite.add(TestCase::new("iter_dedup", test_iterator_dedup));
-    suite.add(TestCase::new("iter_intersperse", test_iterator_intersperse));
-    suite.add(TestCase::new("iter_unzip", test_iterator_unzip));
-    suite.add(TestCase::new("iter_product", test_iterator_product));
-
-    // ── Core: Math ────
-    suite.add(TestCase::new("math_basic", test_math_basic));
-
-    // ── Core: Bytes ────
-    suite.add(TestCase::new("bytes_basic", test_bytes_basic));
-    suite.add(TestCase::new("byte_buffer", test_byte_buffer));
-
-    // ── Memory ────
-    suite.add(TestCase::new("box_basic", test_box_basic));
-    suite.add(TestCase::new("rc_basic", test_rc_basic));
-    suite.add(TestCase::new("arc_basic", test_arc_basic));
-    suite.add(TestCase::new("weak_ref", test_weak_ref));
-
-    // ── IO ────
-    suite.add(TestCase::new("io_print_functions_exist", test_io_print_functions_exist));
-    suite.add(TestCase::new("file_metadata_types", test_file_metadata_types));
-
-    // ── Serialization ────
-    suite.add(TestCase::new("json_round_trip", test_json_round_trip));
-    suite.add(TestCase::new("base64_round_trip", test_base64_round_trip));
-    suite.add(TestCase::new("hex_round_trip", test_hex_round_trip));
-    suite.add(TestCase::new("serialize_primitives", test_serialize_primitives));
-    suite.add(TestCase::new("deserialize_primitives", test_deserialize_primitives));
-
-    // ── Time ────
-    suite.add(TestCase::new("duration_basic", test_duration_basic));
-    suite.add(TestCase::new("duration_arithmetic", test_duration_arithmetic));
-    suite.add(TestCase::new("fake_clock", test_fake_clock));
-    suite.add(TestCase::new("stopwatch", test_stopwatch));
-
-    // ── Concurrency ────
-    suite.add(TestCase::new("mutex_api", test_mutex_api));
-    suite.add(TestCase::new("rwlock_api", test_rwlock_api));
-    suite.add(TestCase::new("channel_api", test_channel_api));
-    suite.add(TestCase::new("atomic_types", test_atomic_types));
-    suite.add(TestCase::new("semaphore_api", test_semaphore_api));
-    suite.add(TestCase::new("sleep_sync_exists", test_sleep_sync_exists));
-    suite.add(TestCase::new("once_api", test_once_api));
-
-    // ── Crypto ────
-    suite.add(TestCase::new("sha256_hash", test_sha256_hash));
-    suite.add(TestCase::new("sha512_hash", test_sha512_hash));
-    suite.add(TestCase::new("secure_random", test_secure_random));
-
-    // ── Error ────
-    suite.add(TestCase::new("error_kind_clone_copy", test_error_kind_clone_copy));
-    suite.add(TestCase::new("any_error", test_any_error));
-    suite.add(TestCase::new("error_chain", test_error_chain));
-
-    // ── Reflection ────
-    suite.add(TestCase::new("type_info_basic", test_type_info_basic));
-    suite.add(TestCase::new("type_id_equality", test_type_id_equality));
-
-    // ── Deterministic ────
-    suite.add(TestCase::new("deterministic_runtime_api", test_deterministic_runtime_api));
-
-    // ── Network ────
-    suite.add(TestCase::new("url_parse", test_url_parse));
-    suite.add(TestCase::new("http_request_build", test_http_request_build));
-
-    // ── System ────
-    suite.add(TestCase::new("command_build", test_command_build));
-    suite.add(TestCase::new("env_api", test_env_api));
-
-    // ── Module ────
-    suite.add(TestCase::new("version_parse", test_version_parse));
-
-    // ── Test Framework (meta) ────
-    suite.add(TestCase::new("assert_eq_passes", test_assert_eq_passes));
-    suite.add(TestCase::new("assert_ne_passes", test_assert_ne_passes));
-    suite.add(TestCase::new("assert_passes", test_assert_passes));
-
-    // ── Cross-module Integration ────
-    suite.add(TestCase::new("prelude_types_available", test_prelude_types_available));
-    suite.add(TestCase::new("error_into_result", test_error_into_result));
-    suite.add(TestCase::new("option_result_interop", test_option_result_interop));
-    suite.add(TestCase::new("iterator_with_option_and_result", test_iterator_with_option_and_result));
-    suite.add(TestCase::new("hashmap_with_vec_values", test_hashmap_with_vec_values));
-    suite.add(TestCase::new("shared_concurrent_state", test_shared_concurrent_state));
-    suite.add(TestCase::new("serialize_roundtrip_flow", test_serialize_roundtrip_flow));
-
-    // ── Run ────
-    let report = suite.run();
-    println(&report.summary());
-
-    if report.failed() > 0 {
-        eprintln(&format!("\n{} test(s) FAILED", report.failed()));
-        sys::process::exit(1);
-    }
-}
+// GreyStd Validation Test Suite
+// Tests core functionality of GreyStd modules using Grey++ syntax
+
+// ============================================================
+// Core Module Tests
+// ============================================================
+
+fn test_string() {
+  fn s() { string_new("hello world") }
+  fn chars_list() { string_chars(s()) }
+  fn reversed() { string_reverse(s()) }
+  fn capitalized() { string_capitalize(s()) }
+  fn sb() { sb_push(sb_push(StringBuilder_new(), "foo"), "bar") }
+  fn built() { sb_build(sb()) }
+
+  [
+    test_eq(get(s(), "value"), "hello world", "string_new stores value"),
+    test_eq(length(chars_list()), 11, "string_chars length"),
+    test_eq(get(reversed(), "value"), "dlrow olleh", "string_reverse"),
+    test_eq(get(capitalized(), "value"), "Hello world", "string_capitalize"),
+    test_eq(built(), "foobar", "StringBuilder builds correctly")
+  ]
+}
+
+fn test_option() {
+  fn some_val() { Some(42) }
+  fn none_val() { None() }
+  fn mapped() { option_map(some_val(), fn(x) { mul(x, 2) }) }
+
+  [
+    test_true(is_some(some_val()), "Some is some"),
+    test_true(is_none(none_val()), "None is none"),
+    test_eq(option_unwrap(some_val()), 42, "unwrap Some"),
+    test_eq(option_unwrap_or(none_val(), 0), 0, "unwrap_or None"),
+    test_eq(option_unwrap(mapped()), 84, "option_map doubles")
+  ]
+}
+
+fn test_result() {
+  fn ok_val() { Ok(10) }
+  fn err_val() { Err("oops") }
+  fn mapped() { result_map(ok_val(), fn(x) { add(x, 5) }) }
+
+  [
+    test_true(is_ok(ok_val()), "Ok is ok"),
+    test_true(is_err(err_val()), "Err is err"),
+    test_eq(result_unwrap(ok_val()), 10, "unwrap Ok"),
+    test_eq(result_unwrap(mapped()), 15, "result_map adds 5")
+  ]
+}
+
+fn test_vec() {
+  fn v() { vec_new() }
+  fn v1() { vec_push(v(), 1) }
+  fn v2() { vec_push(v1(), 2) }
+  fn v3() { vec_push(v2(), 3) }
+
+  [
+    test_eq(length(get(v(), "items")), 0, "vec_new is empty"),
+    test_eq(length(get(v3(), "items")), 3, "vec_push adds items"),
+    test_eq(get(get(v3(), "items"), 0), 1, "first item is 1"),
+    test_eq(get(get(v3(), "items"), 2), 3, "last item is 3")
+  ]
+}
+
+fn test_map_module() {
+  fn m() { map_new() }
+  fn m1() { map_from_entries([["a", 1], ["b", 2], ["c", 3]]) }
+  fn filtered() { map_filter(m1(), fn(k, v) { gt(v, 1) }) }
+
+  [
+    test_eq(length(keys(get(m(), "data"))), 0, "map_new is empty"),
+    test_eq(map_get_or(m1(), "a", 0), 1, "map_get_or finds key"),
+    test_eq(map_get_or(m1(), "z", 99), 99, "map_get_or returns default")
+  ]
+}
+
+fn test_set_module() {
+  fn s1() { set_from([1, 2, 3]) }
+  fn s2() { set_from([2, 3, 4]) }
+  fn union_set() { set_union(s1(), s2()) }
+  fn inter_set() { set_intersection(s1(), s2()) }
+
+  [
+    test_true(set_contains(s1(), 1), "set contains 1"),
+    test_false(set_contains(s1(), 5), "set does not contain 5"),
+    test_true(set_contains(union_set(), 4), "union contains 4"),
+    test_true(set_contains(inter_set(), 2), "intersection contains 2"),
+    test_false(set_contains(inter_set(), 1), "intersection excludes 1")
+  ]
+}
+
+fn test_math() {
+  [
+    test_eq(gcd(12, 8), 4, "gcd(12,8) = 4"),
+    test_eq(lcm(4, 6), 12, "lcm(4,6) = 12"),
+    test_eq(factorial(5), 120, "factorial(5) = 120"),
+    test_eq(fibonacci(10), 55, "fibonacci(10) = 55"),
+    test_true(is_even(4), "4 is even"),
+    test_true(is_odd(7), "7 is odd"),
+    test_eq(sign(-5), -1, "sign(-5) = -1"),
+    test_eq(sign(3), 1, "sign(3) = 1")
+  ]
+}
+
+// ============================================================
+// Mem Module Tests
+// ============================================================
+
+fn test_smart_ptr() {
+  fn b() { Box_new(42) }
+  fn mapped() { box_map(b(), fn(x) { add(x, 8) }) }
+  fn rc() { Rc_new("shared") }
+  fn rc2() { rc_clone(rc()) }
+
+  [
+    test_eq(box_unwrap(b()), 42, "Box holds value"),
+    test_eq(box_unwrap(mapped()), 50, "box_map transforms"),
+    test_eq(rc_count(rc()), 1, "Rc starts at 1"),
+    test_eq(rc_count(rc2()), 2, "rc_clone increments")
+  ]
+}
+
+fn test_arena() {
+  fn a() { Arena_new() }
+  fn r1() { arena_alloc(a(), "first") }
+  fn a1() { get(r1(), "arena") }
+  fn h1() { get(r1(), "handle") }
+  fn r2() { arena_alloc(a1(), "second") }
+  fn a2() { get(r2(), "arena") }
+
+  [
+    test_eq(arena_count(a()), 0, "arena starts empty"),
+    test_eq(arena_get(a1(), h1()), "first", "arena stores values"),
+    test_eq(arena_count(a2()), 2, "arena tracks count")
+  ]
+}
+
+// ============================================================
+// Time Module Tests
+// ============================================================
+
+fn test_duration() {
+  fn d1() { Duration_secs(5) }
+  fn d2() { Duration_ms(3000) }
+  fn added() { duration_add(d1(), d2()) }
+
+  [
+    test_eq(duration_ms(d1()), 5000, "5 secs = 5000ms"),
+    test_eq(duration_ms(d2()), 3000, "3000ms"),
+    test_eq(duration_ms(added()), 8000, "5s + 3s = 8s"),
+    test_true(duration_gt(d1(), d2()), "5s > 3s"),
+    test_true(duration_is_zero(Duration_zero()), "zero is zero")
+  ]
+}
+
+fn test_version() {
+  fn v1() { Version_new(1, 2, 3) }
+  fn v2() { Version_new(1, 3, 0) }
+  fn v3() { version_parse("2.0.0") }
+  fn bumped() { version_bump_minor(v1()) }
+
+  [
+    test_eq(version_to_string(v1()), "1.2.3", "version format"),
+    test_eq(version_compare(v1(), v2()), -1, "1.2.3 < 1.3.0"),
+    test_eq(version_to_string(v3()), "2.0.0", "parse 2.0.0"),
+    test_eq(version_to_string(bumped()), "1.3.0", "bump minor"),
+    test_true(version_is_stable(v1()), "no prerelease = stable")
+  ]
+}
+
+// ============================================================
+// Serial Module Tests
+// ============================================================
+
+fn test_json() {
+  fn obj() { { name: "test", value: 42 } }
+  fn json_str() { json_serialize(obj()) }
+  fn parsed() { json_parse(json_str()) }
+  fn flat() { json_flatten({ a: { b: { c: 1 } } }) }
+
+  [
+    test_true(json_is_valid(json_str()), "serialized JSON is valid"),
+    test_eq(get(parsed(), "name"), "test", "round-trip name"),
+    test_eq(get(parsed(), "value"), 42, "round-trip value"),
+    test_eq(get(flat(), "a.b.c"), 1, "flatten nested key")
+  ]
+}
+
+fn test_binary() {
+  fn enc() { BinaryEncoder_new() }
+  fn e1() { encoder_write_u8(enc(), 42) }
+  fn e2() { encoder_write_u16(e1(), 1000) }
+  fn e3() { encoder_write_bool(e2(), true) }
+  fn bytes() { encoder_bytes(e3()) }
+  fn dec() { BinaryDecoder_new(bytes()) }
+  fn r1() { decoder_read_u8(dec()) }
+  fn r2() { decoder_read_u16(get(r1(), "decoder")) }
+  fn r3() { decoder_read_bool(get(r2(), "decoder")) }
+
+  [
+    test_eq(get(r1(), "value"), 42, "decode u8"),
+    test_eq(get(r2(), "value"), 1000, "decode u16"),
+    test_true(get(r3(), "value"), "decode bool true")
+  ]
+}
+
+// ============================================================
+// Error & Test Module Tests
+// ============================================================
+
+fn test_error_types() {
+  fn e() { Error_new("something failed") }
+  fn te() { TypeError("expected number") }
+  fn wrapped() { error_wrap(te(), "in function foo") }
+  fn root() { error_root_cause(wrapped()) }
+
+  [
+    test_eq(error_message(e()), "something failed", "error message"),
+    test_eq(error_kind(te()), "TypeError", "error kind"),
+    test_str_contains(error_message(wrapped()), "in function foo", "wrapped message"),
+    test_eq(error_kind(root()), "TypeError", "root cause kind")
+  ]
+}
+
+fn test_try_run() {
+  fn ok_result() { try_run(fn() { add(1, 2) }) }
+  fn err_result() { try_run(fn() { panic("boom") }) }
+
+  [
+    test_true(is_ok(ok_result()), "try_run success is Ok"),
+    test_eq(result_unwrap(ok_result()), 3, "try_run value"),
+    test_true(is_err(err_result()), "try_run failure is Err")
+  ]
+}
+
+// ============================================================
+// Reflect Module Tests
+// ============================================================
+
+fn test_inspect() {
+  fn obj() { { _type: "Widget", name: "foo", count: 3 } }
+  fn i() { inspect(obj()) }
+  fn dt() { detailed_type(42) }
+  fn ds() { detailed_type("hello") }
+
+  [
+    test_eq(get(i(), "value_type"), "object", "inspect type"),
+    test_eq(dt(), "integer", "42 is integer"),
+    test_eq(ds(), "string(5)", "hello is string(5)"),
+    test_true(deep_eq([1, 2, 3], [1, 2, 3]), "deep_eq arrays"),
+    test_false(deep_eq([1, 2], [1, 3]), "deep_eq different arrays")
+  ]
+}
+
+// ============================================================
+// Deterministic Module Tests
+// ============================================================
+
+fn test_ordered_map() {
+  fn om() { OrderedMap_new() }
+  fn om1() { omap_insert(om(), "b", 2) }
+  fn om2() { omap_insert(om1(), "a", 1) }
+  fn om3() { omap_insert(om2(), "c", 3) }
+  fn k() { omap_keys(om3()) }
+
+  [
+    test_eq(omap_size(om()), 0, "empty ordered map"),
+    test_eq(omap_get(om3(), "a"), 1, "get from ordered map"),
+    test_eq(get(k(), 0), "b", "first key is b (insertion order)"),
+    test_eq(get(k(), 1), "a", "second key is a"),
+    test_eq(get(k(), 2), "c", "third key is c")
+  ]
+}
+
+fn test_pool_allocator() {
+  fn pool() { PoolAllocator_new(4) }
+  fn r1() { pool_alloc(pool(), "A") }
+  fn p1() { get(r1(), "allocator") }
+  fn h1() { get(r1(), "handle") }
+  fn r2() { pool_alloc(p1(), "B") }
+  fn p2() { get(r2(), "allocator") }
+
+  [
+    test_eq(pool_allocated(pool()), 0, "pool starts empty"),
+    test_eq(pool_get(p1(), h1()), "A", "pool stores value"),
+    test_eq(pool_allocated(p2()), 2, "pool tracks count"),
+    test_eq(pool_free_count(p2()), 2, "pool tracks free slots")
+  ]
+}
+
+// ============================================================
+// Run All Tests
+// ============================================================
+
+fn main() {
+  println("=== GreyStd Validation Suite ===\n")
+
+  fn suites() {
+    [
+      it("core/string", test_string),
+      it("core/option", test_option),
+      it("core/result", test_result),
+      it("core/vec", test_vec),
+      it("core/map", test_map_module),
+      it("core/set", test_set_module),
+      it("core/math", test_math),
+      it("mem/smart_ptr", test_smart_ptr),
+      it("mem/arena", test_arena),
+      it("time/duration", test_duration),
+      it("module/version", test_version),
+      it("serial/json", test_json),
+      it("serial/binary", test_binary),
+      it("error/types", test_error_types),
+      it("error/try_run", test_try_run),
+      it("reflect/inspect", test_inspect),
+      it("deterministic/ordered_map", test_ordered_map),
+      it("deterministic/pool_allocator", test_pool_allocator)
+    ]
+  }
+
+  fn result() { run_tests("GreyStd Validation", suites()) }
+
+  if_then(get(result(), "success"),
+    fn() { println("\nAll GreyStd validation tests passed!") },
+    fn() { println("\nSome GreyStd validation tests failed.") }
+  )
+}
+
+main()

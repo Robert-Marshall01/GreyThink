@@ -1,17 +1,12 @@
-/// reflect — Runtime reflection and introspection for Grey++ types.
-///
-/// Provides type metadata, dynamic inspection, runtime method invocation,
-/// and custom attribute (annotation) support.
-///
-/// # Feature gate
-/// This module requires the `reflect` feature flag.
+// GreyStd Reflect Module
+// Runtime reflection and type inspection
+// Submodules: type_meta, attribute, inspect, invoke
 
-pub mod type_meta;
-pub mod inspect;
-pub mod invoke;
-pub mod attribute;
-
-pub use type_meta::{TypeId, TypeMeta, TypeKind, Field, Variant, GenericParam};
-pub use inspect::{Inspect, Inspector, Value};
-pub use invoke::{DynCall, DynMethod, InvokeError};
-pub use attribute::{Attribute, AttributeTarget, HasAttributes};
+fn reflect_info() {
+  {
+    _type: "Module",
+    name: "reflect",
+    submodules: ["type_meta", "attribute", "inspect", "invoke"],
+    description: "Runtime type inspection, metadata, and dynamic invocation"
+  }
+}

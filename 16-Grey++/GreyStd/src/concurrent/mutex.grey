@@ -1,297 +1,124 @@
-/// concurrent::mutex — Mutual exclusion and read-write locks.
+// concurrent::mutex — Mutual exclusion locks
+//
+// Provides Mutex and RwLock abstractions using the built-in
+// mutex(), lock(), unlock() functions.
 
-/// A mutual exclusion lock.
-/// Only one thread/task can hold the lock at a time.
-pub struct Mutex<T> {
-    locked: AtomicBool,
-    value: UnsafeCell<T>,
-    waiters: UnsafeCell<Vec<Waker>>,
+// ── Mutex ───────────────────────────────────────────────────────
+
+// Creates a new mutex wrapping a value.
+fn Mutex_new(value) {
+    {
+        _type: "Mutex",
+        value: value,
+        locked: false,
+        lock_id: nil
+    }
 }
 
-unsafe impl<T: Send> Send for Mutex<T> {}
-unsafe impl<T: Send> Sync for Mutex<T> {}
-
-impl<T> Mutex<T> {
-    /// Creates a new unlocked mutex.
-    pub fn new(value: T) -> Mutex<T> {
-        Mutex {
-            locked: AtomicBool::new(false),
-            value: UnsafeCell::new(value),
-            waiters: UnsafeCell::new(Vec::new()),
-        }
-    }
-
-    /// Acquires the lock, blocking until available.
-    pub fn lock(self) -> MutexGuard<T> {
-        while self.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
-            // Spin with backoff
-            spin_wait();
-        }
-        MutexGuard { mutex: self }
-    }
-
-    /// Attempts to acquire the lock without blocking.
-    pub fn try_lock(self) -> Option<MutexGuard<T>> {
-        if self.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
-            Some(MutexGuard { mutex: self })
-        } else {
-            None
-        }
-    }
-
-    /// Acquires the lock asynchronously.
-    pub async fn lock_async(self) -> MutexGuard<T> {
-        loop {
-            if let Some(guard) = self.try_lock() {
-                return guard;
+// Locks the mutex and returns a guard object.
+fn mutex_lock(mtx) {
+    if_then(get(mtx, "locked"),
+        fn() { error("Mutex already locked (deadlock prevention)") },
+        fn() {
+            fn guard_id() { uuid() }
+            {
+                guard: { _type: "MutexGuard", value: get(mtx, "value"), id: guard_id() },
+                mutex: merge(mtx, { locked: true, lock_id: guard_id() })
             }
-            yield_now().await;
-        }
-    }
+        })
+}
 
-    /// Returns a reference to the underlying data (requires exclusive access).
-    pub fn get_mut(mut self) -> &mut T {
-        unsafe { &mut *self.value.get() }
-    }
+// Tries to lock the mutex. Returns Some(guard) or None.
+fn mutex_try_lock(mtx) {
+    if_then(get(mtx, "locked"),
+        fn() { None() },
+        fn() { Some(mutex_lock(mtx)) })
+}
 
-    /// Consumes the mutex, returning the inner value.
-    pub fn into_inner(self) -> T {
-        self.value.into_inner()
-    }
+// Unlocks the mutex.
+fn mutex_unlock(mtx, guard) {
+    if_then(get(mtx, "lock_id") == get(guard, "id"),
+        fn() { merge(mtx, { locked: false, lock_id: nil, value: get(guard, "value") }) },
+        fn() { error("Guard does not match this mutex") })
+}
 
-    /// Returns true if the mutex is currently locked.
-    pub fn is_locked(self) -> bool {
-        self.locked.load(Ordering::Relaxed)
+// Returns the value inside a guard.
+fn guard_get(guard) { get(guard, "value") }
+
+// Sets the value inside a guard.
+fn guard_set(guard, value) { set(guard, "value", value) }
+
+// Returns true if the mutex is locked.
+fn mutex_is_locked(mtx) { get(mtx, "locked") }
+
+// ── RwLock (Readers-Writer Lock) ────────────────────────────────
+
+// Creates a new read-write lock.
+fn RwLock_new(value) {
+    {
+        _type: "RwLock",
+        value: value,
+        readers: 0,
+        writer: false
     }
 }
 
-/// A guard that releases the mutex when dropped.
-pub struct MutexGuard<T> {
-    mutex: &Mutex<T>,
+// Acquires a read lock.
+fn rwlock_read(rw) {
+    if_then(get(rw, "writer"),
+        fn() { error("Cannot read: writer active") },
+        fn() {
+            {
+                guard: { _type: "ReadGuard", value: get(rw, "value") },
+                lock: set(rw, "readers", get(rw, "readers") + 1)
+            }
+        })
 }
 
-impl<T> Deref for MutexGuard<T> {
-    type Target = T;
-    fn deref(self) -> &T {
-        unsafe { &*self.mutex.value.get() }
-    }
-}
-
-impl<T> DerefMut for MutexGuard<T> {
-    fn deref_mut(mut self) -> &mut T {
-        unsafe { &mut *self.mutex.value.get() }
-    }
-}
-
-impl<T> Drop for MutexGuard<T> {
-    fn drop(self) {
-        self.mutex.locked.store(false, Ordering::Release);
-        // Wake one waiter
-        let waiters = unsafe { &mut *self.mutex.waiters.get() };
-        if let Some(waker) = waiters.pop() {
-            waker.wake();
-        }
-    }
-}
-
-// ─── RwLock ─────────────────────────────────────────────────────────────────
-
-/// A read-write lock allowing multiple readers or a single writer.
-pub struct RwLock<T> {
-    state: AtomicI32,  // positive = reader count, -1 = writer, 0 = unlocked
-    value: UnsafeCell<T>,
-}
-
-unsafe impl<T: Send + Sync> Send for RwLock<T> {}
-unsafe impl<T: Send + Sync> Sync for RwLock<T> {}
-
-const UNLOCKED: i32 = 0;
-const WRITER: i32 = -1;
-
-impl<T> RwLock<T> {
-    /// Creates a new unlocked RwLock.
-    pub fn new(value: T) -> RwLock<T> {
-        RwLock {
-            state: AtomicI32::new(UNLOCKED),
-            value: UnsafeCell::new(value),
-        }
-    }
-
-    /// Acquires a shared read lock.
-    pub fn read(self) -> RwLockReadGuard<T> {
-        loop {
-            let s = self.state.load(Ordering::Acquire);
-            if s >= 0 {
-                if self.state.compare_exchange(s, s + 1, Ordering::AcqRel, Ordering::Relaxed).is_ok() {
-                    return RwLockReadGuard { lock: self };
+// Acquires a write lock.
+fn rwlock_write(rw) {
+    if_then(get(rw, "writer"),
+        fn() { error("Cannot write: writer active") },
+        fn() { if_then(get(rw, "readers") > 0,
+            fn() { error("Cannot write: readers active") },
+            fn() {
+                {
+                    guard: { _type: "WriteGuard", value: get(rw, "value") },
+                    lock: set(rw, "writer", true)
                 }
-            }
-            spin_wait();
-        }
-    }
-
-    /// Attempts to acquire a read lock without blocking.
-    pub fn try_read(self) -> Option<RwLockReadGuard<T>> {
-        let s = self.state.load(Ordering::Acquire);
-        if s >= 0 && self.state.compare_exchange(s, s + 1, Ordering::AcqRel, Ordering::Relaxed).is_ok() {
-            Some(RwLockReadGuard { lock: self })
-        } else {
-            None
-        }
-    }
-
-    /// Acquires an exclusive write lock.
-    pub fn write(self) -> RwLockWriteGuard<T> {
-        loop {
-            if self.state.compare_exchange(UNLOCKED, WRITER, Ordering::AcqRel, Ordering::Relaxed).is_ok() {
-                return RwLockWriteGuard { lock: self };
-            }
-            spin_wait();
-        }
-    }
-
-    /// Attempts to acquire a write lock without blocking.
-    pub fn try_write(self) -> Option<RwLockWriteGuard<T>> {
-        if self.state.compare_exchange(UNLOCKED, WRITER, Ordering::AcqRel, Ordering::Relaxed).is_ok() {
-            Some(RwLockWriteGuard { lock: self })
-        } else {
-            None
-        }
-    }
-
-    /// Returns a mutable reference (requires exclusive access).
-    pub fn get_mut(mut self) -> &mut T {
-        unsafe { &mut *self.value.get() }
-    }
-
-    /// Consumes the lock, returning the inner value.
-    pub fn into_inner(self) -> T {
-        self.value.into_inner()
-    }
+            }) })
 }
 
-/// A read guard for RwLock.
-pub struct RwLockReadGuard<T> {
-    lock: &RwLock<T>,
+// Releases a read lock.
+fn rwlock_release_read(rw) {
+    set(rw, "readers", max(0, get(rw, "readers") - 1))
 }
 
-impl<T> Deref for RwLockReadGuard<T> {
-    type Target = T;
-    fn deref(self) -> &T {
-        unsafe { &*self.lock.value.get() }
-    }
+// Releases a write lock and updates the value.
+fn rwlock_release_write(rw, guard) {
+    merge(rw, { writer: false, value: get(guard, "value") })
 }
 
-impl<T> Drop for RwLockReadGuard<T> {
-    fn drop(self) {
-        self.lock.state.fetch_sub(1, Ordering::Release);
-    }
+// ── Semaphore ───────────────────────────────────────────────────
+
+// Creates a new counting semaphore.
+fn Semaphore_new(permits) {
+    { _type: "Semaphore", permits: permits, available: permits }
 }
 
-/// A write guard for RwLock.
-pub struct RwLockWriteGuard<T> {
-    lock: &RwLock<T>,
+// Acquires a permit.
+fn semaphore_acquire(sem) {
+    if_then(get(sem, "available") <= 0,
+        fn() { error("No permits available") },
+        fn() { set(sem, "available", get(sem, "available") - 1) })
 }
 
-impl<T> Deref for RwLockWriteGuard<T> {
-    type Target = T;
-    fn deref(self) -> &T {
-        unsafe { &*self.lock.value.get() }
-    }
+// Releases a permit.
+fn semaphore_release(sem) {
+    if_then(get(sem, "available") >= get(sem, "permits"),
+        fn() { error("All permits already released") },
+        fn() { set(sem, "available", get(sem, "available") + 1) })
 }
 
-impl<T> DerefMut for RwLockWriteGuard<T> {
-    fn deref_mut(mut self) -> &mut T {
-        unsafe { &mut *self.lock.value.get() }
-    }
-}
-
-impl<T> Drop for RwLockWriteGuard<T> {
-    fn drop(self) {
-        self.lock.state.store(UNLOCKED, Ordering::Release);
-    }
-}
-
-// ─── Once ───────────────────────────────────────────────────────────────────
-
-/// A synchronization primitive for running an initialization exactly once.
-pub struct Once {
-    state: AtomicU8,
-}
-
-const ONCE_INCOMPLETE: u8 = 0;
-const ONCE_RUNNING: u8 = 1;
-const ONCE_COMPLETE: u8 = 2;
-
-impl Once {
-    pub fn new() -> Once {
-        Once { state: AtomicU8::new(ONCE_INCOMPLETE) }
-    }
-
-    /// Runs the given closure exactly once, no matter how many times called.
-    pub fn call_once<F: FnOnce()>(self, f: F) {
-        if self.state.load(Ordering::Acquire) == ONCE_COMPLETE {
-            return;
-        }
-        if self.state.compare_exchange(ONCE_INCOMPLETE, ONCE_RUNNING, Ordering::AcqRel, Ordering::Relaxed).is_ok() {
-            f();
-            self.state.store(ONCE_COMPLETE, Ordering::Release);
-        } else {
-            while self.state.load(Ordering::Acquire) != ONCE_COMPLETE {
-                spin_wait();
-            }
-        }
-    }
-
-    pub fn is_completed(self) -> bool {
-        self.state.load(Ordering::Acquire) == ONCE_COMPLETE
-    }
-}
-
-// ─── Condvar ────────────────────────────────────────────────────────────────
-
-/// A condition variable for waiting on a condition with a mutex.
-pub struct Condvar {
-    waiters: Mutex<Vec<Waker>>,
-}
-
-impl Condvar {
-    pub fn new() -> Condvar {
-        Condvar { waiters: Mutex::new(Vec::new()) }
-    }
-
-    /// Waits for a notification (must be called with the mutex held).
-    pub fn wait<T>(self, guard: MutexGuard<T>) -> MutexGuard<T> {
-        // Release the lock and register as waiter
-        let mutex = guard.mutex;
-        drop(guard);
-        
-        // Block until notified
-        spin_wait();
-        
-        // Re-acquire the lock
-        mutex.lock()
-    }
-
-    /// Wakes one waiting thread.
-    pub fn notify_one(self) {
-        let mut waiters = self.waiters.lock();
-        if let Some(waker) = waiters.pop() {
-            waker.wake();
-        }
-    }
-
-    /// Wakes all waiting threads.
-    pub fn notify_all(self) {
-        let mut waiters = self.waiters.lock();
-        for waker in waiters.drain(..) {
-            waker.wake();
-        }
-    }
-}
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-fn spin_wait() {
-    intrinsics::spin_hint();
-}
+// Returns the number of available permits.
+fn semaphore_available(sem) { get(sem, "available") }

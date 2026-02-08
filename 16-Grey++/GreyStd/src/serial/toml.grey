@@ -1,483 +1,101 @@
-/// serial::toml — TOML serialization and deserialization.
+// GreyStd Serial - TOML
+// TOML-like serialization and deserialization
 
-use crate::core::string::String;
-use crate::core::vec::Vec;
-use crate::core::map::HashMap;
-use crate::core::option::Option;
-use crate::serial::{Serialize, Deserialize, SerializeError, DeserializeError};
-
-/// A TOML value.
-pub enum TomlValue {
-    String(String),
-    Integer(i64),
-    Float(f64),
-    Boolean(bool),
-    DateTime(String),
-    Array(Vec<TomlValue>),
-    Table(TomlTable),
+// Parse a simple TOML string into an object
+fn toml_parse(text) {
+  fn lines() { split(text, "\n") }
+  fn initial() { { result: {}, current_section: "" } }
+  fn state() {
+    fold(lines(), initial(), fn(st, line) {
+      fn trimmed() { trim(line) }
+      cond(
+        eq(length(trimmed()), 0), st,
+        starts_with(trimmed(), "#"), st,
+        and(starts_with(trimmed(), "["), ends_with(trimmed(), "]")),
+          merge(st, { current_section: slice(trimmed(), 1, sub(length(trimmed()), 1)) }),
+        toml_parse_line(st, trimmed())
+      )
+    })
+  }
+  get(state(), "result")
 }
 
-/// A TOML table (ordered key-value pairs).
-pub type TomlTable = Vec<(String, TomlValue)>;
-
-impl TomlValue {
-    pub fn is_string(self) -> bool  { match self { TomlValue::String(_) => true, _ => false } }
-    pub fn is_integer(self) -> bool { match self { TomlValue::Integer(_) => true, _ => false } }
-    pub fn is_float(self) -> bool   { match self { TomlValue::Float(_) => true, _ => false } }
-    pub fn is_bool(self) -> bool    { match self { TomlValue::Boolean(_) => true, _ => false } }
-    pub fn is_array(self) -> bool   { match self { TomlValue::Array(_) => true, _ => false } }
-    pub fn is_table(self) -> bool   { match self { TomlValue::Table(_) => true, _ => false } }
-
-    pub fn as_str(self) -> Option<&str> {
-        match self { TomlValue::String(s) => Some(s), _ => None }
-    }
-
-    pub fn as_i64(self) -> Option<i64> {
-        match self { TomlValue::Integer(n) => Some(*n), _ => None }
-    }
-
-    pub fn as_f64(self) -> Option<f64> {
-        match self {
-            TomlValue::Float(n) => Some(*n),
-            TomlValue::Integer(n) => Some(*n as f64),
-            _ => None,
-        }
-    }
-
-    pub fn as_bool(self) -> Option<bool> {
-        match self { TomlValue::Boolean(b) => Some(*b), _ => None }
-    }
-
-    pub fn as_array(self) -> Option<&Vec<TomlValue>> {
-        match self { TomlValue::Array(a) => Some(a), _ => None }
-    }
-
-    pub fn as_table(self) -> Option<&TomlTable> {
-        match self { TomlValue::Table(t) => Some(t), _ => None }
-    }
-
-    pub fn get(self, key: &str) -> Option<&TomlValue> {
-        match self {
-            TomlValue::Table(pairs) => {
-                pairs.iter().find(|(k, _)| k == key).map(|(_, v)| v)
-            }
-            _ => None,
-        }
-    }
+// Parse a single TOML key=value line
+fn toml_parse_line(state, line) {
+  fn eq_idx() { index_of(line, "=") }
+  if_then(lt(eq_idx(), 0), fn() { state }, fn() {
+    fn key() { trim(slice(line, 0, eq_idx())) }
+    fn raw_val() { trim(slice(line, add(eq_idx(), 1))) }
+    fn val() { toml_parse_value(raw_val()) }
+    fn section() { get(state, "current_section") }
+    fn full_key() { if_then(eq(section(), ""), fn() { key() }, fn() { concat_str(section(), ".", key()) }) }
+    merge(state, { result: merge(get(state, "result"), fromEntries([[full_key(), val()]])) })
+  })
 }
 
-/// Parses a TOML string into a TomlValue::Table.
-pub fn parse(input: &str) -> Result<TomlValue, DeserializeError> {
-    let mut parser = TomlParser::new(input);
-    parser.parse()
+// Parse a TOML value
+fn toml_parse_value(raw) {
+  cond(
+    eq(raw, "true"), true,
+    eq(raw, "false"), false,
+    and(starts_with(raw, "\""), ends_with(raw, "\"")), slice(raw, 1, sub(length(raw), 1)),
+    and(starts_with(raw, "'"), ends_with(raw, "'")), slice(raw, 1, sub(length(raw), 1)),
+    is_numeric_str(raw), to_number(raw),
+    raw
+  )
 }
 
-/// Serializes a TomlValue to a TOML string.
-pub fn to_string(value: &TomlValue) -> Result<String, SerializeError> {
-    let mut output = String::new();
-    match value {
-        TomlValue::Table(table) => {
-            write_table(&mut output, table, &String::new());
-            Ok(output)
-        }
-        _ => Err(SerializeError::Message(String::from("top-level value must be a table"))),
-    }
+// Check if string is numeric
+fn is_numeric_str(s) {
+  try_catch(fn() { to_number(s) }, fn(_) { false }, fn(_) { true })
 }
 
-fn write_table(out: &mut String, table: &TomlTable, prefix: &str) {
-    // Write simple key-values first
-    for (key, value) in table {
-        match value {
-            TomlValue::Table(_) | TomlValue::Array(_) => continue,
-            _ => {
-                out.push_str(&escape_key(key));
-                out.push_str(" = ");
-                write_value(out, value);
-                out.push('\n');
-            }
-        }
-    }
-
-    // Then nested tables
-    for (key, value) in table {
-        match value {
-            TomlValue::Table(sub) => {
-                out.push('\n');
-                let full_key = if prefix.is_empty() {
-                    escape_key(key)
-                } else {
-                    format!("{}.{}", prefix, escape_key(key))
-                };
-                out.push_str(&format!("[{}]\n", full_key));
-                write_table(out, sub, &full_key);
-            }
-            TomlValue::Array(arr) if !arr.is_empty() && arr[0].is_table() => {
-                let full_key = if prefix.is_empty() {
-                    escape_key(key)
-                } else {
-                    format!("{}.{}", prefix, escape_key(key))
-                };
-                for item in arr {
-                    out.push('\n');
-                    out.push_str(&format!("[[{}]]\n", full_key));
-                    if let TomlValue::Table(t) = item {
-                        write_table(out, t, &full_key);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
+// Serialize an object to TOML string
+fn toml_serialize(obj) {
+  fn entries() { keys(obj) }
+  fn lines() {
+    map(entries(), fn(key) {
+      fn val() { get(obj, key) }
+      fn val_str() {
+        cond(
+          eq(val(), true), "true",
+          eq(val(), false), "false",
+          is_string(val()), concat_str("\"", val(), "\""),
+          eq(val(), nil), "\"\"",
+          to_string(val())
+        )
+      }
+      concat_str(key, " = ", val_str())
+    })
+  }
+  join(lines(), "\n")
 }
 
-fn write_value(out: &mut String, value: &TomlValue) {
-    match value {
-        TomlValue::String(s) => {
-            out.push('"');
-            for ch in s.chars() {
-                match ch {
-                    '"'  => out.push_str("\\\""),
-                    '\\' => out.push_str("\\\\"),
-                    '\n' => out.push_str("\\n"),
-                    '\t' => out.push_str("\\t"),
-                    c => out.push(c),
-                }
-            }
-            out.push('"');
-        }
-        TomlValue::Integer(n) => out.push_str(&n.to_string()),
-        TomlValue::Float(f) => out.push_str(&f.to_string()),
-        TomlValue::Boolean(b) => out.push_str(if *b { "true" } else { "false" }),
-        TomlValue::DateTime(dt) => out.push_str(dt),
-        TomlValue::Array(arr) => {
-            out.push('[');
-            for (i, item) in arr.iter().enumerate() {
-                if i > 0 { out.push_str(", "); }
-                write_value(out, item);
-            }
-            out.push(']');
-        }
-        TomlValue::Table(table) => {
-            out.push('{');
-            for (i, (k, v)) in table.iter().enumerate() {
-                if i > 0 { out.push_str(", "); }
-                out.push_str(&escape_key(k));
-                out.push_str(" = ");
-                write_value(out, v);
-            }
-            out.push('}');
-        }
-    }
+// Create a TOML document
+fn TomlDoc_new() {
+  { _type: "TomlDoc", sections: {}, top_level: {} }
 }
 
-fn escape_key(key: &str) -> String {
-    if key.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
-        String::from(key)
-    } else {
-        let mut s = String::from("\"");
-        s.push_str(key);
-        s.push('"');
-        s
-    }
+// Add a top-level key-value to TOML document
+fn toml_doc_set(doc, key, value) {
+  merge(doc, { top_level: merge(get(doc, "top_level"), fromEntries([[key, value]])) })
 }
 
-// ─── Parser ─────────────────────────────────────────────────
-
-struct TomlParser {
-    chars: Vec<char>,
-    pos: usize,
+// Add a section to TOML document
+fn toml_doc_add_section(doc, section_name, data) {
+  merge(doc, { sections: merge(get(doc, "sections"), fromEntries([[section_name, data]])) })
 }
 
-impl TomlParser {
-    fn new(input: &str) -> TomlParser {
-        TomlParser { chars: input.chars().collect(), pos: 0 }
-    }
-
-    fn parse(mut self) -> Result<TomlValue, DeserializeError> {
-        let mut root: TomlTable = Vec::new();
-        let mut current_table: *mut TomlTable = &mut root;
-
-        while self.pos < self.chars.len() {
-            self.skip_whitespace_and_comments();
-            if self.pos >= self.chars.len() { break; }
-
-            if self.chars[self.pos] == '[' {
-                if self.pos + 1 < self.chars.len() && self.chars[self.pos + 1] == '[' {
-                    // Array of tables [[...]]
-                    self.pos = self.pos + 2;
-                    let key = self.parse_key_path()?;
-                    self.expect(']')?;
-                    self.expect(']')?;
-                    current_table = self.ensure_array_table(&mut root, &key);
-                } else {
-                    // Table [...]
-                    self.pos = self.pos + 1;
-                    let key = self.parse_key_path()?;
-                    self.expect(']')?;
-                    current_table = self.ensure_table(&mut root, &key);
-                }
-            } else {
-                // Key = value
-                let key = self.parse_key()?;
-                self.skip_whitespace();
-                self.expect('=')?;
-                self.skip_whitespace();
-                let value = self.parse_toml_value()?;
-                unsafe { (*current_table).push((key, value)); }
-            }
-
-            self.skip_whitespace_and_comments();
-        }
-
-        Ok(TomlValue::Table(root))
-    }
-
-    fn parse_toml_value(mut self) -> Result<TomlValue, DeserializeError> {
-        match self.peek() {
-            Some('"') => self.parse_string().map(TomlValue::String),
-            Some('\'') => self.parse_literal_string().map(TomlValue::String),
-            Some('[') => self.parse_array(),
-            Some('{') => self.parse_inline_table(),
-            Some('t') | Some('f') => self.parse_bool().map(TomlValue::Boolean),
-            Some(c) if c == '-' || c == '+' || c.is_ascii_digit() => self.parse_number(),
-            _ => Err(DeserializeError::Message(String::from("expected value"))),
-        }
-    }
-
-    fn parse_string(mut self) -> Result<String, DeserializeError> {
-        self.expect('"')?;
-        let mut s = String::new();
-        loop {
-            match self.advance() {
-                Some('"') => return Ok(s),
-                Some('\\') => {
-                    match self.advance() {
-                        Some('"') => s.push('"'),
-                        Some('\\') => s.push('\\'),
-                        Some('n') => s.push('\n'),
-                        Some('t') => s.push('\t'),
-                        Some('r') => s.push('\r'),
-                        _ => return Err(DeserializeError::Message(String::from("invalid escape"))),
-                    }
-                }
-                Some(c) => s.push(c),
-                None => return Err(DeserializeError::Eof),
-            }
-        }
-    }
-
-    fn parse_literal_string(mut self) -> Result<String, DeserializeError> {
-        self.expect('\'')?;
-        let mut s = String::new();
-        loop {
-            match self.advance() {
-                Some('\'') => return Ok(s),
-                Some(c) => s.push(c),
-                None => return Err(DeserializeError::Eof),
-            }
-        }
-    }
-
-    fn parse_key(mut self) -> Result<String, DeserializeError> {
-        if self.peek() == Some('"') {
-            self.parse_string()
-        } else {
-            let start = self.pos;
-            while self.pos < self.chars.len() {
-                let c = self.chars[self.pos];
-                if c.is_alphanumeric() || c == '-' || c == '_' {
-                    self.pos = self.pos + 1;
-                } else {
-                    break;
-                }
-            }
-            if self.pos == start {
-                Err(DeserializeError::Message(String::from("empty key")))
-            } else {
-                Ok(self.chars[start..self.pos].iter().collect())
-            }
-        }
-    }
-
-    fn parse_key_path(mut self) -> Result<Vec<String>, DeserializeError> {
-        let mut keys = Vec::new();
-        self.skip_whitespace();
-        keys.push(self.parse_key()?);
-        while self.peek() == Some('.') {
-            self.advance();
-            keys.push(self.parse_key()?);
-        }
-        self.skip_whitespace();
-        Ok(keys)
-    }
-
-    fn parse_number(mut self) -> Result<TomlValue, DeserializeError> {
-        let start = self.pos;
-        let mut is_float = false;
-
-        if self.peek() == Some('-') || self.peek() == Some('+') {
-            self.advance();
-        }
-        while self.pos < self.chars.len() && (self.chars[self.pos].is_ascii_digit() || self.chars[self.pos] == '_') {
-            self.pos = self.pos + 1;
-        }
-        if self.peek() == Some('.') {
-            is_float = true;
-            self.advance();
-            while self.pos < self.chars.len() && (self.chars[self.pos].is_ascii_digit() || self.chars[self.pos] == '_') {
-                self.pos = self.pos + 1;
-            }
-        }
-        if self.peek() == Some('e') || self.peek() == Some('E') {
-            is_float = true;
-            self.advance();
-            if self.peek() == Some('+') || self.peek() == Some('-') { self.advance(); }
-            while self.pos < self.chars.len() && self.chars[self.pos].is_ascii_digit() {
-                self.pos = self.pos + 1;
-            }
-        }
-
-        let num_str: String = self.chars[start..self.pos].iter().filter(|c| **c != '_').collect();
-        if is_float {
-            num_str.parse::<f64>().map(TomlValue::Float)
-                .map_err(|_| DeserializeError::Message(format!("invalid float: {}", num_str)))
-        } else {
-            num_str.parse::<i64>().map(TomlValue::Integer)
-                .map_err(|_| DeserializeError::Message(format!("invalid integer: {}", num_str)))
-        }
-    }
-
-    fn parse_bool(mut self) -> Result<bool, DeserializeError> {
-        if self.starts_with("true") { self.pos = self.pos + 4; Ok(true) }
-        else if self.starts_with("false") { self.pos = self.pos + 5; Ok(false) }
-        else { Err(DeserializeError::Message(String::from("expected boolean"))) }
-    }
-
-    fn parse_array(mut self) -> Result<TomlValue, DeserializeError> {
-        self.expect('[')?;
-        let mut items = Vec::new();
-        self.skip_whitespace_and_comments();
-        if self.peek() == Some(']') { self.advance(); return Ok(TomlValue::Array(items)); }
-        loop {
-            self.skip_whitespace_and_comments();
-            items.push(self.parse_toml_value()?);
-            self.skip_whitespace_and_comments();
-            if self.peek() == Some(',') { self.advance(); }
-            self.skip_whitespace_and_comments();
-            if self.peek() == Some(']') { self.advance(); return Ok(TomlValue::Array(items)); }
-        }
-    }
-
-    fn parse_inline_table(mut self) -> Result<TomlValue, DeserializeError> {
-        self.expect('{')?;
-        let mut pairs = Vec::new();
-        self.skip_whitespace();
-        if self.peek() == Some('}') { self.advance(); return Ok(TomlValue::Table(pairs)); }
-        loop {
-            self.skip_whitespace();
-            let key = self.parse_key()?;
-            self.skip_whitespace();
-            self.expect('=')?;
-            self.skip_whitespace();
-            let value = self.parse_toml_value()?;
-            pairs.push((key, value));
-            self.skip_whitespace();
-            if self.peek() == Some(',') { self.advance(); }
-            if self.peek() == Some('}') { self.advance(); return Ok(TomlValue::Table(pairs)); }
-        }
-    }
-
-    // Helpers
-    fn peek(self) -> Option<char> { self.chars.get(self.pos).copied() }
-    fn advance(mut self) -> Option<char> {
-        if self.pos < self.chars.len() { let c = self.chars[self.pos]; self.pos += 1; Some(c) } else { None }
-    }
-    fn expect(mut self, ch: char) -> Result<(), DeserializeError> {
-        match self.advance() {
-            Some(c) if c == ch => Ok(()),
-            Some(c) => Err(DeserializeError::Message(format!("expected '{}', got '{}'", ch, c))),
-            None => Err(DeserializeError::Eof),
-        }
-    }
-    fn skip_whitespace(mut self) {
-        while self.pos < self.chars.len() && (self.chars[self.pos] == ' ' || self.chars[self.pos] == '\t') {
-            self.pos += 1;
-        }
-    }
-    fn skip_whitespace_and_comments(mut self) {
-        loop {
-            while self.pos < self.chars.len() && self.chars[self.pos].is_whitespace() {
-                self.pos += 1;
-            }
-            if self.peek() == Some('#') {
-                while self.pos < self.chars.len() && self.chars[self.pos] != '\n' { self.pos += 1; }
-            } else { break; }
-        }
-    }
-    fn starts_with(self, s: &str) -> bool {
-        let chars: Vec<char> = s.chars().collect();
-        if self.pos + chars.len() > self.chars.len() { return false; }
-        self.chars[self.pos..self.pos + chars.len()] == chars[..]
-    }
-    fn ensure_table(self, root: &mut TomlTable, keys: &[String]) -> *mut TomlTable {
-        let mut current = root as *mut TomlTable;
-        for key in keys {
-            unsafe {
-                let table = &mut *current;
-                let idx = table.iter().position(|(k, _)| k == key);
-                match idx {
-                    Some(i) => {
-                        if let TomlValue::Table(ref mut t) = table[i].1 {
-                            current = t as *mut TomlTable;
-                        }
-                    }
-                    None => {
-                        table.push((key.clone(), TomlValue::Table(Vec::new())));
-                        let last = table.len() - 1;
-                        if let TomlValue::Table(ref mut t) = table[last].1 {
-                            current = t as *mut TomlTable;
-                        }
-                    }
-                }
-            }
-        }
-        current
-    }
-    fn ensure_array_table(self, root: &mut TomlTable, keys: &[String]) -> *mut TomlTable {
-        // Navigate to parent, then push a new table to the array
-        let parent = if keys.len() > 1 {
-            self.ensure_table(root, &keys[..keys.len() - 1])
-        } else {
-            root as *mut TomlTable
-        };
-        let last_key = &keys[keys.len() - 1];
-        unsafe {
-            let table = &mut *parent;
-            let idx = table.iter().position(|(k, _)| k == last_key);
-            match idx {
-                Some(i) => {
-                    if let TomlValue::Array(ref mut arr) = table[i].1 {
-                        arr.push(TomlValue::Table(Vec::new()));
-                        let last = arr.len() - 1;
-                        if let TomlValue::Table(ref mut t) = arr[last] {
-                            return t as *mut TomlTable;
-                        }
-                    }
-                }
-                None => {
-                    let mut arr = Vec::new();
-                    arr.push(TomlValue::Table(Vec::new()));
-                    table.push((last_key.clone(), TomlValue::Array(arr)));
-                    let last_table = table.len() - 1;
-                    if let TomlValue::Array(ref mut arr) = table[last_table].1 {
-                        let last_arr = arr.len() - 1;
-                        if let TomlValue::Table(ref mut t) = arr[last_arr] {
-                            return t as *mut TomlTable;
-                        }
-                    }
-                }
-            }
-        }
-        root as *mut TomlTable
-    }
+// Serialize a TOML document to string
+fn toml_doc_to_string(doc) {
+  fn top() { toml_serialize(get(doc, "top_level")) }
+  fn section_strs() {
+    map(keys(get(doc, "sections")), fn(name) {
+      fn header() { concat_str("[", name, "]") }
+      fn body() { toml_serialize(get(get(doc, "sections"), name)) }
+      concat_str(header(), "\n", body())
+    })
+  }
+  fn all_parts() { concat([top()], section_strs()) }
+  join(filter(all_parts(), fn(p) { gt(length(p), 0) }), "\n\n")
 }

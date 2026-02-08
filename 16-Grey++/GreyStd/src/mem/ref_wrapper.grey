@@ -1,210 +1,57 @@
-/// mem::ref_wrapper — Reference wrappers for interior mutability.
-///
-/// These types allow mutation through shared references in controlled ways.
+// mem::ref_wrapper — Reference wrapper utilities
+//
+// Provides a mutable reference wrapper (Cell/RefCell pattern)
+// for Grey++ where values are normally immutable.
 
-/// A mutable memory cell. Provides interior mutability for `Copy` types.
-pub struct Cell<T: Copy> {
-    value: UnsafeCell<T>,
+// Creates a new mutable cell wrapping a value.
+fn Cell_new(value) {
+    { _type: "Cell", value: value }
 }
 
-impl<T: Copy> Cell<T> {
-    /// Creates a new Cell with the given value.
-    pub fn new(value: T) -> Cell<T> {
-        Cell { value: UnsafeCell::new(value) }
-    }
+// Gets the current value.
+fn cell_get(cell) { get(cell, "value") }
 
-    /// Returns a copy of the contained value.
-    pub fn get(self) -> T {
-        unsafe { *self.value.get() }
-    }
+// Sets a new value (returns a new cell).
+fn cell_set(cell, value) {
+    set(cell, "value", value)
+}
 
-    /// Sets the contained value.
-    pub fn set(self, value: T) {
-        unsafe { *self.value.get() = value; }
-    }
+// Updates the value by applying a function.
+fn cell_update(cell, f) {
+    cell_set(cell, f(cell_get(cell)))
+}
 
-    /// Replaces the value, returning the old one.
-    pub fn replace(self, value: T) -> T {
-        let old = self.get();
-        self.set(value);
-        old
-    }
-
-    /// Updates the value using a function.
-    pub fn update(self, f: fn(T) -> T) {
-        self.set(f(self.get()));
+// Swaps the value with another cell.
+fn cell_swap(cell_a, cell_b) {
+    {
+        a: cell_set(cell_a, cell_get(cell_b)),
+        b: cell_set(cell_b, cell_get(cell_a))
     }
 }
 
-/// A dynamically-checked borrowing cell. Provides interior mutability with
-/// runtime borrow checking.
-pub struct RefCell<T> {
-    value: UnsafeCell<T>,
-    borrow_state: Cell<BorrowState>,
+// Creates a RefCell (reference cell with borrow tracking).
+fn RefCell_new(value) {
+    { _type: "RefCell", value: value, borrowed: false, mut_borrowed: false }
 }
 
-enum BorrowState {
-    /// No borrows active.
-    Unused,
-    /// `n` shared borrows active.
-    Reading(usize),
-    /// One mutable borrow active.
-    Writing,
+// Borrows the value immutably.
+fn refcell_borrow(cell) {
+    if_then(get(cell, "mut_borrowed"),
+        fn() { error("Cannot borrow: already mutably borrowed") },
+        fn() { merge(cell, { borrowed: true }) })
 }
 
-impl<T> RefCell<T> {
-    /// Creates a new RefCell.
-    pub fn new(value: T) -> RefCell<T> {
-        RefCell {
-            value: UnsafeCell::new(value),
-            borrow_state: Cell::new(BorrowState::Unused),
-        }
-    }
-
-    /// Returns an immutable borrow. Panics if mutably borrowed.
-    pub fn borrow(self) -> Ref<T> {
-        match self.borrow_state.get() {
-            BorrowState::Writing => panic("RefCell: already mutably borrowed"),
-            BorrowState::Unused => {
-                self.borrow_state.set(BorrowState::Reading(1));
-            }
-            BorrowState::Reading(n) => {
-                self.borrow_state.set(BorrowState::Reading(n + 1));
-            }
-        }
-        Ref { cell: self }
-    }
-
-    /// Attempts an immutable borrow. Returns None if mutably borrowed.
-    pub fn try_borrow(self) -> Option<Ref<T>> {
-        match self.borrow_state.get() {
-            BorrowState::Writing => None,
-            BorrowState::Unused => {
-                self.borrow_state.set(BorrowState::Reading(1));
-                Some(Ref { cell: self })
-            }
-            BorrowState::Reading(n) => {
-                self.borrow_state.set(BorrowState::Reading(n + 1));
-                Some(Ref { cell: self })
-            }
-        }
-    }
-
-    /// Returns a mutable borrow. Panics if already borrowed.
-    pub fn borrow_mut(self) -> RefMut<T> {
-        match self.borrow_state.get() {
-            BorrowState::Unused => {
-                self.borrow_state.set(BorrowState::Writing);
-            }
-            _ => panic("RefCell: already borrowed"),
-        }
-        RefMut { cell: self }
-    }
-
-    /// Attempts a mutable borrow. Returns None if already borrowed.
-    pub fn try_borrow_mut(self) -> Option<RefMut<T>> {
-        match self.borrow_state.get() {
-            BorrowState::Unused => {
-                self.borrow_state.set(BorrowState::Writing);
-                Some(RefMut { cell: self })
-            }
-            _ => None,
-        }
-    }
-
-    /// Replaces the contained value, returning the old one.
-    pub fn replace(self, value: T) -> T {
-        let mut borrow = self.borrow_mut();
-        mem::replace(&mut *borrow, value)
-    }
-
-    /// Takes the value out, leaving Default::default() in its place.
-    pub fn take(self) -> T where T: Default {
-        self.replace(T::default())
-    }
+// Borrows the value mutably.
+fn refcell_borrow_mut(cell) {
+    if_then(get(cell, "borrowed"),
+        fn() { error("Cannot mutably borrow: already borrowed") },
+        fn() { if_then(get(cell, "mut_borrowed"),
+            fn() { error("Cannot mutably borrow: already mutably borrowed") },
+            fn() { merge(cell, { mut_borrowed: true }) }) })
 }
 
-/// An immutable borrow guard from a RefCell.
-pub struct Ref<T> {
-    cell: &RefCell<T>,
-}
+// Gets the value from a RefCell.
+fn refcell_get(cell) { get(cell, "value") }
 
-impl<T> Ref<T> {
-    pub fn map<U, F: Fn(&T) -> &U>(self, f: F) -> MappedRef<T, U, F> {
-        MappedRef { _ref: self, f }
-    }
-}
-
-impl<T> Deref for Ref<T> {
-    type Target = T;
-    fn deref(self) -> &T {
-        unsafe { &*self.cell.value.get() }
-    }
-}
-
-impl<T> Drop for Ref<T> {
-    fn drop(self) {
-        match self.cell.borrow_state.get() {
-            BorrowState::Reading(1) => self.cell.borrow_state.set(BorrowState::Unused),
-            BorrowState::Reading(n) => self.cell.borrow_state.set(BorrowState::Reading(n - 1)),
-            _ => unreachable(),
-        }
-    }
-}
-
-/// A mutable borrow guard from a RefCell.
-pub struct RefMut<T> {
-    cell: &RefCell<T>,
-}
-
-impl<T> Deref for RefMut<T> {
-    type Target = T;
-    fn deref(self) -> &T {
-        unsafe { &*self.cell.value.get() }
-    }
-}
-
-impl<T> DerefMut for RefMut<T> {
-    fn deref_mut(mut self) -> &mut T {
-        unsafe { &mut *self.cell.value.get() }
-    }
-}
-
-impl<T> Drop for RefMut<T> {
-    fn drop(self) {
-        self.cell.borrow_state.set(BorrowState::Unused);
-    }
-}
-
-pub struct MappedRef<T, U, F> {
-    _ref: Ref<T>,
-    f: F,
-}
-
-impl<T, U, F: Fn(&T) -> &U> Deref for MappedRef<T, U, F> {
-    type Target = U;
-    fn deref(self) -> &U {
-        (self.f)(&*self._ref)
-    }
-}
-
-/// The lowest-level interior mutability primitive. UNSAFE.
-pub struct UnsafeCell<T> {
-    value: T,
-}
-
-impl<T> UnsafeCell<T> {
-    pub fn new(value: T) -> UnsafeCell<T> {
-        UnsafeCell { value }
-    }
-
-    /// Returns a raw mutable pointer to the contained value. UNSAFE.
-    pub fn get(self) -> *mut T {
-        &self.value as *const T as *mut T
-    }
-
-    /// Consumes the cell, returning the inner value.
-    pub fn into_inner(self) -> T {
-        self.value
-    }
-}
+// Sets the value in a RefCell.
+fn refcell_set(cell, value) { set(cell, "value", value) }

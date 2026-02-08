@@ -1,192 +1,94 @@
-/// crypto::symmetric — Symmetric encryption (AES-GCM, ChaCha20-Poly1305).
+// GreyStd Crypto - Symmetric
+// Symmetric encryption (AES-like) wrappers
 
-use crate::core::vec::Vec;
-use crate::core::string::String;
-use crate::crypto::{CryptoResult, CryptoError};
-
-/// A symmetric authenticated encryption cipher.
-pub trait Cipher {
-    /// Required key length in bytes.
-    fn key_len() -> usize;
-
-    /// Required nonce length in bytes.
-    fn nonce_len() -> usize;
-
-    /// Authentication tag length in bytes.
-    fn tag_len() -> usize;
-
-    /// Encrypt plaintext. Returns ciphertext || tag.
-    fn encrypt(&self, nonce: &[u8], plaintext: &[u8], aad: &[u8]) -> CryptoResult<Vec<u8>>;
-
-    /// Decrypt ciphertext || tag. Returns plaintext.
-    fn decrypt(&self, nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> CryptoResult<Vec<u8>>;
+// Create a symmetric cipher configuration
+fn SymmetricCipher_new(algorithm, key) {
+  {
+    _type: "SymmetricCipher",
+    algorithm: algorithm,
+    key: key,
+    mode: "CBC",
+    padding: "PKCS7"
+  }
 }
 
-/// Cipher error types.
-pub enum CipherError {
-    InvalidKeyLength,
-    InvalidNonceLength,
-    AuthenticationFailed,
+// Create AES-256-CBC cipher
+fn aes256_cbc(key) {
+  SymmetricCipher_new("AES-256-CBC", key)
 }
 
-// ─── AES-128-GCM ────────────────────────────────────────────
-
-/// AES-128 in GCM mode.
-pub struct Aes128Gcm {
-    key: [u8; 16],
+// Create AES-128-CBC cipher
+fn aes128_cbc(key) {
+  SymmetricCipher_new("AES-128-CBC", key)
 }
 
-impl Aes128Gcm {
-    pub fn new(key: &[u8]) -> CryptoResult<Aes128Gcm> {
-        if key.len() != 16 {
-            return Err(CryptoError::InvalidKeyLength { expected: 16, got: key.len() });
-        }
-        let mut k = [0u8; 16];
-        k.copy_from_slice(key);
-        Ok(Aes128Gcm { key: k })
-    }
+// Set cipher mode
+fn cipher_set_mode(cipher, mode) {
+  merge(cipher, { mode: mode })
 }
 
-impl Cipher for Aes128Gcm {
-    fn key_len() -> usize { 16 }
-    fn nonce_len() -> usize { 12 }
-    fn tag_len() -> usize { 16 }
-
-    fn encrypt(&self, nonce: &[u8], plaintext: &[u8], aad: &[u8]) -> CryptoResult<Vec<u8>> {
-        if nonce.len() != 12 {
-            return Err(CryptoError::InvalidNonceLength { expected: 12, got: nonce.len() });
-        }
-        extern fn __grey_aes128gcm_encrypt(key: &[u8; 16], nonce: &[u8], pt: &[u8], aad: &[u8]) -> Vec<u8>;
-        Ok(unsafe { __grey_aes128gcm_encrypt(&self.key, nonce, plaintext, aad) })
-    }
-
-    fn decrypt(&self, nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> CryptoResult<Vec<u8>> {
-        if nonce.len() != 12 {
-            return Err(CryptoError::InvalidNonceLength { expected: 12, got: nonce.len() });
-        }
-        if ciphertext.len() < 16 {
-            return Err(CryptoError::DecryptionFailed);
-        }
-        extern fn __grey_aes128gcm_decrypt(key: &[u8; 16], nonce: &[u8], ct: &[u8], aad: &[u8]) -> Option<Vec<u8>>;
-        unsafe { __grey_aes128gcm_decrypt(&self.key, nonce, ciphertext, aad) }
-            .ok_or(CryptoError::DecryptionFailed)
-    }
+// Set cipher padding
+fn cipher_set_padding(cipher, padding) {
+  merge(cipher, { padding: padding })
 }
 
-// ─── AES-256-GCM ────────────────────────────────────────────
-
-/// AES-256 in GCM mode. 
-pub struct Aes256Gcm {
-    key: [u8; 32],
+// Encrypt plaintext with the cipher
+fn cipher_encrypt(cipher, plaintext) {
+  fn iv() { random_hex(16) }
+  fn encrypted() { encrypt(plaintext, get(cipher, "key"), get(cipher, "algorithm")) }
+  {
+    _type: "CipherText",
+    data: encrypted(),
+    iv: iv(),
+    algorithm: get(cipher, "algorithm")
+  }
 }
 
-impl Aes256Gcm {
-    pub fn new(key: &[u8]) -> CryptoResult<Aes256Gcm> {
-        if key.len() != 32 {
-            return Err(CryptoError::InvalidKeyLength { expected: 32, got: key.len() });
-        }
-        let mut k = [0u8; 32];
-        k.copy_from_slice(key);
-        Ok(Aes256Gcm { key: k })
-    }
+// Decrypt ciphertext with the cipher
+fn cipher_decrypt(cipher, ciphertext) {
+  decrypt(get(ciphertext, "data"), get(cipher, "key"), get(cipher, "algorithm"))
 }
 
-impl Cipher for Aes256Gcm {
-    fn key_len() -> usize { 32 }
-    fn nonce_len() -> usize { 12 }
-    fn tag_len() -> usize { 16 }
-
-    fn encrypt(&self, nonce: &[u8], plaintext: &[u8], aad: &[u8]) -> CryptoResult<Vec<u8>> {
-        if nonce.len() != 12 {
-            return Err(CryptoError::InvalidNonceLength { expected: 12, got: nonce.len() });
-        }
-        extern fn __grey_aes256gcm_encrypt(key: &[u8; 32], nonce: &[u8], pt: &[u8], aad: &[u8]) -> Vec<u8>;
-        Ok(unsafe { __grey_aes256gcm_encrypt(&self.key, nonce, plaintext, aad) })
-    }
-
-    fn decrypt(&self, nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> CryptoResult<Vec<u8>> {
-        if nonce.len() != 12 {
-            return Err(CryptoError::InvalidNonceLength { expected: 12, got: nonce.len() });
-        }
-        if ciphertext.len() < 16 {
-            return Err(CryptoError::DecryptionFailed);
-        }
-        extern fn __grey_aes256gcm_decrypt(key: &[u8; 32], nonce: &[u8], ct: &[u8], aad: &[u8]) -> Option<Vec<u8>>;
-        unsafe { __grey_aes256gcm_decrypt(&self.key, nonce, ciphertext, aad) }
-            .ok_or(CryptoError::DecryptionFailed)
-    }
+// Generate a random encryption key (hex string)
+fn generate_key(bits) {
+  fn byte_count() { div(bits, 8) }
+  random_hex(byte_count())
 }
 
-// ─── ChaCha20-Poly1305 ─────────────────────────────────────
-
-/// ChaCha20-Poly1305 AEAD cipher (RFC 8439).
-pub struct ChaCha20Poly1305 {
-    key: [u8; 32],
+// Generate a 256-bit key
+fn generate_key_256() {
+  generate_key(256)
 }
 
-impl ChaCha20Poly1305 {
-    pub fn new(key: &[u8]) -> CryptoResult<ChaCha20Poly1305> {
-        if key.len() != 32 {
-            return Err(CryptoError::InvalidKeyLength { expected: 32, got: key.len() });
-        }
-        let mut k = [0u8; 32];
-        k.copy_from_slice(key);
-        Ok(ChaCha20Poly1305 { key: k })
-    }
+// Generate a 128-bit key
+fn generate_key_128() {
+  generate_key(128)
 }
 
-impl Cipher for ChaCha20Poly1305 {
-    fn key_len() -> usize { 32 }
-    fn nonce_len() -> usize { 12 }
-    fn tag_len() -> usize { 16 }
-
-    fn encrypt(&self, nonce: &[u8], plaintext: &[u8], aad: &[u8]) -> CryptoResult<Vec<u8>> {
-        if nonce.len() != 12 {
-            return Err(CryptoError::InvalidNonceLength { expected: 12, got: nonce.len() });
-        }
-        extern fn __grey_chacha20poly1305_encrypt(key: &[u8; 32], nonce: &[u8], pt: &[u8], aad: &[u8]) -> Vec<u8>;
-        Ok(unsafe { __grey_chacha20poly1305_encrypt(&self.key, nonce, plaintext, aad) })
-    }
-
-    fn decrypt(&self, nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> CryptoResult<Vec<u8>> {
-        if nonce.len() != 12 {
-            return Err(CryptoError::InvalidNonceLength { expected: 12, got: nonce.len() });
-        }
-        if ciphertext.len() < 16 {
-            return Err(CryptoError::DecryptionFailed);
-        }
-        extern fn __grey_chacha20poly1305_decrypt(key: &[u8; 32], nonce: &[u8], ct: &[u8], aad: &[u8]) -> Option<Vec<u8>>;
-        unsafe { __grey_chacha20poly1305_decrypt(&self.key, nonce, ciphertext, aad) }
-            .ok_or(CryptoError::DecryptionFailed)
-    }
+// Simple XOR encryption (for lightweight use)
+fn xor_encrypt(data, key) {
+  fn data_bytes() { map(chars(data), fn(c) { char_code(c) }) }
+  fn key_bytes() { map(chars(key), fn(c) { char_code(c) }) }
+  fn encrypted_bytes() {
+    map(enumerate(data_bytes()), fn(pair) {
+      fn idx() { get(pair, 0) }
+      fn byte() { get(pair, 1) }
+      fn key_byte() { get(key_bytes(), mod(idx(), length(key_bytes()))) }
+      bitxor(byte(), key_byte())
+    })
+  }
+  map(encrypted_bytes(), fn(b) { to_hex_byte(b) })
 }
 
-// ─── Convenience ────────────────────────────────────────────
-
-/// Encrypt with AES-256-GCM using a random nonce. Returns nonce || ciphertext || tag.
-pub fn encrypt_aes256(key: &[u8], plaintext: &[u8]) -> CryptoResult<Vec<u8>> {
-    let cipher = Aes256Gcm::new(key)?;
-    let mut nonce = [0u8; 12];
-    crate::crypto::random::fill_random(&mut nonce)?;
-    let ct = cipher.encrypt(&nonce, plaintext, &[])?;
-    let mut result = Vec::with_capacity(12 + ct.len());
-    result.extend_from_slice(&nonce);
-    result.extend_from_slice(&ct);
-    Ok(result)
+// Convert byte to 2-char hex
+fn to_hex_byte(b) {
+  fn hex_chars() { "0123456789abcdef" }
+  fn hi() { char_at(hex_chars(), div(b, 16)) }
+  fn lo() { char_at(hex_chars(), mod(b, 16)) }
+  concat_str(hi(), lo())
 }
 
-/// Decrypt with AES-256-GCM. Input: nonce || ciphertext || tag.
-pub fn decrypt_aes256(key: &[u8], data: &[u8]) -> CryptoResult<Vec<u8>> {
-    if data.len() < 28 { return Err(CryptoError::DecryptionFailed); }
-    let nonce = &data[..12];
-    let ct = &data[12..];
-    let cipher = Aes256Gcm::new(key)?;
-    cipher.decrypt(nonce, ct, &[])
-}
-
-/// Encrypt with a random key and return (key, encrypted_data).
-pub fn encrypt_random(plaintext: &[u8]) -> CryptoResult<(Vec<u8>, Vec<u8>)> {
-    let key = crate::crypto::random::random_bytes(32)?;
-    let encrypted = encrypt_aes256(&key, plaintext)?;
-    Ok((key, encrypted))
+// Enumerate helper
+fn enumerate(arr) {
+  map(range(0, length(arr)), fn(i) { [i, get(arr, i)] })
 }

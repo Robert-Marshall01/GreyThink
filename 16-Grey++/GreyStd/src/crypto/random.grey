@@ -1,168 +1,107 @@
-/// crypto::random — Cryptographically secure random number generation.
+// GreyStd Crypto - Random
+// Cryptographically secure random number generation
 
-use crate::core::vec::Vec;
-use crate::core::string::String;
-use crate::crypto::{CryptoResult, CryptoError};
-
-/// A cryptographically secure random number generator.
-pub struct SecureRandom {
-    _private: (),
+// Generate a random integer in range [min, max)
+fn random_int(min_val, max_val) {
+  add(min_val, floor(mul(random(), sub(max_val, min_val))))
 }
 
-impl SecureRandom {
-    /// Create a new CSPRNG instance using the platform's entropy source.
-    pub fn new() -> SecureRandom {
-        SecureRandom { _private: () }
-    }
-
-    /// Fill a buffer with random bytes.
-    pub fn fill(&self, buf: &mut [u8]) -> CryptoResult<()> {
-        extern fn __grey_getrandom(buf: &mut [u8]) -> bool;
-        if unsafe { __grey_getrandom(buf) } {
-            Ok(())
-        } else {
-            Err(CryptoError::RngError(String::from("platform RNG unavailable")))
-        }
-    }
-
-    /// Generate n random bytes.
-    pub fn bytes(&self, n: usize) -> CryptoResult<Vec<u8>> {
-        let mut buf = vec![0u8; n];
-        self.fill(&mut buf)?;
-        Ok(buf)
-    }
-
-    /// Generate a random u32.
-    pub fn u32(&self) -> CryptoResult<u32> {
-        let mut buf = [0u8; 4];
-        self.fill(&mut buf)?;
-        Ok(u32::from_le_bytes(buf))
-    }
-
-    /// Generate a random u64.
-    pub fn u64(&self) -> CryptoResult<u64> {
-        let mut buf = [0u8; 8];
-        self.fill(&mut buf)?;
-        Ok(u64::from_le_bytes(buf))
-    }
-
-    /// Generate a random u128.
-    pub fn u128(&self) -> CryptoResult<u128> {
-        let mut buf = [0u8; 16];
-        self.fill(&mut buf)?;
-        Ok(u128::from_le_bytes(buf))
-    }
-
-    /// Generate a random u32 in [0, upper).
-    pub fn u32_range(&self, upper: u32) -> CryptoResult<u32> {
-        if upper == 0 { return Ok(0); }
-        let threshold = u32::MAX - (u32::MAX % upper);
-        loop {
-            let v = self.u32()?;
-            if v < threshold {
-                return Ok(v % upper);
-            }
-        }
-    }
-
-    /// Generate a random u64 in [low, high).
-    pub fn u64_range(&self, low: u64, high: u64) -> CryptoResult<u64> {
-        assert!(low < high, "low must be less than high");
-        let range = high - low;
-        let threshold = u64::MAX - (u64::MAX % range);
-        loop {
-            let v = self.u64()?;
-            if v < threshold {
-                return Ok(low + (v % range));
-            }
-        }
-    }
-
-    /// Generate a random f64 in [0.0, 1.0).
-    pub fn f64(&self) -> CryptoResult<f64> {
-        let v = self.u64()?;
-        Ok((v >> 11) as f64 / (1u64 << 53) as f64)
-    }
-
-    /// Generate a random boolean.
-    pub fn bool(&self) -> CryptoResult<bool> {
-        let mut buf = [0u8; 1];
-        self.fill(&mut buf)?;
-        Ok(buf[0] & 1 == 1)
-    }
-
-    /// Choose a random element from a slice.
-    pub fn choose<'a, T>(&self, items: &'a [T]) -> CryptoResult<&'a T> {
-        if items.is_empty() { return Err(CryptoError::RngError(String::from("empty slice"))); }
-        let idx = self.u32_range(items.len() as u32)? as usize;
-        Ok(&items[idx])
-    }
-
-    /// Shuffle a mutable slice in-place (Fisher-Yates).
-    pub fn shuffle<T>(&self, items: &mut [T]) -> CryptoResult<()> {
-        let len = items.len();
-        for i in (1..len).rev() {
-            let j = self.u32_range((i + 1) as u32)? as usize;
-            items.swap(i, j);
-        }
-        Ok(())
-    }
-
-    /// Generate a random alphanumeric string of the given length.
-    pub fn alphanumeric(&self, len: usize) -> CryptoResult<String> {
-        const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-        let mut result = String::with_capacity(len);
-        for _ in 0..len {
-            let idx = self.u32_range(CHARSET.len() as u32)? as usize;
-            result.push(CHARSET[idx] as char);
-        }
-        Ok(result)
-    }
-
-    /// Generate a random hex string of the given byte length (output is 2x chars).
-    pub fn hex(&self, byte_len: usize) -> CryptoResult<String> {
-        let bytes = self.bytes(byte_len)?;
-        Ok(crate::serial::binary::hex_encode(&bytes))
-    }
-
-    /// Generate a UUID v4 (random).
-    pub fn uuid_v4(&self) -> CryptoResult<String> {
-        let mut bytes = [0u8; 16];
-        self.fill(&mut bytes)?;
-        // Set version 4
-        bytes[6] = (bytes[6] & 0x0F) | 0x40;
-        // Set variant 1
-        bytes[8] = (bytes[8] & 0x3F) | 0x80;
-
-        Ok(format!(
-            "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-            bytes[0], bytes[1], bytes[2], bytes[3],
-            bytes[4], bytes[5],
-            bytes[6], bytes[7],
-            bytes[8], bytes[9],
-            bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
-        ))
-    }
+// Generate a random float in [0, 1)
+fn random_float() {
+  random()
 }
 
-// ─── Convenience functions ──────────────────────────────────
-
-/// Fill a buffer with cryptographically secure random bytes.
-pub fn fill_random(buf: &mut [u8]) -> CryptoResult<()> {
-    SecureRandom::new().fill(buf)
+// Generate a random float in range [min, max)
+fn random_float_range(min_val, max_val) {
+  add(min_val, mul(random(), sub(max_val, min_val)))
 }
 
-/// Generate n cryptographically secure random bytes.
-pub fn random_bytes(n: usize) -> CryptoResult<Vec<u8>> {
-    SecureRandom::new().bytes(n)
+// Generate random hex string of n bytes
+fn random_hex(n) {
+  fn hex_chars() { "0123456789abcdef" }
+  fn gen_pair(i) {
+    fn hi() { char_at(hex_chars(), random_int(0, 16)) }
+    fn lo() { char_at(hex_chars(), random_int(0, 16)) }
+    concat_str(hi(), lo())
+  }
+  join(map(range(0, n), fn(i) { gen_pair(i) }), "")
 }
 
-/// Generate a cryptographically secure random u64.
-pub fn random_u64() -> CryptoResult<u64> {
-    SecureRandom::new().u64()
+// Generate random bytes as array
+fn random_bytes(n) {
+  map(range(0, n), fn(_) { random_int(0, 256) })
 }
 
-/// Generate a random UUID v4 string.
-pub fn uuid() -> CryptoResult<String> {
-    SecureRandom::new().uuid_v4()
+// Generate a UUID v4
+fn random_uuid() {
+  uuid()
+}
+
+// Generate a random alphanumeric string
+fn random_string(length_val) {
+  fn chars_set() { "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" }
+  fn pick(_) { char_at(chars_set(), random_int(0, 62)) }
+  join(map(range(0, length_val), pick), "")
+}
+
+// Generate a random alphabetic string
+fn random_alpha(length_val) {
+  fn chars_set() { "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" }
+  fn pick(_) { char_at(chars_set(), random_int(0, 52)) }
+  join(map(range(0, length_val), pick), "")
+}
+
+// Generate a random token (URL-safe base64-like)
+fn random_token(bytes) {
+  fn chars_set() { "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_" }
+  fn pick(_) { char_at(chars_set(), random_int(0, 64)) }
+  join(map(range(0, bytes), pick), "")
+}
+
+// Pick a random element from an array
+fn random_choice(arr) {
+  get(arr, random_int(0, length(arr)))
+}
+
+// Shuffle an array (Fisher-Yates)
+fn random_shuffle(arr) {
+  fn shuffle_step(result, i) {
+    fn j() { random_int(0, add(i, 1)) }
+    fn swapped() {
+      fn a_val() { get(result, i) }
+      fn b_val() { get(result, j()) }
+      fn r1() { set_at(result, i, b_val()) }
+      set_at(r1(), j(), a_val())
+    }
+    swapped()
+  }
+  fold(reverse(range(1, length(arr))), arr, fn(acc, i) { shuffle_step(acc, i) })
+}
+
+// Set array element at index (returns new array)
+fn set_at(arr, idx, val) {
+  map(range(0, length(arr)), fn(i) {
+    if_then(eq(i, idx), fn() { val }, fn() { get(arr, i) })
+  })
+}
+
+// Generate random sample of k items from array (no replacement)
+fn random_sample(arr, k) {
+  fn shuffled() { random_shuffle(arr) }
+  slice(shuffled(), 0, k)
+}
+
+// Generate a random boolean with given probability
+fn random_bool(probability) {
+  lt(random(), probability)
+}
+
+// Fair coin flip
+fn coin_flip() {
+  random_bool(0.5)
+}
+
+// Roll a die with n sides
+fn dice_roll(sides) {
+  add(1, random_int(0, sides))
 }

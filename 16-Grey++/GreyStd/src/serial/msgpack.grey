@@ -1,375 +1,76 @@
-/// serial::msgpack — MessagePack binary serialization format.
+// GreyStd Serial - MsgPack
+// MessagePack-like binary serialization using byte arrays
 
-use crate::core::string::String;
-use crate::core::vec::Vec;
-use crate::core::option::Option;
-use crate::serial::{Serialize, Deserialize, Serializer, Deserializer, SerializeError, DeserializeError};
-
-/// A MessagePack value.
-pub enum MsgPackValue {
-    Nil,
-    Bool(bool),
-    Int(i64),
-    Uint(u64),
-    Float32(f32),
-    Float64(f64),
-    Str(String),
-    Bin(Vec<u8>),
-    Array(Vec<MsgPackValue>),
-    Map(Vec<(MsgPackValue, MsgPackValue)>),
-    Ext(i8, Vec<u8>),
+// Encode a value to msgpack-like byte representation
+fn msgpack_encode(value) {
+  cond(
+    eq(value, nil), { _type: "MsgPack", tag: "nil", bytes: [0xC0] },
+    eq(value, true), { _type: "MsgPack", tag: "bool", bytes: [0xC3] },
+    eq(value, false), { _type: "MsgPack", tag: "bool", bytes: [0xC2] },
+    is_number(value), msgpack_encode_number(value),
+    is_string(value), msgpack_encode_string(value),
+    is_array(value), msgpack_encode_array(value),
+    is_object(value), msgpack_encode_map(value),
+    { _type: "MsgPack", tag: "unknown", bytes: [] }
+  )
 }
 
-/// Encodes a value to MessagePack bytes.
-pub fn encode<T: Serialize>(value: &T) -> Result<Vec<u8>, SerializeError> {
-    let mut encoder = MsgPackEncoder::new();
-    value.serialize(&mut encoder)?;
-    Ok(encoder.buf)
+// Encode a number
+fn msgpack_encode_number(n) {
+  if_then(and(gte(n, 0), lt(n, 128)),
+    fn() { { _type: "MsgPack", tag: "fixint", bytes: [n], value: n } },
+    fn() { { _type: "MsgPack", tag: "int", bytes: [0xD2, n], value: n } }
+  )
 }
 
-/// Decodes MessagePack bytes into a MsgPackValue.
-pub fn decode(data: &[u8]) -> Result<MsgPackValue, DeserializeError> {
-    let mut decoder = MsgPackDecoder::new(data);
-    decoder.decode_value()
+// Encode a string
+fn msgpack_encode_string(s) {
+  fn len() { length(s) }
+  if_then(lt(len(), 32),
+    fn() { { _type: "MsgPack", tag: "fixstr", bytes: concat([add(0xA0, len())], string_to_bytes(s)), value: s } },
+    fn() { { _type: "MsgPack", tag: "str", bytes: concat([0xD9, len()], string_to_bytes(s)), value: s } }
+  )
 }
 
-/// Decodes MessagePack bytes into a typed value.
-pub fn decode_into<T: Deserialize>(data: &[u8]) -> Result<T, DeserializeError> {
-    let value = decode(data)?;
-    let mut deser = MsgPackDeserializer::new(value);
-    T::deserialize(&mut deser)
+// Convert string to byte array (simplified - ASCII)
+fn string_to_bytes(s) {
+  map(chars(s), fn(c) { char_code(c) })
 }
 
-// ─── Encoder ────────────────────────────────────────────────
-
-struct MsgPackEncoder {
-    buf: Vec<u8>,
+// Encode an array
+fn msgpack_encode_array(arr) {
+  fn len() { length(arr) }
+  fn encoded_items() { map(arr, fn(item) { msgpack_encode(item) }) }
+  { _type: "MsgPack", tag: "array", count: len(), items: encoded_items() }
 }
 
-impl MsgPackEncoder {
-    fn new() -> MsgPackEncoder {
-        MsgPackEncoder { buf: Vec::new() }
-    }
-
-    fn write_nil(mut self) { self.buf.push(0xC0); }
-
-    fn write_bool(mut self, v: bool) {
-        self.buf.push(if v { 0xC3 } else { 0xC2 });
-    }
-
-    fn write_int(mut self, v: i64) {
-        if v >= 0 {
-            self.write_uint(v as u64);
-        } else if v >= -32 {
-            self.buf.push(v as u8); // negative fixint
-        } else if v >= -128 {
-            self.buf.push(0xD0);
-            self.buf.push(v as u8);
-        } else if v >= -32768 {
-            self.buf.push(0xD1);
-            self.buf.extend_from_slice(&(v as i16).to_be_bytes());
-        } else if v >= -2147483648 {
-            self.buf.push(0xD2);
-            self.buf.extend_from_slice(&(v as i32).to_be_bytes());
-        } else {
-            self.buf.push(0xD3);
-            self.buf.extend_from_slice(&v.to_be_bytes());
-        }
-    }
-
-    fn write_uint(mut self, v: u64) {
-        if v <= 127 {
-            self.buf.push(v as u8); // positive fixint
-        } else if v <= 255 {
-            self.buf.push(0xCC);
-            self.buf.push(v as u8);
-        } else if v <= 65535 {
-            self.buf.push(0xCD);
-            self.buf.extend_from_slice(&(v as u16).to_be_bytes());
-        } else if v <= 4294967295 {
-            self.buf.push(0xCE);
-            self.buf.extend_from_slice(&(v as u32).to_be_bytes());
-        } else {
-            self.buf.push(0xCF);
-            self.buf.extend_from_slice(&v.to_be_bytes());
-        }
-    }
-
-    fn write_f64(mut self, v: f64) {
-        self.buf.push(0xCB);
-        self.buf.extend_from_slice(&v.to_be_bytes());
-    }
-
-    fn write_str(mut self, v: &str) {
-        let bytes = v.as_bytes();
-        let len = bytes.len();
-        if len <= 31 {
-            self.buf.push(0xA0 | len as u8); // fixstr
-        } else if len <= 255 {
-            self.buf.push(0xD9);
-            self.buf.push(len as u8);
-        } else if len <= 65535 {
-            self.buf.push(0xDA);
-            self.buf.extend_from_slice(&(len as u16).to_be_bytes());
-        } else {
-            self.buf.push(0xDB);
-            self.buf.extend_from_slice(&(len as u32).to_be_bytes());
-        }
-        self.buf.extend_from_slice(bytes);
-    }
-
-    fn write_bin(mut self, v: &[u8]) {
-        let len = v.len();
-        if len <= 255 {
-            self.buf.push(0xC4);
-            self.buf.push(len as u8);
-        } else if len <= 65535 {
-            self.buf.push(0xC5);
-            self.buf.extend_from_slice(&(len as u16).to_be_bytes());
-        } else {
-            self.buf.push(0xC6);
-            self.buf.extend_from_slice(&(len as u32).to_be_bytes());
-        }
-        self.buf.extend_from_slice(v);
-    }
-
-    fn write_array_header(mut self, len: usize) {
-        if len <= 15 {
-            self.buf.push(0x90 | len as u8);
-        } else if len <= 65535 {
-            self.buf.push(0xDC);
-            self.buf.extend_from_slice(&(len as u16).to_be_bytes());
-        } else {
-            self.buf.push(0xDD);
-            self.buf.extend_from_slice(&(len as u32).to_be_bytes());
-        }
-    }
-
-    fn write_map_header(mut self, len: usize) {
-        if len <= 15 {
-            self.buf.push(0x80 | len as u8);
-        } else if len <= 65535 {
-            self.buf.push(0xDE);
-            self.buf.extend_from_slice(&(len as u16).to_be_bytes());
-        } else {
-            self.buf.push(0xDF);
-            self.buf.extend_from_slice(&(len as u32).to_be_bytes());
-        }
-    }
+// Encode an object/map
+fn msgpack_encode_map(obj) {
+  fn k() { keys(obj) }
+  fn encoded_pairs() {
+    map(k(), fn(key) {
+      { key: msgpack_encode(key), value: msgpack_encode(get(obj, key)) }
+    })
+  }
+  { _type: "MsgPack", tag: "map", count: length(k()), pairs: encoded_pairs() }
 }
 
-impl Serializer for MsgPackEncoder {
-    fn serialize_bool(mut self, v: bool) -> Result<(), SerializeError> { self.write_bool(v); Ok(()) }
-    fn serialize_i64(mut self, v: i64) -> Result<(), SerializeError> { self.write_int(v); Ok(()) }
-    fn serialize_u64(mut self, v: u64) -> Result<(), SerializeError> { self.write_uint(v); Ok(()) }
-    fn serialize_f64(mut self, v: f64) -> Result<(), SerializeError> { self.write_f64(v); Ok(()) }
-    fn serialize_str(mut self, v: &str) -> Result<(), SerializeError> { self.write_str(v); Ok(()) }
-    fn serialize_bytes(mut self, v: &[u8]) -> Result<(), SerializeError> { self.write_bin(v); Ok(()) }
-    fn serialize_none(mut self) -> Result<(), SerializeError> { self.write_nil(); Ok(()) }
-    fn serialize_some<T: Serialize>(mut self, value: &T) -> Result<(), SerializeError> { value.serialize(self) }
-    fn serialize_seq_begin(mut self, len: Option<usize>) -> Result<(), SerializeError> {
-        self.write_array_header(len.unwrap_or(0)); Ok(())
-    }
-    fn serialize_seq_element<T: Serialize>(mut self, value: &T) -> Result<(), SerializeError> { value.serialize(self) }
-    fn serialize_seq_end(mut self) -> Result<(), SerializeError> { Ok(()) }
-    fn serialize_map_begin(mut self, len: Option<usize>) -> Result<(), SerializeError> {
-        self.write_map_header(len.unwrap_or(0)); Ok(())
-    }
-    fn serialize_map_key<T: Serialize>(mut self, key: &T) -> Result<(), SerializeError> { key.serialize(self) }
-    fn serialize_map_value<T: Serialize>(mut self, value: &T) -> Result<(), SerializeError> { value.serialize(self) }
-    fn serialize_map_end(mut self) -> Result<(), SerializeError> { Ok(()) }
-    fn serialize_struct_begin(mut self, _name: &str, len: usize) -> Result<(), SerializeError> {
-        self.write_map_header(len); Ok(())
-    }
-    fn serialize_struct_field<T: Serialize>(mut self, key: &str, value: &T) -> Result<(), SerializeError> {
-        self.write_str(key); value.serialize(self)
-    }
-    fn serialize_struct_end(mut self) -> Result<(), SerializeError> { Ok(()) }
+// Get the tag type from a msgpack value
+fn msgpack_type(packed) {
+  get(packed, "tag")
 }
 
-// ─── Decoder ────────────────────────────────────────────────
-
-struct MsgPackDecoder<'a> {
-    data: &'a [u8],
-    pos: usize,
+// Get the decoded value from a msgpack value
+fn msgpack_value(packed) {
+  get(packed, "value")
 }
 
-impl<'a> MsgPackDecoder<'a> {
-    fn new(data: &'a [u8]) -> MsgPackDecoder<'a> {
-        MsgPackDecoder { data, pos: 0 }
-    }
-
-    fn read_u8(mut self) -> Result<u8, DeserializeError> {
-        if self.pos >= self.data.len() { return Err(DeserializeError::Eof); }
-        let v = self.data[self.pos];
-        self.pos += 1;
-        Ok(v)
-    }
-
-    fn read_u16_be(mut self) -> Result<u16, DeserializeError> {
-        if self.pos + 2 > self.data.len() { return Err(DeserializeError::Eof); }
-        let v = u16::from_be_bytes([self.data[self.pos], self.data[self.pos + 1]]);
-        self.pos += 2;
-        Ok(v)
-    }
-
-    fn read_u32_be(mut self) -> Result<u32, DeserializeError> {
-        if self.pos + 4 > self.data.len() { return Err(DeserializeError::Eof); }
-        let mut bytes = [0u8; 4];
-        bytes.copy_from_slice(&self.data[self.pos..self.pos + 4]);
-        self.pos += 4;
-        Ok(u32::from_be_bytes(bytes))
-    }
-
-    fn read_u64_be(mut self) -> Result<u64, DeserializeError> {
-        if self.pos + 8 > self.data.len() { return Err(DeserializeError::Eof); }
-        let mut bytes = [0u8; 8];
-        bytes.copy_from_slice(&self.data[self.pos..self.pos + 8]);
-        self.pos += 8;
-        Ok(u64::from_be_bytes(bytes))
-    }
-
-    fn read_bytes(mut self, len: usize) -> Result<Vec<u8>, DeserializeError> {
-        if self.pos + len > self.data.len() { return Err(DeserializeError::Eof); }
-        let v = self.data[self.pos..self.pos + len].to_vec();
-        self.pos += len;
-        Ok(v)
-    }
-
-    fn decode_value(mut self) -> Result<MsgPackValue, DeserializeError> {
-        let tag = self.read_u8()?;
-
-        match tag {
-            // Positive fixint 0x00–0x7f
-            0x00..=0x7F => Ok(MsgPackValue::Uint(tag as u64)),
-            // Fixmap 0x80–0x8f
-            0x80..=0x8F => {
-                let len = (tag & 0x0F) as usize;
-                self.decode_map(len)
-            }
-            // Fixarray 0x90–0x9f
-            0x90..=0x9F => {
-                let len = (tag & 0x0F) as usize;
-                self.decode_array(len)
-            }
-            // Fixstr 0xa0–0xbf
-            0xA0..=0xBF => {
-                let len = (tag & 0x1F) as usize;
-                let bytes = self.read_bytes(len)?;
-                Ok(MsgPackValue::Str(String::from_utf8(bytes)
-                    .map_err(|_| DeserializeError::Message(String::from("invalid UTF-8")))?))
-            }
-            0xC0 => Ok(MsgPackValue::Nil),
-            0xC2 => Ok(MsgPackValue::Bool(false)),
-            0xC3 => Ok(MsgPackValue::Bool(true)),
-            0xC4 => { let len = self.read_u8()? as usize; self.read_bytes(len).map(MsgPackValue::Bin) }
-            0xC5 => { let len = self.read_u16_be()? as usize; self.read_bytes(len).map(MsgPackValue::Bin) }
-            0xC6 => { let len = self.read_u32_be()? as usize; self.read_bytes(len).map(MsgPackValue::Bin) }
-            0xCA => {
-                let bits = self.read_u32_be()?;
-                Ok(MsgPackValue::Float32(f32::from_bits(bits)))
-            }
-            0xCB => {
-                let bits = self.read_u64_be()?;
-                Ok(MsgPackValue::Float64(f64::from_bits(bits)))
-            }
-            0xCC => { let v = self.read_u8()?; Ok(MsgPackValue::Uint(v as u64)) }
-            0xCD => { let v = self.read_u16_be()?; Ok(MsgPackValue::Uint(v as u64)) }
-            0xCE => { let v = self.read_u32_be()?; Ok(MsgPackValue::Uint(v as u64)) }
-            0xCF => { let v = self.read_u64_be()?; Ok(MsgPackValue::Uint(v)) }
-            0xD0 => { let v = self.read_u8()? as i8; Ok(MsgPackValue::Int(v as i64)) }
-            0xD1 => { let v = self.read_u16_be()? as i16; Ok(MsgPackValue::Int(v as i64)) }
-            0xD2 => { let v = self.read_u32_be()? as i32; Ok(MsgPackValue::Int(v as i64)) }
-            0xD3 => { let v = self.read_u64_be()? as i64; Ok(MsgPackValue::Int(v)) }
-            0xD9 => { let len = self.read_u8()? as usize; let b = self.read_bytes(len)?; Ok(MsgPackValue::Str(String::from_utf8(b).unwrap_or_default())) }
-            0xDA => { let len = self.read_u16_be()? as usize; let b = self.read_bytes(len)?; Ok(MsgPackValue::Str(String::from_utf8(b).unwrap_or_default())) }
-            0xDB => { let len = self.read_u32_be()? as usize; let b = self.read_bytes(len)?; Ok(MsgPackValue::Str(String::from_utf8(b).unwrap_or_default())) }
-            0xDC => { let len = self.read_u16_be()? as usize; self.decode_array(len) }
-            0xDD => { let len = self.read_u32_be()? as usize; self.decode_array(len) }
-            0xDE => { let len = self.read_u16_be()? as usize; self.decode_map(len) }
-            0xDF => { let len = self.read_u32_be()? as usize; self.decode_map(len) }
-            // Negative fixint 0xe0–0xff
-            0xE0..=0xFF => Ok(MsgPackValue::Int((tag as i8) as i64)),
-            _ => Err(DeserializeError::Message(format!("unknown msgpack tag: 0x{:02X}", tag))),
-        }
-    }
-
-    fn decode_array(mut self, len: usize) -> Result<MsgPackValue, DeserializeError> {
-        let mut items = Vec::with_capacity(len);
-        for _ in 0..len {
-            items.push(self.decode_value()?);
-        }
-        Ok(MsgPackValue::Array(items))
-    }
-
-    fn decode_map(mut self, len: usize) -> Result<MsgPackValue, DeserializeError> {
-        let mut pairs = Vec::with_capacity(len);
-        for _ in 0..len {
-            let key = self.decode_value()?;
-            let val = self.decode_value()?;
-            pairs.push((key, val));
-        }
-        Ok(MsgPackValue::Map(pairs))
-    }
+// Get the raw bytes
+fn msgpack_bytes(packed) {
+  get(packed, "bytes")
 }
 
-struct MsgPackDeserializer {
-    value: MsgPackValue,
-}
-
-impl MsgPackDeserializer {
-    fn new(value: MsgPackValue) -> MsgPackDeserializer {
-        MsgPackDeserializer { value }
-    }
-}
-
-impl Deserializer for MsgPackDeserializer {
-    fn deserialize_bool(mut self) -> Result<bool, DeserializeError> {
-        match &self.value { MsgPackValue::Bool(b) => Ok(*b), _ => Err(DeserializeError::InvalidType { expected: String::from("bool"), found: String::from("other") }) }
-    }
-    fn deserialize_i64(mut self) -> Result<i64, DeserializeError> {
-        match &self.value { MsgPackValue::Int(n) => Ok(*n), MsgPackValue::Uint(n) => Ok(*n as i64), _ => Err(DeserializeError::InvalidType { expected: String::from("int"), found: String::from("other") }) }
-    }
-    fn deserialize_u64(mut self) -> Result<u64, DeserializeError> {
-        match &self.value { MsgPackValue::Uint(n) => Ok(*n), MsgPackValue::Int(n) => Ok(*n as u64), _ => Err(DeserializeError::InvalidType { expected: String::from("uint"), found: String::from("other") }) }
-    }
-    fn deserialize_f64(mut self) -> Result<f64, DeserializeError> {
-        match &self.value { MsgPackValue::Float64(f) => Ok(*f), MsgPackValue::Float32(f) => Ok(*f as f64), _ => Err(DeserializeError::InvalidType { expected: String::from("float"), found: String::from("other") }) }
-    }
-    fn deserialize_str(mut self) -> Result<String, DeserializeError> {
-        match &self.value { MsgPackValue::Str(s) => Ok(s.clone()), _ => Err(DeserializeError::InvalidType { expected: String::from("str"), found: String::from("other") }) }
-    }
-    fn deserialize_bytes(mut self) -> Result<Vec<u8>, DeserializeError> {
-        match &self.value { MsgPackValue::Bin(b) => Ok(b.clone()), _ => Err(DeserializeError::InvalidType { expected: String::from("bin"), found: String::from("other") }) }
-    }
-    fn deserialize_option<T: Deserialize>(mut self) -> Result<Option<T>, DeserializeError> {
-        match &self.value {
-            MsgPackValue::Nil => Ok(None),
-            _ => { let mut d = MsgPackDeserializer::new(self.value.clone()); T::deserialize(&mut d).map(Some) }
-        }
-    }
-    fn deserialize_seq<T: Deserialize>(mut self) -> Result<Vec<T>, DeserializeError> {
-        match &self.value {
-            MsgPackValue::Array(arr) => {
-                let mut result = Vec::new();
-                for item in arr { let mut d = MsgPackDeserializer::new(item.clone()); result.push(T::deserialize(&mut d)?); }
-                Ok(result)
-            }
-            _ => Err(DeserializeError::InvalidType { expected: String::from("array"), found: String::from("other") }),
-        }
-    }
-    fn deserialize_map<K: Deserialize + Eq + Hash, V: Deserialize>(mut self) -> Result<HashMap<K, V>, DeserializeError> {
-        match &self.value {
-            MsgPackValue::Map(pairs) => {
-                let mut map = HashMap::new();
-                for (k, v) in pairs {
-                    let mut kd = MsgPackDeserializer::new(k.clone());
-                    let mut vd = MsgPackDeserializer::new(v.clone());
-                    map.insert(K::deserialize(&mut kd)?, V::deserialize(&mut vd)?);
-                }
-                Ok(map)
-            }
-            _ => Err(DeserializeError::InvalidType { expected: String::from("map"), found: String::from("other") }),
-        }
-    }
+// Estimate encoded size
+fn msgpack_size(packed) {
+  length(get(packed, "bytes"))
 }

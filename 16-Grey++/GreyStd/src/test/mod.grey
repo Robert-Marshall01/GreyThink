@@ -1,11 +1,12 @@
-/// test — Built-in testing framework: unit tests, assertions, runner, benchmarks.
+// GreyStd Test Module
+// Testing framework for Grey++ applications
+// Submodules: assert, runner, bench, unit
 
-pub mod unit;
-pub mod assert;
-pub mod runner;
-pub mod bench;
-
-pub use unit::{TestCase, TestResult, TestStatus};
-pub use runner::{TestRunner, TestFilter, RunResult};
-pub use bench::{Benchmark, BenchResult};
-pub use assert::*;
+fn test_info() {
+  {
+    _type: "Module",
+    name: "test",
+    submodules: ["assert", "runner", "bench", "unit"],
+    description: "Unit testing, benchmarking, and test runner framework"
+  }
+}

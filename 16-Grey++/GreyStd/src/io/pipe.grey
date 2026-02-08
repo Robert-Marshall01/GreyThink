@@ -1,186 +1,53 @@
-/// io::pipe — In-process byte pipe for inter-task communication.
+// io::pipe — Inter-process pipes
+//
+// Provides a pipe abstraction for connecting producers to consumers.
 
-use crate::core::vec::Vec;
-use crate::core::option::Option;
-use crate::io::{IoResult, IoError, IoErrorKind};
-use crate::io::stream::{Read, Write};
-use crate::concurrent::mutex::Mutex;
-use crate::concurrent::mutex::Condvar;
-use crate::mem::smart_ptr::Arc;
-
-/// Creates a synchronous, in-memory pipe returning a (reader, writer) pair.
-///
-/// Data written to the PipeWriter can be read from the PipeReader.
-/// The pipe has an internal buffer; writes block when the buffer is full,
-/// reads block when the buffer is empty.
-///
-/// ```grey
-/// let (reader, writer) = pipe();
-///
-/// spawn(async move {
-///     writer.write_all(b"Hello from another task!").unwrap();
-///     writer.close();
-/// });
-///
-/// let mut buf = String::new();
-/// reader.read_to_string(&mut buf).unwrap();
-/// assert_eq(buf, "Hello from another task!");
-/// ```
-pub fn pipe() -> (PipeReader, PipeWriter) {
-    pipe_with_capacity(65536) // 64 KiB default
-}
-
-/// Creates a pipe with a custom buffer capacity.
-pub fn pipe_with_capacity(capacity: usize) -> (PipeReader, PipeWriter) {
-    let shared = Arc::new(PipeShared {
-        buffer: Mutex::new(PipeBuffer {
-            data: Vec::with_capacity(capacity),
-            read_pos: 0,
-            closed_write: false,
-            closed_read: false,
-        }),
-        capacity,
-        not_empty: Condvar::new(),
-        not_full: Condvar::new(),
-    });
-
-    let reader = PipeReader { shared: shared.clone() };
-    let writer = PipeWriter { shared };
-    (reader, writer)
-}
-
-struct PipeShared {
-    buffer: Mutex<PipeBuffer>,
-    capacity: usize,
-    not_empty: Condvar,
-    not_full: Condvar,
-}
-
-struct PipeBuffer {
-    data: Vec<u8>,
-    read_pos: usize,
-    closed_write: bool,
-    closed_read: bool,
-}
-
-impl PipeBuffer {
-    fn available(self) -> usize {
-        self.data.len() - self.read_pos
-    }
-
-    fn compact(mut self) {
-        if self.read_pos > 0 {
-            self.data.drain(0..self.read_pos);
-            self.read_pos = 0;
+// Creates a new pipe. Returns { reader, writer }.
+fn Pipe_new() {
+    fn buffer() { { data: [] } }
+    {
+        reader: {
+            _type: "PipeReader",
+            buffer: buffer(),
+            closed: false
+        },
+        writer: {
+            _type: "PipeWriter",
+            buffer: buffer(),
+            closed: false
         }
     }
 }
 
-/// The reading end of a pipe.
-pub struct PipeReader {
-    shared: Arc<PipeShared>,
+// Writes data to the pipe.
+fn pipe_write(writer, data) {
+    fn buf() { get(writer, "buffer") }
+    set(buf(), "data", push(get(buf(), "data"), data))
+    writer
 }
 
-impl Read for PipeReader {
-    fn read(mut self, buf: &mut [u8]) -> IoResult<usize> {
-        let mut pipe_buf = self.shared.buffer.lock();
-
-        // Wait until there's data or the writer closed
-        while pipe_buf.available() == 0 && !pipe_buf.closed_write {
-            pipe_buf = self.shared.not_empty.wait(pipe_buf);
-        }
-
-        let avail = pipe_buf.available();
-        if avail == 0 {
-            // Writer closed, EOF
-            return Ok(0);
-        }
-
-        let n = min(avail, buf.len());
-        let start = pipe_buf.read_pos;
-        buf[..n].copy_from_slice(&pipe_buf.data[start..start + n]);
-        pipe_buf.read_pos = pipe_buf.read_pos + n;
-
-        // Compact if we've consumed enough
-        if pipe_buf.read_pos > pipe_buf.data.len() / 2 {
-            pipe_buf.compact();
-        }
-
-        // Notify writers that space is available
-        self.shared.not_full.notify_one();
-        Ok(n)
-    }
+// Reads from the pipe (consumes the first item).
+fn pipe_read(reader) {
+    fn buf() { get(reader, "buffer") }
+    fn data() { get(buf(), "data") }
+    if_then(len(data()) == 0, fn() { nil },
+        fn() {
+            fn item() { head(data()) }
+            set(buf(), "data", tail(data()))
+            item()
+        })
 }
 
-impl PipeReader {
-    /// Closes the reading end. Subsequent writes will fail with BrokenPipe.
-    pub fn close(self) {
-        let mut buf = self.shared.buffer.lock();
-        buf.closed_read = true;
-        self.shared.not_full.notify_all();
-    }
+// Returns true if the pipe has data available.
+fn pipe_has_data(reader) {
+    len(get(get(reader, "buffer"), "data")) > 0
 }
 
-impl Drop for PipeReader {
-    fn drop(mut self) {
-        self.close();
-    }
-}
+// Closes a pipe writer.
+fn pipe_close_writer(writer) { set(writer, "closed", true) }
 
-/// The writing end of a pipe.
-pub struct PipeWriter {
-    shared: Arc<PipeShared>,
-}
+// Closes a pipe reader.
+fn pipe_close_reader(reader) { set(reader, "closed", true) }
 
-impl Write for PipeWriter {
-    fn write(mut self, data: &[u8]) -> IoResult<usize> {
-        let mut pipe_buf = self.shared.buffer.lock();
-
-        // Check if reader is closed
-        if pipe_buf.closed_read {
-            return Err(IoError::new(IoErrorKind::BrokenPipe, String::from("reader closed")));
-        }
-
-        // Wait for space
-        while pipe_buf.data.len() - pipe_buf.read_pos >= self.shared.capacity && !pipe_buf.closed_read {
-            pipe_buf = self.shared.not_full.wait(pipe_buf);
-        }
-
-        if pipe_buf.closed_read {
-            return Err(IoError::new(IoErrorKind::BrokenPipe, String::from("reader closed")));
-        }
-
-        let space = self.shared.capacity - (pipe_buf.data.len() - pipe_buf.read_pos);
-        let n = min(data.len(), space);
-
-        pipe_buf.data.extend_from_slice(&data[..n]);
-
-        // Notify readers
-        self.shared.not_empty.notify_one();
-        Ok(n)
-    }
-
-    fn flush(self) -> IoResult<()> {
-        // Pipes don't have a flush concept; data is immediately available
-        Ok(())
-    }
-}
-
-impl PipeWriter {
-    /// Closes the writing end. The reader will see EOF after consuming buffered data.
-    pub fn close(self) {
-        let mut buf = self.shared.buffer.lock();
-        buf.closed_write = true;
-        self.shared.not_empty.notify_all();
-    }
-}
-
-impl Drop for PipeWriter {
-    fn drop(mut self) {
-        self.close();
-    }
-}
-
-fn min(a: usize, b: usize) -> usize {
-    if a < b { a } else { b }
-}
+// Returns true if the writer is closed.
+fn pipe_writer_closed(writer) { get(writer, "closed") }

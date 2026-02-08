@@ -1,239 +1,130 @@
-/// error::log — Structured logging framework with levels, targets, and formatting.
+// GreyStd Error - Log
+// Structured logging framework
 
-use crate::core::string::String;
-use crate::core::vec::Vec;
-use crate::core::option::Option;
-use crate::time::timezone::DateTime;
-use crate::time::clock::SystemClock;
+// Log levels
+fn LOG_TRACE() { 0 }
+fn LOG_DEBUG() { 1 }
+fn LOG_INFO() { 2 }
+fn LOG_WARN() { 3 }
+fn LOG_ERROR() { 4 }
+fn LOG_FATAL() { 5 }
 
-/// Log severity levels.
-pub enum LogLevel {
-    /// Extremely verbose: function entry/exit, loop iterations.
-    Trace,
-    /// Diagnostics useful during development.
-    Debug,
-    /// Normal operational messages.
-    Info,
-    /// Something unexpected but recoverable happened.
-    Warn,
-    /// A significant error occurred.
-    Error,
-    /// Disable all logging.
-    Off,
+// Level names
+fn log_level_name(level) {
+  cond(
+    eq(level, 0), "TRACE",
+    eq(level, 1), "DEBUG",
+    eq(level, 2), "INFO",
+    eq(level, 3), "WARN",
+    eq(level, 4), "ERROR",
+    eq(level, 5), "FATAL",
+    "UNKNOWN"
+  )
 }
 
-impl LogLevel {
-    pub fn name(&self) -> &str {
-        match self {
-            LogLevel::Trace => "TRACE", LogLevel::Debug => "DEBUG",
-            LogLevel::Info => "INFO", LogLevel::Warn => "WARN",
-            LogLevel::Error => "ERROR", LogLevel::Off => "OFF",
+// Create a logger
+fn Logger_new(name) {
+  {
+    _type: "Logger",
+    name: name,
+    min_level: LOG_INFO(),
+    prefix: "",
+    entries: []
+  }
+}
+
+// Create a logger with minimum level
+fn Logger_with_level(name, level) {
+  merge(Logger_new(name), { min_level: level })
+}
+
+// Set minimum log level
+fn logger_set_level(logger, level) {
+  merge(logger, { min_level: level })
+}
+
+// Set log prefix
+fn logger_set_prefix(logger, prefix) {
+  merge(logger, { prefix: prefix })
+}
+
+// Core log function
+fn logger_log(logger, level, message) {
+  if_then(gte(level, get(logger, "min_level")),
+    fn() {
+      fn entry() {
+        {
+          level: level,
+          level_name: log_level_name(level),
+          message: message,
+          logger: get(logger, "name"),
+          timestamp: timestamp()
         }
-    }
-
-    pub fn severity(&self) -> u8 {
-        match self {
-            LogLevel::Trace => 0, LogLevel::Debug => 1,
-            LogLevel::Info => 2, LogLevel::Warn => 3,
-            LogLevel::Error => 4, LogLevel::Off => 5,
-        }
-    }
+      }
+      fn formatted() {
+        fn prefix() { get(logger, "prefix") }
+        concat_str("[", log_level_name(level), "] ",
+          if_then(gt(length(prefix()), 0), fn() { concat_str(prefix(), " ") }, fn() { "" }),
+          "[", get(logger, "name"), "] ",
+          message
+        )
+      }
+      if_then(gte(level, LOG_ERROR()),
+        fn() { eprintln(formatted()) },
+        fn() { println(formatted()) }
+      )
+      merge(logger, { entries: append(get(logger, "entries"), entry()) })
+    },
+    fn() { logger }
+  )
 }
 
-impl PartialOrd for LogLevel {
-    fn partial_cmp(&self, other: &LogLevel) -> Option<Ordering> {
-        self.severity().partial_cmp(&other.severity())
-    }
+// Convenience log methods
+fn log_trace(logger, msg) { logger_log(logger, LOG_TRACE(), msg) }
+fn log_debug(logger, msg) { logger_log(logger, LOG_DEBUG(), msg) }
+fn log_info(logger, msg) { logger_log(logger, LOG_INFO(), msg) }
+fn log_warn(logger, msg) { logger_log(logger, LOG_WARN(), msg) }
+fn log_error(logger, msg) { logger_log(logger, LOG_ERROR(), msg) }
+fn log_fatal(logger, msg) { logger_log(logger, LOG_FATAL(), msg) }
+
+// Log with key-value context
+fn log_with(logger, level, message, context) {
+  fn ctx_str() {
+    join(map(keys(context), fn(k) { concat_str(k, "=", to_string(get(context, k))) }), " ")
+  }
+  logger_log(logger, level, concat_str(message, " | ", ctx_str()))
 }
 
-impl PartialEq for LogLevel {
-    fn eq(&self, other: &LogLevel) -> bool { self.severity() == other.severity() }
+// Get all log entries
+fn logger_entries(logger) {
+  get(logger, "entries")
 }
 
-/// A log record.
-pub struct LogRecord {
-    pub level: LogLevel,
-    pub message: String,
-    pub target: String,
-    pub timestamp: DateTime,
-    pub file: Option<String>,
-    pub line: Option<u32>,
-    pub fields: Vec<(String, String)>,
+// Get entries filtered by level
+fn logger_entries_at(logger, level) {
+  filter(get(logger, "entries"), fn(e) { eq(get(e, "level"), level) })
 }
 
-/// A logging backend.
-pub trait LogSink: Send + Sync {
-    /// Called for each log record that passes the filter.
-    fn log(&self, record: &LogRecord);
-
-    /// Flush buffered output.
-    fn flush(&self);
+// Get entry count
+fn logger_count(logger) {
+  length(get(logger, "entries"))
 }
 
-/// A log output that writes to stderr.
-pub struct StderrSink {
-    format: LogFormat,
+// Clear log entries
+fn logger_clear(logger) {
+  merge(logger, { entries: [] })
 }
 
-pub enum LogFormat {
-    /// Human-readable: "2025-07-10T12:00:00Z INFO [target] message"
-    Pretty,
-    /// JSON: {"timestamp":"...", "level":"INFO", "target":"...", "message":"..."}
-    Json,
-    /// Compact: "INFO message"
-    Compact,
+// Create a child logger with prefix
+fn logger_child(logger, child_name) {
+  fn full_name() { concat_str(get(logger, "name"), ".", child_name) }
+  merge(Logger_new(full_name()), { min_level: get(logger, "min_level") })
 }
 
-impl StderrSink {
-    pub fn new(format: LogFormat) -> StderrSink {
-        StderrSink { format }
-    }
-}
-
-impl LogSink for StderrSink {
-    fn log(&self, record: &LogRecord) {
-        let line = match &self.format {
-            LogFormat::Pretty => {
-                format!("{} {:>5} [{}] {}",
-                    record.timestamp.to_rfc3339(),
-                    record.level.name(),
-                    record.target,
-                    record.message)
-            }
-            LogFormat::Json => {
-                let fields: Vec<String> = record.fields.iter()
-                    .map(|(k, v)| format!("\"{}\":\"{}\"", k, v)).collect();
-                let extra = if fields.is_empty() { String::new() } else { format!(",{}", fields.join(",")) };
-                format!("{{\"timestamp\":\"{}\",\"level\":\"{}\",\"target\":\"{}\",\"message\":\"{}\"{}}}",
-                    record.timestamp.to_rfc3339(), record.level.name(), record.target, record.message, extra)
-            }
-            LogFormat::Compact => {
-                format!("{:>5} {}", record.level.name(), record.message)
-            }
-        };
-        eprintln!("{}", line);
-    }
-
-    fn flush(&self) {
-        // stderr is unbuffered
-    }
-}
-
-/// A log output that writes to a file.
-pub struct FileSink {
-    path: String,
-}
-
-impl FileSink {
-    pub fn new(path: &str) -> FileSink {
-        FileSink { path: String::from(path) }
-    }
-}
-
-impl LogSink for FileSink {
-    fn log(&self, record: &LogRecord) {
-        let line = format!("{} {:>5} [{}] {}\n",
-            record.timestamp.to_rfc3339(), record.level.name(), record.target, record.message);
-        let _ = crate::io::file::File::append(&self.path, line.as_bytes());
-    }
-
-    fn flush(&self) {}
-}
-
-/// The global logger.
-pub struct Logger {
-    sinks: Vec<Box<dyn LogSink>>,
-    min_level: LogLevel,
-    target_filter: Option<String>,
-}
-
-impl Logger {
-    /// Create a new logger with stderr output at INFO level.
-    pub fn new() -> Logger {
-        Logger {
-            sinks: vec![Box::new(StderrSink::new(LogFormat::Pretty))],
-            min_level: LogLevel::Info,
-            target_filter: None,
-        }
-    }
-
-    /// Set minimum log level.
-    pub fn level(mut self, level: LogLevel) -> Logger {
-        self.min_level = level;
-        self
-    }
-
-    /// Add a sink.
-    pub fn sink(mut self, sink: impl LogSink + 'static) -> Logger {
-        self.sinks.push(Box::new(sink));
-        self
-    }
-
-    /// Set a target filter prefix.
-    pub fn filter(mut self, target: &str) -> Logger {
-        self.target_filter = Some(String::from(target));
-        self
-    }
-
-    /// Initialize as the global logger.
-    pub fn init(self) {
-        // Store in global static
-        extern fn __grey_set_global_logger(logger: Logger);
-        unsafe { __grey_set_global_logger(self) }
-    }
-
-    /// Log a record.
-    pub fn log_record(&self, record: &LogRecord) {
-        if record.level < self.min_level { return; }
-        if let Some(filter) = &self.target_filter {
-            if !record.target.starts_with(filter) { return; }
-        }
-        for sink in &self.sinks {
-            sink.log(record);
-        }
-    }
-}
-
-// ─── Convenience functions ──────────────────────────────────
-
-fn log_impl(level: LogLevel, target: &str, message: String) {
-    let record = LogRecord {
-        level,
-        message,
-        target: String::from(target),
-        timestamp: SystemClock::now_utc(),
-        file: None,
-        line: None,
-        fields: Vec::new(),
-    };
-    extern fn __grey_get_global_logger() -> &Logger;
-    unsafe { __grey_get_global_logger() }.log_record(&record);
-}
-
-pub fn log(level: LogLevel, message: &str) { log_impl(level, "", String::from(message)); }
-pub fn trace(message: &str) { log_impl(LogLevel::Trace, "", String::from(message)); }
-pub fn debug(message: &str) { log_impl(LogLevel::Debug, "", String::from(message)); }
-pub fn info(message: &str) { log_impl(LogLevel::Info, "", String::from(message)); }
-pub fn warn(message: &str) { log_impl(LogLevel::Warn, "", String::from(message)); }
-pub fn error(message: &str) { log_impl(LogLevel::Error, "", String::from(message)); }
-
-/// Log macros for formatted messages.
-#[macro_export]
-macro_rules! log_info {
-    ($($arg:tt)*) => { $crate::error::log::info(&format!($($arg)*)) };
-}
-
-#[macro_export]
-macro_rules! log_warn {
-    ($($arg:tt)*) => { $crate::error::log::warn(&format!($($arg)*)) };
-}
-
-#[macro_export]
-macro_rules! log_error {
-    ($($arg:tt)*) => { $crate::error::log::error(&format!($($arg)*)) };
-}
-
-#[macro_export]
-macro_rules! log_debug {
-    ($($arg:tt)*) => { $crate::error::log::debug(&format!($($arg)*)) };
-}
+// Simple global-style log functions (print directly)
+fn trace(msg) { println(concat_str("[TRACE] ", msg)) }
+fn debug(msg) { println(concat_str("[DEBUG] ", msg)) }
+fn info(msg) { println(concat_str("[INFO] ", msg)) }
+fn warn(msg) { println(concat_str("[WARN] ", msg)) }
+fn error(msg) { eprintln(concat_str("[ERROR] ", msg)) }
+fn fatal(msg) { eprintln(concat_str("[FATAL] ", msg)) }

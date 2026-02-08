@@ -1,13 +1,12 @@
-/// error — Error handling, diagnostics, stack traces, logging, and assertions.
+// GreyStd Error Module
+// Error handling, assertion, logging, and debugging
+// Submodules: types, trace, assert, debug, log
 
-pub mod types;
-pub mod trace;
-pub mod log;
-pub mod assert;
-pub mod debug;
-
-pub use types::{Error, ErrorKind, BoxError, AnyError};
-pub use trace::{Backtrace, BacktraceFrame};
-pub use log::{Logger, LogLevel, log, info, warn, error as log_error, debug as log_debug, trace as log_trace};
-pub use assert::{assert_eq, assert_ne, assert_that};
-pub use debug::{dbg, todo, unimplemented, unreachable_unchecked};
+fn error_info() {
+  {
+    _type: "Module",
+    name: "error",
+    submodules: ["types", "trace", "assert", "debug", "log"],
+    description: "Error types, stack traces, assertions, and logging"
+  }
+}

@@ -1,361 +1,118 @@
-/// reflect::inspect — Dynamic value inspection and traversal.
+// GreyStd Reflect - Inspect
+// Runtime value inspection utilities
 
-use crate::core::string::String;
-use crate::core::vec::Vec;
-use crate::core::option::Option;
-use crate::core::result::Result;
-use crate::reflect::type_meta::{TypeId, TypeMeta, Reflect};
-
-/// A type-erased dynamic value that can be inspected at runtime.
-pub enum Value {
-    /// No value / unit.
-    Unit,
-    /// Boolean.
-    Bool(bool),
-    /// Signed integer (up to 128-bit).
-    Int(i128),
-    /// Unsigned integer (up to 128-bit).
-    Uint(u128),
-    /// Floating point.
-    Float(f64),
-    /// Character.
-    Char(char),
-    /// String.
-    Str(String),
-    /// Byte slice.
-    Bytes(Vec<u8>),
-    /// Ordered list of values.
-    List(Vec<Value>),
-    /// Named fields (struct-like).
-    Map(Vec<(String, Value)>),
-    /// Enum variant with name and optional payload.
-    Variant(String, Option<Box<Value>>),
-    /// Tuple of values.
-    Tuple(Vec<Value>),
-    /// Optional value.
-    Optional(Option<Box<Value>>),
-    /// Opaque value with type info.
-    Opaque { type_name: String, debug: String },
+// Get a full description of a value
+fn inspect(value) {
+  {
+    _type: "Inspection",
+    value_type: type_of(value),
+    detailed_type: detailed_type(value),
+    is_nil: eq(value, nil),
+    is_truthy: truthy(value),
+    summary: inspect_summary(value)
+  }
 }
 
-impl Value {
-    /// Get as bool.
-    pub fn as_bool(&self) -> Option<bool> {
-        match self { Value::Bool(b) => Option::Some(*b), _ => Option::None }
-    }
-
-    /// Get as i128.
-    pub fn as_int(&self) -> Option<i128> {
-        match self { Value::Int(n) => Option::Some(*n), _ => Option::None }
-    }
-
-    /// Get as u128.
-    pub fn as_uint(&self) -> Option<u128> {
-        match self { Value::Uint(n) => Option::Some(*n), _ => Option::None }
-    }
-
-    /// Get as f64.
-    pub fn as_float(&self) -> Option<f64> {
-        match self {
-            Value::Float(f) => Option::Some(*f),
-            Value::Int(n) => Option::Some(*n as f64),
-            Value::Uint(n) => Option::Some(*n as f64),
-            _ => Option::None,
-        }
-    }
-
-    /// Get as string reference.
-    pub fn as_str(&self) -> Option<&str> {
-        match self { Value::Str(s) => Option::Some(s.as_str()), _ => Option::None }
-    }
-
-    /// Get field by name (for Map values).
-    pub fn field(&self, name: &str) -> Option<&Value> {
-        match self {
-            Value::Map(fields) => fields.iter()
-                .find(|(k, _)| k == name)
-                .map(|(_, v)| v),
-            _ => Option::None,
-        }
-    }
-
-    /// Get element by index (for List or Tuple values).
-    pub fn index(&self, idx: usize) -> Option<&Value> {
-        match self {
-            Value::List(items) => items.get(idx),
-            Value::Tuple(items) => items.get(idx),
-            _ => Option::None,
-        }
-    }
-
-    /// Check if the value is a specific variant.
-    pub fn is_variant(&self, name: &str) -> bool {
-        match self {
-            Value::Variant(n, _) => n == name,
-            _ => false,
-        }
-    }
-
-    /// Deep equality comparison.
-    pub fn deep_eq(&self, other: &Value) -> bool {
-        match (self, other) {
-            (Value::Unit, Value::Unit) => true,
-            (Value::Bool(a), Value::Bool(b)) => a == b,
-            (Value::Int(a), Value::Int(b)) => a == b,
-            (Value::Uint(a), Value::Uint(b)) => a == b,
-            (Value::Float(a), Value::Float(b)) => (a - b).abs() < f64::EPSILON,
-            (Value::Char(a), Value::Char(b)) => a == b,
-            (Value::Str(a), Value::Str(b)) => a == b,
-            (Value::Bytes(a), Value::Bytes(b)) => a == b,
-            (Value::List(a), Value::List(b)) => {
-                a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x.deep_eq(y))
-            }
-            (Value::Map(a), Value::Map(b)) => {
-                a.len() == b.len() && a.iter().zip(b.iter()).all(|((ka, va), (kb, vb))| ka == kb && va.deep_eq(vb))
-            }
-            (Value::Tuple(a), Value::Tuple(b)) => {
-                a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x.deep_eq(y))
-            }
-            (Value::Variant(na, pa), Value::Variant(nb, pb)) => {
-                na == nb && match (pa, pb) {
-                    (Option::Some(a), Option::Some(b)) => a.deep_eq(b),
-                    (Option::None, Option::None) => true,
-                    _ => false,
-                }
-            }
-            (Value::Optional(a), Value::Optional(b)) => match (a, b) {
-                (Option::Some(a), Option::Some(b)) => a.deep_eq(b),
-                (Option::None, Option::None) => true,
-                _ => false,
-            },
-            _ => false,
-        }
-    }
-
-    /// Pretty-print the value with indentation.
-    pub fn pretty_print(&self, indent: usize) -> String {
-        let pad = " ".repeat(indent);
-        match self {
-            Value::Unit => String::from("()"),
-            Value::Bool(b) => format!("{}", b),
-            Value::Int(n) => format!("{}", n),
-            Value::Uint(n) => format!("{}", n),
-            Value::Float(f) => format!("{}", f),
-            Value::Char(c) => format!("'{}'", c),
-            Value::Str(s) => format!("\"{}\"", s),
-            Value::Bytes(b) => format!("[{} bytes]", b.len()),
-            Value::List(items) => {
-                if items.is_empty() { return String::from("[]"); }
-                let mut s = String::from("[\n");
-                for item in items {
-                    s.push_str(&format!("{}  {},\n", pad, item.pretty_print(indent + 2)));
-                }
-                s.push_str(&format!("{}]", pad));
-                s
-            }
-            Value::Map(fields) => {
-                if fields.is_empty() { return String::from("{}"); }
-                let mut s = String::from("{\n");
-                for (key, val) in fields {
-                    s.push_str(&format!("{}  {}: {},\n", pad, key, val.pretty_print(indent + 2)));
-                }
-                s.push_str(&format!("{}}}", pad));
-                s
-            }
-            Value::Tuple(items) => {
-                let inner: Vec<String> = items.iter().map(|v| v.pretty_print(0)).collect();
-                format!("({})", inner.join(", "))
-            }
-            Value::Variant(name, payload) => match payload {
-                Option::Some(v) => format!("{}({})", name, v.pretty_print(indent)),
-                Option::None => name.clone(),
-            },
-            Value::Optional(opt) => match opt {
-                Option::Some(v) => format!("Some({})", v.pretty_print(indent)),
-                Option::None => String::from("None"),
-            },
-            Value::Opaque { type_name, debug } => format!("<{}: {}>", type_name, debug),
-        }
-    }
+// Get detailed type string
+fn detailed_type(value) {
+  cond(
+    eq(value, nil), "nil",
+    is_number(value), if_then(eq(value, floor(value)), fn() { "integer" }, fn() { "float" }),
+    is_string(value), concat_str("string(", to_string(length(value)), ")"),
+    eq(value, true), "boolean",
+    eq(value, false), "boolean",
+    is_array(value), concat_str("array(", to_string(length(value)), ")"),
+    is_function(value), "function",
+    is_object(value), object_type_name(value),
+    "unknown"
+  )
 }
 
-impl Display for Value {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(f, "{}", self.pretty_print(0))
-    }
+// Get object type name from _type field or key count
+fn object_type_name(obj) {
+  fn t() { get(obj, "_type") }
+  if_then(not(eq(t(), nil)),
+    fn() { concat_str(t(), "{", to_string(length(keys(obj))), "}") },
+    fn() { concat_str("object{", to_string(length(keys(obj))), "}") }
+  )
 }
 
-/// Trait for types that can be dynamically inspected.
-pub trait Inspect: Reflect {
-    /// Convert this value to a dynamic Value representation.
-    fn to_value(&self) -> Value;
-
-    /// Try to reconstruct from a dynamic Value.
-    fn from_value(value: &Value) -> Result<Self, String> where Self: Sized;
-
-    /// Get a field value by name (for structs).
-    fn get_field(&self, name: &str) -> Option<Value> {
-        Option::None
-    }
-
-    /// Set a field value by name (for mutable structs).
-    fn set_field(&mut self, name: &str, value: Value) -> Result<(), String> {
-        Result::Err(format!("set_field not supported for {}", self.type_name()))
-    }
-
-    /// List field names (for structs).
-    fn field_names(&self) -> Vec<String> {
-        Vec::new()
-    }
+// Get a short summary of a value
+fn inspect_summary(value) {
+  cond(
+    eq(value, nil), "nil",
+    is_string(value), if_then(gt(length(value), 50),
+      fn() { concat_str("\"", slice(value, 0, 47), "...\"") },
+      fn() { concat_str("\"", value, "\"") }
+    ),
+    is_number(value), to_string(value),
+    eq(value, true), "true",
+    eq(value, false), "false",
+    is_array(value), concat_str("[...](", to_string(length(value)), ")"),
+    is_function(value), "<function>",
+    is_object(value), concat_str("{...}(", to_string(length(keys(value))), " keys)"),
+    to_string(value)
+  )
 }
 
-/// Inspector provides a visitor-based traversal of values.
-pub struct Inspector {
-    path: Vec<String>,
-    depth: usize,
-    max_depth: usize,
+// List all keys/fields of an object
+fn inspect_keys(value) {
+  if_then(is_object(value),
+    fn() { keys(value) },
+    fn() { [] }
+  )
 }
 
-impl Inspector {
-    pub fn new() -> Inspector {
-        Inspector { path: Vec::new(), depth: 0, max_depth: 64 }
-    }
-
-    pub fn with_max_depth(max_depth: usize) -> Inspector {
-        Inspector { path: Vec::new(), depth: 0, max_depth }
-    }
-
-    /// Current path as a dot-separated string.
-    pub fn current_path(&self) -> String {
-        self.path.join(".")
-    }
-
-    /// Visit a value, calling the callback for each node in the tree.
-    pub fn visit<F>(&mut self, value: &Value, callback: &mut F)
-    where
-        F: FnMut(&str, &Value, usize),
-    {
-        if self.depth >= self.max_depth { return; }
-
-        let path = self.current_path();
-        callback(&path, value, self.depth);
-
-        self.depth += 1;
-        match value {
-            Value::List(items) => {
-                for (i, item) in items.iter().enumerate() {
-                    self.path.push(format!("[{}]", i));
-                    self.visit(item, callback);
-                    self.path.pop();
-                }
-            }
-            Value::Map(fields) => {
-                for (key, val) in fields {
-                    self.path.push(key.clone());
-                    self.visit(val, callback);
-                    self.path.pop();
-                }
-            }
-            Value::Tuple(items) => {
-                for (i, item) in items.iter().enumerate() {
-                    self.path.push(format!(".{}", i));
-                    self.visit(item, callback);
-                    self.path.pop();
-                }
-            }
-            Value::Variant(_, payload) => {
-                if let Option::Some(v) = payload {
-                    self.visit(v, callback);
-                }
-            }
-            Value::Optional(opt) => {
-                if let Option::Some(v) = opt {
-                    self.visit(v, callback);
-                }
-            }
-            _ => {}
-        }
-        self.depth -= 1;
-    }
-
-    /// Collect all leaf values.
-    pub fn leaves(&mut self, value: &Value) -> Vec<(String, Value)> {
-        let mut result = Vec::new();
-        self.visit(value, &mut |path, val, _depth| {
-            match val {
-                Value::List(_) | Value::Map(_) | Value::Tuple(_) | Value::Variant(_, _) | Value::Optional(_) => {}
-                _ => { result.push((String::from(path), val.clone())); }
-            }
-        });
-        result
-    }
+// Get the shape of a value (structure without data)
+fn inspect_shape(value) {
+  cond(
+    is_array(value), {
+      type: "array",
+      length: length(value),
+      element_shapes: if_then(gt(length(value), 0),
+        fn() { [inspect_shape(get(value, 0))] },
+        fn() { [] }
+      )
+    },
+    is_object(value), {
+      type: "object",
+      keys: map(keys(value), fn(k) { { key: k, value_type: type_of(get(value, k)) } })
+    },
+    { type: type_of(value) }
+  )
 }
 
-/// Diff two values and return a list of paths where they differ.
-pub fn diff(a: &Value, b: &Value) -> Vec<DiffEntry> {
-    let mut diffs = Vec::new();
-    diff_inner(a, b, &mut Vec::new(), &mut diffs);
-    diffs
+// Compare shapes of two values
+fn shapes_match(a, b) {
+  fn sa() { inspect_shape(a) }
+  fn sb() { inspect_shape(b) }
+  eq(get(sa(), "type"), get(sb(), "type"))
 }
 
-pub struct DiffEntry {
-    pub path: String,
-    pub left: Value,
-    pub right: Value,
+// Print inspection result
+fn print_inspect(value) {
+  fn i() { inspect(value) }
+  println(concat_str("Type: ", get(i(), "detailed_type")))
+  println(concat_str("Value: ", get(i(), "summary")))
+  when(is_object(value), fn() {
+    println(concat_str("Keys: ", join(keys(value), ", ")))
+  })
 }
 
-fn diff_inner(a: &Value, b: &Value, path: &mut Vec<String>, diffs: &mut Vec<DiffEntry>) {
-    match (a, b) {
-        (Value::Map(fa), Value::Map(fb)) => {
-            for (ka, va) in fa {
-                path.push(ka.clone());
-                match fb.iter().find(|(kb, _)| kb == ka) {
-                    Option::Some((_, vb)) => diff_inner(va, vb, path, diffs),
-                    Option::None => diffs.push(DiffEntry {
-                        path: path.join("."),
-                        left: va.clone(),
-                        right: Value::Unit,
-                    }),
-                }
-                path.pop();
-            }
-            for (kb, vb) in fb {
-                if !fa.iter().any(|(ka, _)| ka == kb) {
-                    path.push(kb.clone());
-                    diffs.push(DiffEntry {
-                        path: path.join("."),
-                        left: Value::Unit,
-                        right: vb.clone(),
-                    });
-                    path.pop();
-                }
-            }
-        }
-        (Value::List(la), Value::List(lb)) => {
-            let max = la.len().max(lb.len());
-            for i in 0..max {
-                path.push(format!("[{}]", i));
-                match (la.get(i), lb.get(i)) {
-                    (Option::Some(va), Option::Some(vb)) => diff_inner(va, vb, path, diffs),
-                    (Option::Some(va), Option::None) => diffs.push(DiffEntry {
-                        path: path.join("."), left: va.clone(), right: Value::Unit,
-                    }),
-                    (Option::None, Option::Some(vb)) => diffs.push(DiffEntry {
-                        path: path.join("."), left: Value::Unit, right: vb.clone(),
-                    }),
-                    _ => {}
-                }
-                path.pop();
-            }
-        }
-        _ => {
-            if !a.deep_eq(b) {
-                diffs.push(DiffEntry {
-                    path: path.join("."),
-                    left: a.clone(),
-                    right: b.clone(),
-                });
-            }
-        }
-    }
+// Deep equality check
+fn deep_eq(a, b) {
+  cond(
+    and(is_array(a), is_array(b)),
+      and(eq(length(a), length(b)),
+          every(range(0, length(a)), fn(i) { deep_eq(get(a, i), get(b, i)) })),
+    and(is_object(a), is_object(b)),
+      and(eq(length(keys(a)), length(keys(b))),
+          every(keys(a), fn(k) { deep_eq(get(a, k), get(b, k)) })),
+    eq(a, b)
+  )
+}
+
+// Check if every element satisfies predicate
+fn every(arr, pred) {
+  eq(length(filter(arr, pred)), length(arr))
 }

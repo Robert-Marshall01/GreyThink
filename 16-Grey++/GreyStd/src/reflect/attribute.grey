@@ -1,242 +1,95 @@
-/// reflect::attribute — Custom attributes (annotations) for Grey++ types and members.
-///
-/// Attributes are metadata attached to types, fields, methods, and other declarations
-/// at compile time and queryable at runtime via reflection.
+// GreyStd Reflect - Attribute
+// Attribute/annotation system for metadata tagging
 
-use crate::core::string::String;
-use crate::core::vec::Vec;
-use crate::core::option::Option;
-use crate::core::map::HashMap;
-use crate::reflect::inspect::Value;
-
-/// Where an attribute can be applied.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum AttributeTarget {
-    /// On a struct or enum type.
-    Type,
-    /// On a struct field.
-    Field,
-    /// On an enum variant.
-    Variant,
-    /// On a method or function.
-    Method,
-    /// On a function parameter.
-    Parameter,
-    /// On a module.
-    Module,
-    /// On a trait definition.
-    Trait,
-    /// On an impl block.
-    Impl,
+// Create an attribute
+fn Attribute_new(name, value) {
+  {
+    _type: "Attribute",
+    name: name,
+    value: value
+  }
 }
 
-/// An attribute value (the content between parentheses in `#[attr(value)]`).
-#[derive(Debug, Clone)]
-pub enum AttributeValue {
-    /// No value: `#[attr]`
-    None,
-    /// Single literal: `#[attr(42)]` or `#[attr("hello")]`
-    Literal(Value),
-    /// Key-value pairs: `#[attr(key = "value", count = 42)]`
-    Named(HashMap<String, Value>),
-    /// List of values: `#[attr(a, b, c)]`
-    List(Vec<Value>),
+// Create a simple tag attribute (no value)
+fn Attribute_tag(name) {
+  Attribute_new(name, true)
 }
 
-impl AttributeValue {
-    pub fn is_none(&self) -> bool {
-        matches!(self, AttributeValue::None)
-    }
+// Common attributes
+fn attr_deprecated(reason) { Attribute_new("deprecated", reason) }
+fn attr_test() { Attribute_tag("test") }
+fn attr_bench() { Attribute_tag("bench") }
+fn attr_skip(reason) { Attribute_new("skip", reason) }
+fn attr_doc(text) { Attribute_new("doc", text) }
+fn attr_version(ver) { Attribute_new("version", ver) }
+fn attr_author(name) { Attribute_new("author", name) }
+fn attr_since(ver) { Attribute_new("since", ver) }
+fn attr_todo(task) { Attribute_new("todo", task) }
 
-    /// Get as a literal Value.
-    pub fn as_literal(&self) -> Option<&Value> {
-        match self { AttributeValue::Literal(v) => Option::Some(v), _ => Option::None }
-    }
+// Get attribute name
+fn attr_name(attr) { get(attr, "name") }
 
-    /// Get a named parameter.
-    pub fn get(&self, key: &str) -> Option<&Value> {
-        match self {
-            AttributeValue::Named(map) => map.get(key),
-            _ => Option::None,
-        }
-    }
+// Get attribute value
+fn attr_value(attr) { get(attr, "value") }
 
-    /// Get a named parameter as string.
-    pub fn get_str(&self, key: &str) -> Option<&str> {
-        self.get(key).and_then(|v| v.as_str())
-    }
-
-    /// Get a named parameter as int.
-    pub fn get_int(&self, key: &str) -> Option<i128> {
-        self.get(key).and_then(|v| v.as_int())
-    }
-
-    /// Get a named parameter as bool.
-    pub fn get_bool(&self, key: &str) -> Option<bool> {
-        self.get(key).and_then(|v| v.as_bool())
-    }
+// Create an attribute set
+fn AttributeSet_new() {
+  { _type: "AttributeSet", attrs: [] }
 }
 
-/// A single attribute attached to a declaration.
-#[derive(Debug, Clone)]
-pub struct Attribute {
-    /// Attribute name (e.g. "serialize", "deprecated").
-    pub name: String,
-    /// Full path if the attribute is from another crate (e.g. "serde::rename").
-    pub path: Option<String>,
-    /// Attribute value/arguments.
-    pub value: AttributeValue,
-    /// Where this attribute is applied.
-    pub target: AttributeTarget,
+// Add an attribute to the set
+fn attrset_add(aset, attr) {
+  merge(aset, { attrs: append(get(aset, "attrs"), attr) })
 }
 
-impl Attribute {
-    /// Create a marker attribute with no value.
-    pub fn marker(name: &str, target: AttributeTarget) -> Attribute {
-        Attribute {
-            name: String::from(name),
-            path: Option::None,
-            value: AttributeValue::None,
-            target,
-        }
-    }
-
-    /// Create an attribute with a literal value.
-    pub fn with_value(name: &str, target: AttributeTarget, value: Value) -> Attribute {
-        Attribute {
-            name: String::from(name),
-            path: Option::None,
-            value: AttributeValue::Literal(value),
-            target,
-        }
-    }
-
-    /// Create an attribute with named parameters.
-    pub fn with_named(name: &str, target: AttributeTarget, params: HashMap<String, Value>) -> Attribute {
-        Attribute {
-            name: String::from(name),
-            path: Option::None,
-            value: AttributeValue::Named(params),
-            target,
-        }
-    }
-
-    /// Check if this is a specific attribute by name.
-    pub fn is(&self, name: &str) -> bool {
-        self.name == name
-    }
+// Get attribute by name
+fn attrset_get(aset, name) {
+  find(get(aset, "attrs"), fn(a) { eq(attr_name(a), name) })
 }
 
-/// Trait for items that can have attributes queried.
-pub trait HasAttributes {
-    /// Get all attributes.
-    fn attributes(&self) -> &[Attribute];
-
-    /// Find attribute by name.
-    fn get_attribute(&self, name: &str) -> Option<&Attribute> {
-        self.attributes().iter().find(|a| a.name == name)
-    }
-
-    /// Check if an attribute exists.
-    fn has_attribute(&self, name: &str) -> bool {
-        self.attributes().iter().any(|a| a.name == name)
-    }
-
-    /// Get all attributes with a given name (there can be multiples).
-    fn get_attributes(&self, name: &str) -> Vec<&Attribute> {
-        self.attributes().iter().filter(|a| a.name == name).collect()
-    }
+// Check if attribute exists
+fn attrset_has(aset, name) {
+  not(eq(attrset_get(aset, name), nil))
 }
 
-// ─── Well-known built-in attributes ───────────────────────────────────────────
-
-/// Check if a type is marked `#[deprecated]`.
-pub fn is_deprecated<T: HasAttributes>(item: &T) -> bool {
-    item.has_attribute("deprecated")
+// Get all attribute names
+fn attrset_names(aset) {
+  map(get(aset, "attrs"), fn(a) { attr_name(a) })
 }
 
-/// Get deprecation message if marked `#[deprecated(message = "...")]`.
-pub fn deprecation_message<T: HasAttributes>(item: &T) -> Option<&str> {
-    item.get_attribute("deprecated")
-        .and_then(|a| a.value.get_str("message"))
+// Remove attribute by name
+fn attrset_remove(aset, name) {
+  merge(aset, {
+    attrs: filter(get(aset, "attrs"), fn(a) { not(eq(attr_name(a), name)) })
+  })
 }
 
-/// Check if a field is marked `#[skip]` (e.g. for serialization).
-pub fn is_skipped<T: HasAttributes>(item: &T) -> bool {
-    item.has_attribute("skip")
+// Create an annotated item (value + attributes)
+fn Annotated_new(value, attributes) {
+  {
+    _type: "Annotated",
+    value: value,
+    attributes: attributes
+  }
 }
 
-/// Get rename value from `#[rename("new_name")]`.
-pub fn get_rename<T: HasAttributes>(item: &T) -> Option<&str> {
-    item.get_attribute("rename")
-        .and_then(|a| a.value.as_literal())
-        .and_then(|v| v.as_str())
+// Get the underlying value
+fn annotated_value(ann) {
+  get(ann, "value")
 }
 
-/// Get doc comment text from `#[doc("...")]`.
-pub fn get_doc<T: HasAttributes>(item: &T) -> Option<String> {
-    let docs: Vec<&str> = item.get_attributes("doc")
-        .iter()
-        .filter_map(|a| a.value.as_literal().and_then(|v| v.as_str()))
-        .collect();
-    if docs.is_empty() { Option::None }
-    else { Option::Some(docs.join("\n")) }
+// Get attributes of an annotated item
+fn annotated_attrs(ann) {
+  get(ann, "attributes")
 }
 
-/// Attribute builder for constructing attributes fluently.
-pub struct AttributeBuilder {
-    name: String,
-    path: Option<String>,
-    target: AttributeTarget,
-    params: HashMap<String, Value>,
+// Check if annotated item has a specific attribute
+fn annotated_has(ann, attr_name_str) {
+  attrset_has(get(ann, "attributes"), attr_name_str)
 }
 
-impl AttributeBuilder {
-    pub fn new(name: &str, target: AttributeTarget) -> AttributeBuilder {
-        AttributeBuilder {
-            name: String::from(name),
-            path: Option::None,
-            target,
-            params: HashMap::new(),
-        }
-    }
-
-    pub fn path(mut self, path: &str) -> AttributeBuilder {
-        self.path = Option::Some(String::from(path));
-        self
-    }
-
-    pub fn param(mut self, key: &str, value: Value) -> AttributeBuilder {
-        self.params.insert(String::from(key), value);
-        self
-    }
-
-    pub fn str_param(mut self, key: &str, value: &str) -> AttributeBuilder {
-        self.params.insert(String::from(key), Value::Str(String::from(value)));
-        self
-    }
-
-    pub fn int_param(mut self, key: &str, value: i64) -> AttributeBuilder {
-        self.params.insert(String::from(key), Value::Int(value as i128));
-        self
-    }
-
-    pub fn bool_param(mut self, key: &str, value: bool) -> AttributeBuilder {
-        self.params.insert(String::from(key), Value::Bool(value));
-        self
-    }
-
-    pub fn build(self) -> Attribute {
-        let value = if self.params.is_empty() {
-            AttributeValue::None
-        } else {
-            AttributeValue::Named(self.params)
-        };
-        Attribute {
-            name: self.name,
-            path: self.path,
-            value,
-            target: self.target,
-        }
-    }
+// Get attribute value from annotated item
+fn annotated_get_attr(ann, attr_name_str) {
+  fn attr() { attrset_get(get(ann, "attributes"), attr_name_str) }
+  if_then(eq(attr(), nil), fn() { nil }, fn() { attr_value(attr()) })
 }

@@ -1,23 +1,15 @@
 # GreyStd Documentation
 
-> Comprehensive API reference and usage guide for the Grey++ Standard Library.
+> Comprehensive API reference for the Grey++ Standard Library.
+
+All code in GreyStd uses **Grey++ syntax**: `fn`-only declarations, objects `{key: value}` for data,
+function-based control flow (`if_then`, `cond`, `match`, `when`, `unless`), and 120+ built-in functions.
 
 ---
 
 ## Table of Contents
 
 - [1. Core Module](#1-core-module)
-  - [1.1 String](#11-string)
-  - [1.2 Vec\<T\>](#12-vect)
-  - [1.3 HashMap\<K, V\>](#13-hashmapk-v)
-  - [1.4 HashSet\<T\>](#14-hashsett)
-  - [1.5 Option\<T\>](#15-optiont)
-  - [1.6 Result\<T, E\>](#16-resultt-e)
-  - [1.7 Iterator](#17-iterator)
-  - [1.8 Math](#18-math)
-  - [1.9 Bytes & ByteBuffer](#19-bytes--bytebuffer)
-  - [1.10 Array\<T, N\>](#110-arrayt-n)
-  - [1.11 Tuple](#111-tuple)
 - [2. Memory Module](#2-memory-module)
 - [3. Concurrency Module](#3-concurrency-module)
 - [4. IO Module](#4-io-module)
@@ -31,7 +23,6 @@
 - [12. Testing Framework](#12-testing-framework)
 - [13. Reflection](#13-reflection)
 - [14. Deterministic Execution](#14-deterministic-execution)
-- [Prelude](#prelude)
 
 ---
 
@@ -39,348 +30,150 @@
 
 **Path:** `src/core/`
 
-The core module provides the foundational types that every Grey++ program depends on.
+### 1.1 String (`src/core/string.grey`)
 
-### 1.1 String
-
-**File:** `src/core/string.grey`
-
-A heap-allocated, UTF-8 encoded, growable string type.
+String utilities beyond built-in `split`, `trim`, `upper`, `lower`, etc.
 
 ```grey
-use greystd::core::string::{ String, StringSlice, StringBuilder };
+fn s() { string_new("hello world") }
+fn rev() { string_reverse(s()) }           // { value: "dlrow olleh" }
+fn cap() { string_capitalize(s()) }         // { value: "Hello world" }
+fn title() { string_title(s()) }           // { value: "Hello World" }
+fn lines() { string_lines("a\nb\nc") }    // ["a", "b", "c"]
+fn words() { string_words("hello world") } // ["hello", "world"]
 
-let s = String::from("Hello, Grey++!");
-let len = s.len();               // 14
-let upper = s.to_uppercase();    // "HELLO, GREY++!"
-
-// StringSlice — borrowed, zero-copy view
-let slice: &str = s.as_str();
-let sub = s.substring(0, 5);     // "Hello"
-
-// StringBuilder — efficient concatenation
-let mut sb = StringBuilder::new();
-sb.push_str("Hello");
-sb.push_str(", World!");
-let result = sb.build();         // "Hello, World!"
+// StringBuilder
+fn sb() { sb_push(sb_push(StringBuilder_new(), "foo"), "bar") }
+fn result() { sb_build(sb()) }             // "foobar"
 ```
 
-**Key methods:**
+### 1.2 Vec (`src/core/vec.grey`)
 
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `new` | `fn new() -> String` | Creates an empty string |
-| `from` | `fn from(s: &str) -> String` | Creates from a string literal |
-| `len` | `fn len(&self) -> usize` | Returns byte length |
-| `is_empty` | `fn is_empty(&self) -> bool` | True if length is zero |
-| `push_str` | `fn push_str(&mut self, s: &str)` | Appends a string slice |
-| `push_char` | `fn push_char(&mut self, c: char)` | Appends a character |
-| `contains` | `fn contains(&self, pat: &str) -> bool` | Substring test |
-| `starts_with` | `fn starts_with(&self, pat: &str) -> bool` | Prefix test |
-| `ends_with` | `fn ends_with(&self, pat: &str) -> bool` | Suffix test |
-| `split` | `fn split(&self, sep: &str) -> Vec<String>` | Split by delimiter |
-| `trim` | `fn trim(&self) -> &str` | Strip leading/trailing whitespace |
-| `to_uppercase` | `fn to_uppercase(&self) -> String` | Uppercase conversion |
-| `to_lowercase` | `fn to_lowercase(&self) -> String` | Lowercase conversion |
-| `replace` | `fn replace(&self, from: &str, to: &str) -> String` | Replace occurrences |
-| `chars` | `fn chars(&self) -> CharIterator` | Character iterator |
-| `substring` | `fn substring(&self, start: usize, end: usize) -> &str` | Slice extraction |
-
-**Traits implemented:** `Display`, `Debug`, `Clone`, `Eq`, `Hash`, `Add<StringSlice>`, `IntoIterator`
-
-### 1.2 Vec\<T\>
-
-**File:** `src/core/vec.grey`
-
-A heap-allocated, contiguous, growable array. The workhorse collection of Grey++.
+Dynamic-array utilities with immutable push/pop returning new vectors.
 
 ```grey
-let mut v = Vec::new();
-v.push(1);
-v.push(2);
-v.push(3);
-
-let first = v[0];            // 1
-let popped = v.pop();        // Some(3)
-let doubled: Vec<i32> = v.iter().map(|x| x * 2).collect();
+fn v() { vec_new() }
+fn v1() { vec_push(v(), 42) }
+fn v2() { vec_push(v1(), 99) }
+fn popped() { vec_pop(v2()) }   // { value: 99, vec: <vec with [42]> }
+fn sorted() { vec_sort_by_key(v2(), fn(x) { x }) }
 ```
 
-**Key methods:**
+### 1.3 Map (`src/core/map.grey`)
 
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `new` | `fn new() -> Vec<T>` | Empty vector |
-| `with_capacity` | `fn with_capacity(cap: usize) -> Vec<T>` | Pre-allocate |
-| `from_slice` | `fn from_slice(s: &[T]) -> Vec<T>` | Copy from slice |
-| `push` | `fn push(&mut self, val: T)` | Append element |
-| `pop` | `fn pop(&mut self) -> Option<T>` | Remove last |
-| `insert` | `fn insert(&mut self, idx: usize, val: T)` | Insert at index |
-| `remove` | `fn remove(&mut self, idx: usize) -> T` | Remove at index |
-| `len` | `fn len(&self) -> usize` | Element count |
-| `is_empty` | `fn is_empty(&self) -> bool` | True if empty |
-| `contains` | `fn contains(&self, val: &T) -> bool` | Membership test |
-| `sort` | `fn sort(&mut self)` | In-place sort (timsort) |
-| `dedup` | `fn dedup(&mut self)` | Remove consecutive duplicates |
-| `iter` | `fn iter(&self) -> VecIter<T>` | Borrowing iterator |
-| `drain` | `fn drain(&mut self, start, end) -> Vec<T>` | Remove range |
-| `splice` | `fn splice(&mut self, start, end, iter)` | Replace range |
-| `retain` | `fn retain(&mut self, f: fn(&T) -> bool)` | Keep matching |
-| `reverse` | `fn reverse(&mut self)` | Reverse in-place |
-| `windows` | `fn windows(&self, size: usize) -> WindowsIter<T>` | Sliding windows |
-| `chunks` | `fn chunks(&self, size: usize) -> ChunksIter<T>` | Fixed-size chunks |
-
-**Traits implemented:** `Drop`, `Clone`, `Eq`, `Debug`, `Index`, `IndexMut`, `IntoIterator`
-
-### 1.3 HashMap\<K, V\>
-
-**File:** `src/core/map.grey`
-
-A hash map using Robin Hood open addressing.
+Object/hashmap utilities.
 
 ```grey
-let mut m = HashMap::new();
-m.insert("name", "Grey++");
-m.insert("version", "1.0");
-
-let name = m.get(&"name");  // Some("Grey++")
-m.remove(&"version");
-
-for (k, v) in m.iter() {
-    println("{}: {}", k, v);
-}
+fn m() { map_from_entries([["a", 1], ["b", 2], ["c", 3]]) }
+fn val() { map_get_or(m(), "a", 0) }       // 1
+fn updated() { map_update(m(), "a", fn(v) { add(v, 10) }) }
+fn inverted() { map_invert(m()) }           // { "1": "a", "2": "b", ... }
+fn freqs() { map_frequencies(["a", "b", "a", "c", "a"]) }
 ```
 
-**Key methods:** `new`, `with_capacity`, `insert`, `get`, `get_mut`, `remove`, `contains_key`, `len`, `is_empty`, `iter`, `keys`, `values`, `entry`, `clear`
+### 1.4 Set (`src/core/set.grey`)
 
-### 1.4 HashSet\<T\>
-
-**File:** `src/core/set.grey`
-
-A hash set built on `HashMap<T, ()>`.
+Set operations using objects as backing store.
 
 ```grey
-let mut s = HashSet::new();
-s.insert(1);
-s.insert(2);
-s.insert(3);
-
-let has_two = s.contains(&2);        // true
-let union = s.union(&other_set);
-let inter = s.intersection(&other_set);
-let diff = s.difference(&other_set);
+fn s1() { set_from([1, 2, 3]) }
+fn s2() { set_from([2, 3, 4]) }
+fn u() { set_union(s1(), s2()) }
+fn i() { set_intersection(s1(), s2()) }
+fn d() { set_difference(s1(), s2()) }
+set_contains(s1(), 2)  // true
+set_is_subset(s1(), u())  // true
 ```
 
-### 1.5 Option\<T\>
+### 1.5 Option (`src/core/option.grey`)
 
-**File:** `src/core/option.grey`
-
-Represents an optional value — either `Some(T)` or `None`. Eliminates null pointer errors.
+Optional value type: `Some(value)` or `None()`.
 
 ```grey
-let some: Option<i32> = Some(42);
-let none: Option<i32> = None;
-
-// Safe unwrapping
-let val = some.unwrap_or(0);
-let mapped = some.map(|x| x * 2);        // Some(84)
-let chained = some.and_then(|x| if x > 0 { Some(x) } else { None });
-
-// Flattening nested Options
-let nested: Option<Option<i32>> = Some(Some(10));
-let flat = nested.flatten();              // Some(10)
-
-// Iteration
-for val in Some(42) {
-    println("{}", val);   // prints 42
-}
+fn val() { Some(42) }
+fn empty() { None() }
+is_some(val())                    // true
+is_none(empty())                  // true
+option_unwrap(val())              // 42
+option_unwrap_or(empty(), 0)      // 0
+option_map(val(), fn(x) { mul(x, 2) })  // Some(84)
+option_and_then(val(), fn(x) { if_then(gt(x, 0), fn() { Some(x) }, fn() { None() }) })
 ```
 
-**Key methods:** `is_some`, `is_none`, `unwrap`, `unwrap_or`, `unwrap_or_else`, `map`, `and_then`, `or`, `or_else`, `filter`, `flatten`, `ok_or`, `ok_or_else`, `iter`, `zip`, `unzip`, `take`, `replace`, `get_or_insert`
+### 1.6 Result (`src/core/result.grey`)
 
-**Traits implemented:** `Clone`, `Eq`, `Debug`, `Display`, `IntoIterator`
-
-### 1.6 Result\<T, E\>
-
-**File:** `src/core/result.grey`
-
-Represents success (`Ok(T)`) or failure (`Err(E)`). Used pervasively for error handling.
+Error-or-value type: `Ok(value)` or `Err(error)`.
 
 ```grey
-fn divide(a: f64, b: f64) -> Result<f64, String> {
-    if b == 0.0 { Err(String::from("division by zero")) }
-    else { Ok(a / b) }
-}
-
-let r = divide(10.0, 3.0);
-let value = r.unwrap_or(0.0);
-
-// ? operator for early return
-fn process() -> Result<(), Error> {
-    let data = read_file("config.toml")?;
-    let parsed = parse_config(&data)?;
-    Ok(())
-}
-
-// Chaining
-let result = Ok(5)
-    .map(|x| x * 2)
-    .and_then(|x| if x > 5 { Ok(x) } else { Err("too small") });
+fn success() { Ok(42) }
+fn failure() { Err("oops") }
+is_ok(success())                  // true
+is_err(failure())                 // true
+result_unwrap(success())          // 42
+result_map(success(), fn(x) { add(x, 1) })  // Ok(43)
+result_and_then(success(), fn(x) { Ok(mul(x, 2)) })
 ```
 
-**Key methods:** `is_ok`, `is_err`, `unwrap`, `unwrap_err`, `unwrap_or`, `unwrap_or_else`, `map`, `map_err`, `and_then`, `or`, `or_else`, `ok`, `err`, `transpose`, `flatten`, `inspect`, `inspect_err`, `iter`
+### 1.7 Iterator (`src/core/iter.grey`)
 
-**Traits implemented:** `Clone`, `Eq`, `Debug`, `Display`, `IntoIterator`
-
-### 1.7 Iterator
-
-**File:** `src/core/iter.grey`
-
-The iterator protocol is the backbone of Grey++'s collection processing. Iterators are lazy, composable, and zero-cost.
+Lazy iterator protocol and combinators.
 
 ```grey
-use greystd::core::iter::{ Iterator, IntoIterator, range, once, empty, from_fn };
-
-// Chaining adapters
-let result: Vec<i32> = range(1, 100)
-    .filter(|x| x % 2 == 0)
-    .map(|x| x * x)
-    .take(10)
-    .collect();
-
-// Folding
-let sum = vec![1, 2, 3, 4, 5].iter().fold(0, |acc, x| acc + x);
-
-// Flattening nested iterators
-let nested = vec![vec![1, 2], vec![3, 4]];
-let flat: Vec<i32> = nested.into_iter().flatten().collect();
+fn it() { iter_range(1, 10) }
+fn sum() { iter_fold(it(), 0, fn(acc, x) { add(acc, x) }) }
+fn evens() { iter_take_while(iter_range(0, 100), fn(x) { lt(x, 10) }) }
+fn enumerated() { iter_enumerate(iter_from([10, 20, 30])) }
 ```
 
-**Adapters (lazy):**
+### 1.8 Math (`src/core/math.grey`)
 
-| Adapter | Description |
-|---------|-------------|
-| `map(f)` | Transform each element |
-| `filter(p)` | Keep elements matching predicate |
-| `flat_map(f)` | Map then flatten |
-| `flatten()` | Flatten nested iterators |
-| `take(n)` | First n elements |
-| `skip(n)` | Skip first n elements |
-| `take_while(p)` | Take while predicate holds |
-| `skip_while(p)` | Skip while predicate holds |
-| `chain(other)` | Concatenate two iterators |
-| `zip(other)` | Pair elements from two iterators |
-| `enumerate()` | Attach index to each element |
-| `peekable()` | Allow peeking ahead |
-| `inspect(f)` | Side-effect without consuming |
-| `step_by(n)` | Take every nth element |
-| `intersperse(sep)` | Insert separator between elements |
-| `dedup()` | Remove consecutive duplicates |
-
-**Consumers (eager):**
-
-| Consumer | Description |
-|----------|-------------|
-| `collect()` | Gather into `Vec<T>` |
-| `fold(init, f)` | Reduce to single value |
-| `reduce(f)` | Reduce without initial value |
-| `for_each(f)` | Side-effect on each element |
-| `any(p)` / `all(p)` | Short-circuiting boolean tests |
-| `find(p)` | First matching element |
-| `position(p)` | Index of first match |
-| `count()` | Number of elements |
-| `last()` | Last element |
-| `min()` / `max()` | Extrema |
-| `sum()` / `product()` | Arithmetic aggregation |
-| `partition(p)` | Split into two collections |
-| `unzip()` | Split pairs into two Vecs |
-
-**Factory functions:**
-
-| Function | Description |
-|----------|-------------|
-| `empty()` | Yields nothing |
-| `once(v)` | Yields a single element |
-| `range(start, end)` | `[start, end)` integer range |
-| `repeat_with(f)` | Infinite lazily-produced values |
-| `from_fn(f)` | Values from a closure |
-| `successors(first, f)` | Successive applications |
-| `count_from(n)` | Infinite incrementing counter |
-
-**Generators:**
+Numerical utilities.
 
 ```grey
-let fib = generator {
-    let (mut a, mut b) = (0, 1);
-    loop {
-        yield a;
-        let next = a + b;
-        a = b;
-        b = next;
-    }
-};
-
-let first_10: Vec<i64> = fib.take(10).collect();
+gcd(12, 8)        // 4
+lcm(4, 6)         // 12
+factorial(5)       // 120
+fibonacci(10)      // 55
+mean([1,2,3,4,5])  // 3
+median([1,2,3,4,5])  // 3
+std_dev([2,4,4,4,5,5,7,9])
+is_even(4)         // true
+is_odd(7)          // true
 ```
 
-### 1.8 Math
+### 1.9 Bytes (`src/core/bytes.grey`)
 
-**File:** `src/core/math.grey`
-
-Numeric utilities and constants.
-
-| Function | Description |
-|----------|-------------|
-| `abs(x)` | Absolute value |
-| `min(a, b)` | Minimum of two values |
-| `max(a, b)` | Maximum of two values |
-| `clamp(x, lo, hi)` | Clamp to range |
-| `pow(base, exp)` | Exponentiation |
-| `sqrt(x)` | Square root |
-| `floor(x)` / `ceil(x)` | Rounding |
-| `sin(x)` / `cos(x)` / `tan(x)` | Trigonometry |
-| `log(x)` / `log2(x)` / `log10(x)` | Logarithms |
-
-**Constants:** `PI`, `E`, `TAU`, `INFINITY`, `NEG_INFINITY`, `NAN`
-
-### 1.9 Bytes & ByteBuffer
-
-**File:** `src/core/bytes.grey`
-
-Immutable byte sequences and a mutable byte buffer for binary protocols.
+Byte array and buffer utilities.
 
 ```grey
-let bytes = Bytes::from_slice(&[0x48, 0x65, 0x6C, 0x6C, 0x6F]);
-let slice = bytes.slice(0, 3);
-
-let mut buf = ByteBuffer::new();
-buf.write_u8(0xFF);
-buf.write_u32_be(12345);
-buf.write_str("hello");
-let data = buf.freeze();   // -> Bytes
+fn b() { bytes_from([72, 101, 108]) }
+fn hex() { bytes_to_hex(b()) }
+fn buf() { buf_write_u8(buf_write_u8(ByteBuffer_new(), 0xCA), 0xFE) }
+fn frozen() { buf_freeze(buf()) }
 ```
 
-### 1.10 Array\<T, N\>
+### 1.10 Array (`src/core/array.grey`)
 
-**File:** `src/core/array.grey`
-
-Fixed-size, stack-allocated array with compile-time length.
+Array utilities beyond built-in `map`, `filter`, `reduce`.
 
 ```grey
-let arr: Array<i32, 5> = Array::new([1, 2, 3, 4, 5]);
-let first = arr[0];
-let slice = arr.as_slice();
+fn a() { array_range_step(0, 10, 2) }       // [0, 2, 4, 6, 8]
+fn chunks() { array_chunk([1,2,3,4,5], 2) }  // [[1,2],[3,4],[5]]
+fn parts() { array_partition([1,2,3,4], fn(x) { is_even(x) }) }
+fn windows() { array_windows([1,2,3,4], 3) } // [[1,2,3],[2,3,4]]
 ```
 
-### 1.11 Tuple
+### 1.11 Tuple (`src/core/tuple.grey`)
 
-**File:** `src/core/tuple.grey`
-
-Heterogeneous fixed-size sequences. Supports up to 12 elements.
+Lightweight fixed-size groupings.
 
 ```grey
-let pair = (42, "hello");
-let triple = (1, 2.0, true);
-let first = pair.0;
+fn p() { pair(1, "hello") }
+fst(p())   // 1
+snd(p())   // "hello"
+fn t() { triple("a", "b", "c") }
+trd(t())   // "c"
+tuple_swap(p())  // pair("hello", 1)
 ```
 
 ---
@@ -389,28 +182,51 @@ let first = pair.0;
 
 **Path:** `src/mem/`
 
-Smart pointers and memory management utilities.
-
-| Type | File | Description |
-|------|------|-------------|
-| `Box<T>` | `smart.grey` | Unique ownership, heap-allocated |
-| `Rc<T>` | `smart.grey` | Reference-counted shared ownership (single-thread) |
-| `Arc<T>` | `smart.grey` | Atomically reference-counted (thread-safe) |
-| `Weak<T>` | `smart.grey` | Non-owning reference to Rc/Arc |
-| `Pin<T>` | `pin.grey` | Pinned memory for self-referential types |
-| `Arena` | `arena.grey` | Region-based bump allocator |
+### 2.1 Smart Pointers (`src/mem/smart_ptr.grey`)
 
 ```grey
-use greystd::mem::{ Box, Rc, Arc };
+fn b() { Box_new(42) }
+box_unwrap(b())              // 42
+box_map(b(), fn(x) { add(x, 1) })  // Box(43)
 
-let b = Box::new(42);           // unique heap allocation
-let rc = Rc::new("shared");     // shared within one thread
-let arc = Arc::new(100);        // shared across threads
+fn rc() { Rc_new("shared") }
+fn rc2() { rc_clone(rc()) }
+rc_count(rc2())              // 2
+```
 
-let weak = Rc::downgrade(&rc);  // non-owning reference
-if let Some(val) = weak.upgrade() {
-    println("still alive: {}", val);
-}
+### 2.2 Arena (`src/mem/arena.grey`)
+
+```grey
+fn a() { Arena_new() }
+fn r() { arena_alloc(a(), "value") }  // { arena: ..., handle: 0 }
+arena_get(get(r(), "arena"), get(r(), "handle"))  // "value"
+```
+
+### 2.3 Clone (`src/mem/clone.grey`)
+
+```grey
+fn original() { { a: 1, b: { c: 2 } } }
+fn cloned() { clone(original()) }  // deep copy
+structurally_equal(original(), cloned())  // true
+```
+
+### 2.4 Borrow (`src/mem/borrow.grey`)
+
+Copy-on-write semantics.
+
+```grey
+fn cow() { Cow_borrowed("hello") }
+fn owned() { cow_to_owned(cow()) }
+fn mapped() { cow_map(cow(), fn(s) { upper(s) }) }
+```
+
+### 2.5 RefCell (`src/mem/ref_wrapper.grey`)
+
+```grey
+fn cell() { Cell_new(0) }
+fn updated() { cell_set(cell(), 42) }
+cell_get(updated())  // 42
+cell_update(cell(), fn(x) { add(x, 1) })
 ```
 
 ---
@@ -419,44 +235,77 @@ if let Some(val) = weak.upgrade() {
 
 **Path:** `src/concurrent/`
 
-Async-first concurrency with structured task management.
-
-| Component | File | Description |
-|-----------|------|-------------|
-| `spawn` / `Task` | `task.grey` | Spawn async tasks |
-| `Future` / `Poll` | `future.grey` | Async computation trait |
-| `Mutex<T>` | `mutex.grey` | Mutual exclusion lock |
-| `RwLock<T>` | `mutex.grey` | Readers-writer lock |
-| `Channel` | `channel.grey` | MPSC message passing |
-| `Semaphore` | `mutex.grey` | Counting semaphore |
-| `AtomicBool/I64/Ptr` | `atomic.grey` | Lock-free atomics |
-| `Once` | `once.grey` | One-time initialization |
-| `ThreadPool` | `pool.grey` | Worker thread pool |
-| `EventLoop` | `event_loop.grey` | Async event loop |
-| `sleep` / `sleep_sync` | `timer.grey` | Async and blocking sleep |
-| `Delay` / `Interval` / `Timeout` | `timer.grey` | Timer utilities |
+### 3.1 Task (`src/concurrent/task.grey`)
 
 ```grey
-use greystd::concurrent::{ spawn, Mutex, Channel, sleep };
-use greystd::time::Duration;
+fn t() { task_spawn(fn() { add(1, 2) }) }
+fn named() { task_spawn_named("compute", fn() { factorial(10) }) }
+fn all() { task_spawn_all([fn() { 1 }, fn() { 2 }, fn() { 3 }]) }
+```
 
-let counter = Arc::new(Mutex::new(0));
+### 3.2 Future (`src/concurrent/future.grey`)
 
-for _ in 0..10 {
-    let c = counter.clone();
-    spawn(async {
-        let mut guard = c.lock();
-        *guard += 1;
-    });
-}
+```grey
+fn f() { future_ready(42) }
+fn mapped() { future_map(f(), fn(x) { mul(x, 2) }) }
+fn chained() { future_and_then(f(), fn(x) { future_ready(add(x, 1)) }) }
+fn all() { future_join_all([future_ready(1), future_ready(2)]) }
+```
 
-sleep(Duration::from_millis(100)).await;
-println("counter: {}", *counter.lock());
+### 3.3 Mutex (`src/concurrent/mutex.grey`)
 
-// Channels
-let (tx, rx) = Channel::new();
-spawn(async { tx.send(42); });
-let val = rx.recv().await.unwrap();
+```grey
+fn m() { Mutex_new(0) }
+fn result() { mutex_lock(m()) }   // { guard: 0, mutex: ... }
+fn unlocked() { mutex_unlock(get(result(), "mutex")) }
+
+fn sem() { Semaphore_new(3) }
+fn acquired() { semaphore_acquire(sem()) }
+```
+
+### 3.4 Channel (`src/concurrent/channel.grey`)
+
+```grey
+fn ch() { Channel_new(10) }       // { sender: ..., receiver: ... }
+fn s() { channel_send(get(ch(), "sender"), "hello") }
+fn r() { channel_recv(get(ch(), "receiver")) }
+```
+
+### 3.5 Atomic (`src/concurrent/atomic.grey`)
+
+```grey
+fn flag() { AtomicBool_new(false) }
+fn stored() { atomic_bool_store(flag(), true) }
+atomic_bool_load(stored())  // true
+
+fn counter() { AtomicInt_new(0) }
+fn inc() { atomic_int_inc(counter()) }
+```
+
+### 3.6 ThreadPool (`src/concurrent/pool.grey`)
+
+```grey
+fn pool() { ThreadPool_new(4) }
+fn submitted() { pool_submit(pool(), fn() { factorial(20) }) }
+pool_stats(pool())
+```
+
+### 3.7 EventLoop (`src/concurrent/event_loop.grey`)
+
+```grey
+fn loop() { EventLoop_new() }
+fn with_task() { loop_next_tick(loop(), fn() { println("tick!") }) }
+fn with_timeout() { loop_set_timeout(loop(), 1000, fn() { println("delayed") }) }
+```
+
+### 3.8 Timer (`src/concurrent/timer.grey`)
+
+```grey
+fn sw() { Stopwatch_new() }
+fn started() { stopwatch_start(sw()) }
+// ... do work ...
+fn stopped() { stopwatch_stop(started()) }
+stopwatch_elapsed(stopped())  // Duration
 ```
 
 ---
@@ -465,36 +314,67 @@ let val = rx.recv().await.unwrap();
 
 **Path:** `src/io/`
 
-File system operations, streams, and console I/O.
-
-| Component | File | Description |
-|-----------|------|-------------|
-| `print` / `println` | `mod.grey` | Write to stdout |
-| `eprint` / `eprintln` | `mod.grey` | Write to stderr |
-| `read_line` | `mod.grey` | Read line from stdin |
-| `File` | `file.grey` | File operations |
-| `Dir` | `dir.grey` | Directory operations |
-| `InputStream` / `OutputStream` | `stream.grey` | Byte streams |
-| `BufReader` / `BufWriter` | `stream.grey` | Buffered I/O |
-| `Pipe` | `pipe.grey` | Inter-process pipes |
-| `MemoryMappedFile` | `mmap.grey` | Memory-mapped files |
+### 4.1 Core IO (`src/io/mod.grey`)
 
 ```grey
-use greystd::io::{ println, File };
+io_println("Hello, world!")
+io_eprint("Warning!")
+fn input() { io_read_line() }
+```
 
-// Console output
-println("Hello, World!");
+### 4.2 File (`src/io/file.grey`)
 
-// File I/O
-let content = File::read_to_string("data.txt")?;
-File::write_string("output.txt", &content)?;
+```grey
+fn content() { file_read("data.txt") }
+file_write("output.txt", "Hello!")
+file_append("log.txt", "Entry\n")
+fn lines() { file_read_lines("data.txt") }
+fn info() { FileInfo_new("path/to/file.txt") }
+file_extension(info())  // "txt"
+```
 
-// Streaming
-let file = File::open("large.bin", OpenMode::Read)?;
-let reader = BufReader::new(file);
-for line in reader.lines() {
-    process(line?);
-}
+### 4.3 Directory (`src/io/dir.grey`)
+
+```grey
+fn d() { Dir_new("/home/user") }
+fn entries() { dir_list(d()) }
+fn parent() { dir_parent(d()) }
+fn sub() { dir_join(d(), "documents") }
+```
+
+### 4.4 Streams (`src/io/stream.grey`)
+
+```grey
+fn input() { InputStream_from_string("line1\nline2\nline3") }
+fn line() { stream_read_line(input()) }
+fn out() { OutputStream_new() }
+fn written() { stream_write(out(), "data") }
+```
+
+### 4.5 Buffered IO (`src/io/buffered.grey`)
+
+```grey
+fn reader() { BufReader_new("file.txt") }
+fn lines() { bufreader_lines(reader()) }
+fn writer() { BufWriter_new("output.txt") }
+fn w() { bufwriter_write(writer(), "buffered data") }
+bufwriter_flush(w())
+```
+
+### 4.6 Pipes (`src/io/pipe.grey`)
+
+```grey
+fn p() { Pipe_new() }    // { reader: ..., writer: ... }
+fn written() { pipe_write(get(p(), "writer"), "hello") }
+fn data() { pipe_read(get(p(), "reader")) }
+```
+
+### 4.7 Memory-Mapped Files (`src/io/mmap.grey`)
+
+```grey
+fn m() { MappedFile_new("large_file.bin") }
+fn data() { mmap_read(m(), 0, 1024) }
+mmap_size(m())
 ```
 
 ---
@@ -503,24 +383,59 @@ for line in reader.lines() {
 
 **Path:** `src/net/`
 
-TCP/UDP sockets, HTTP client, WebSockets, DNS, and TLS.
+### 5.1 TCP (`src/net/tcp.grey`)
 
 ```grey
-use greystd::net::http::{ HttpClient, HttpRequest, HttpMethod };
-use greystd::net::url::Url;
+fn conn() { TcpStream_connect("example.com", 80) }
+fn sent() { tcp_write(conn(), "GET / HTTP/1.1\r\n\r\n") }
+fn response() { tcp_read(conn()) }
+tcp_close(conn())
 
-// HTTP request
-let client = HttpClient::new();
-let resp = client.get("https://api.example.com/data").await?;
-println("Status: {}", resp.status());
-println("Body: {}", resp.body_string()?);
+fn server() { TcpListener_bind("0.0.0.0", 8080) }
+```
 
-// TCP
-let stream = TcpStream::connect("127.0.0.1:8080").await?;
-stream.write_all(b"GET / HTTP/1.1\r\n\r\n").await?;
+### 5.2 UDP (`src/net/udp.grey`)
 
-// URL parsing
-let url = Url::parse("https://user:pass@example.com:443/path?q=1#frag")?;
+```grey
+fn sock() { UdpSocket_bind("0.0.0.0", 9000) }
+fn sent() { udp_send_to(sock(), "hello", "192.168.1.1", 9001) }
+fn received() { udp_recv_from(sock()) }
+```
+
+### 5.3 HTTP (`src/net/http.grey`)
+
+```grey
+fn client() { HttpClient_new() }
+fn response() { http_get_url(client(), "https://api.example.com/data") }
+response_status(response())
+response_body(response())
+fn json_data() { response_json(response()) }
+```
+
+### 5.4 WebSocket (`src/net/websocket.grey`)
+
+```grey
+fn ws() { WebSocket_connect("wss://echo.websocket.org") }
+ws_send(ws(), "hello")
+ws_on_message(ws(), fn(msg) { println(msg) })
+ws_close(ws())
+```
+
+### 5.5 DNS (`src/net/dns.grey`)
+
+```grey
+fn ip() { dns_lookup("example.com") }
+fn parsed() { url_parse("https://example.com/path?q=1") }
+// { protocol: "https", host: "example.com", path: "/path", query: "q=1" }
+```
+
+### 5.6 TLS (`src/net/tls.grey`)
+
+```grey
+fn config() { TlsConfig_new() }
+fn secure() { tls_set_min_version(config(), "1.2") }
+fn wrapped() { tls_wrap(tcp_conn(), secure()) }
+tls_handshake(wrapped())
 ```
 
 ---
@@ -529,30 +444,55 @@ let url = Url::parse("https://user:pass@example.com:443/path?q=1#frag")?;
 
 **Path:** `src/serial/`
 
-Data format support with trait-based serialization.
+### 6.1 JSON (`src/serial/json.grey`)
 
 ```grey
-use greystd::serial::{ Serialize, Deserialize };
-use greystd::serial::json::{ to_json, from_json };
-use greystd::serial::binary::{ base64_encode, base64_decode, hex_encode, hex_decode };
+fn obj() { { name: "Grey", version: 1 } }
+fn json_str() { json_serialize(obj()) }
+fn pretty() { json_pretty(obj()) }
+fn parsed() { json_parse(json_str()) }
+json_is_valid(json_str())  // true
 
-// JSON
-let json_str = to_json(&my_struct);
-let parsed: MyStruct = from_json(&json_str)?;
-
-// Base64
-let encoded = base64_encode(data.as_bytes());
-let decoded = base64_decode(&encoded)?;
-
-// Hex
-let hex = hex_encode(&[0xDE, 0xAD, 0xBE, 0xEF]);  // "deadbeef"
+fn nested() { json_get_path(obj(), "name") }
+fn flat() { json_flatten({ a: { b: 1 } }) }   // { "a.b": 1 }
+fn diff() { json_diff({ a: 1 }, { a: 2, b: 3 }) }
 ```
 
-**Primitive Serialize impls:** `bool`, `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `String`, `&str`, `Vec<T>`, `Option<T>`, `HashMap<K, V>`
+### 6.2 YAML (`src/serial/yaml.grey`)
 
-**Primitive Deserialize impls:** `bool`, `i32`, `i64`, `u32`, `u64`, `f64`, `String`, `Vec<T>`, `Option<T>`, `HashMap<K, V>`
+```grey
+fn data() { yaml_parse("name: Grey\nversion: 1") }
+fn yaml_str() { yaml_serialize(data()) }
+fn doc() { YamlDoc_new({ key: "value" }) }
+```
 
-**Supported formats:** JSON, YAML, TOML, MessagePack, Binary (base64/hex)
+### 6.3 TOML (`src/serial/toml.grey`)
+
+```grey
+fn data() { toml_parse("name = \"Grey\"\nversion = 1") }
+fn doc() { TomlDoc_new() }
+fn with_data() { toml_doc_set(doc(), "name", "Grey") }
+fn with_section() { toml_doc_add_section(doc(), "dependencies", { other_lib: "1.0" }) }
+```
+
+### 6.4 MsgPack (`src/serial/msgpack.grey`)
+
+```grey
+fn encoded() { msgpack_encode(42) }
+msgpack_type(encoded())   // "fixint"
+msgpack_value(encoded())  // 42
+fn str_enc() { msgpack_encode("hello") }
+```
+
+### 6.5 Binary (`src/serial/binary.grey`)
+
+```grey
+fn enc() { encoder_write_u32(encoder_write_u8(BinaryEncoder_new(), 0xFF), 1000) }
+fn bytes() { encoder_bytes(enc()) }
+fn dec() { BinaryDecoder_new(bytes()) }
+fn r1() { decoder_read_u8(dec()) }   // { value: 255, decoder: ... }
+fn r2() { decoder_read_u32(get(r1(), "decoder")) }
+```
 
 ---
 
@@ -560,34 +500,56 @@ let hex = hex_encode(&[0xDE, 0xAD, 0xBE, 0xEF]);  // "deadbeef"
 
 **Path:** `src/time/`
 
-Temporal types, clocks, and scheduling.
+### 7.1 Duration (`src/time/duration.grey`)
 
 ```grey
-use greystd::time::{ Duration, Instant };
-use greystd::time::clock::{ SystemClock, FakeClock, Stopwatch };
-use greystd::time::date::{ Date, DateTime, TimeZone };
+fn d() { Duration_secs(5) }
+duration_ms(d())        // 5000
+duration_format(d())    // "5s"
+fn d2() { Duration_mins(2) }
+fn sum() { duration_add(d(), d2()) }
+duration_format(sum())  // "2m 5s"
+```
 
-// Duration
-let d = Duration::from_secs(5) + Duration::from_millis(500);
-println("{}ms", d.as_millis());  // 5500
+### 7.2 Instant (`src/time/instant.grey`)
 
-// Clock
-let now = SystemClock::unix_now();  // seconds since epoch
+```grey
+fn start() { Instant_now() }
+// ... do work ...
+fn elapsed() { instant_elapsed(start()) }  // Duration
+fn measured() { measure_time(fn() { factorial(20) }) }
+// { result: 2432902008176640000, elapsed: Duration }
+```
 
-// FakeClock for testing
-let mut clock = FakeClock::new(1000);
-clock.advance(Duration::from_secs(60));
-assert_eq(clock.unix_timestamp(), 1060);
+### 7.3 Clock (`src/time/clock.grey`)
 
-// Stopwatch
-let mut sw = Stopwatch::new();
-sw.start();
-expensive_operation();
-sw.stop();
-println("Elapsed: {}ms", sw.elapsed().as_millis());
+```grey
+fn now() { clock_now() }
+clock_format(now())     // "14:30:45"
+clock_format_ms(now())  // "14:30:45.123"
+clock_epoch_ms()        // 1703001045123
+```
 
-// Scheduling
-let cron = CronExpr::parse("0 */5 * * *")?;  // every 5 minutes
+### 7.4 Timezone (`src/time/timezone.grey`)
+
+```grey
+fn utc() { TZ_UTC() }
+fn pst() { TZ_PST() }
+fn dt() { DateTime_now(pst()) }
+datetime_format(dt())   // "06:30:45 PST"
+fn converted() { datetime_to_tz(dt(), utc()) }
+```
+
+### 7.5 Schedule (`src/time/schedule.grey`)
+
+```grey
+fn interval() { Schedule_interval(Duration_secs(5)) }
+fn once() { Schedule_once(Duration_secs(10)) }
+fn repeat() { Schedule_repeat(Duration_secs(1), 5) }
+
+fn task() { ScheduledTask_new("cleanup", interval(), fn() { println("cleaning...") }) }
+fn sched() { scheduler_add(Scheduler_new(), task()) }
+fn next() { scheduler_tick(sched()) }
 ```
 
 ---
@@ -596,27 +558,70 @@ let cron = CronExpr::parse("0 */5 * * *")?;  // every 5 minutes
 
 **Path:** `src/crypto/`
 
-Cryptographic primitives — hashing, encryption, and secure random.
+### 8.1 Hash (`src/crypto/hash.grey`)
 
 ```grey
-use greystd::crypto::hash::{ Sha256, Sha512 };
-use greystd::crypto::random::SecureRandom;
-use greystd::crypto::aes::{ Aes256, AesKey };
+fn digest() { sha256("hello world") }
+fn h() { HashDigest_new("sha256", "data") }
+digest_hex(h())
+hash_verify("data", digest(), "sha256")
 
-// Hashing
-let mut hasher = Sha256::new();
-hasher.update(b"hello world");
-let digest = hasher.finalize();  // 32 bytes
+fn hasher() { hasher_update(hasher_update(Hasher_new("sha256"), "part1"), "part2") }
+fn final_hash() { hasher_finish(hasher()) }
+```
 
-// Secure random
-let mut rng = SecureRandom::new();
-let key_bytes = rng.bytes(32);
+### 8.2 Symmetric Encryption (`src/crypto/symmetric.grey`)
 
-// AES encryption
-let key = AesKey::from_bytes(&key_bytes);
-let cipher = Aes256::new(&key);
-let encrypted = cipher.encrypt(plaintext, &iv)?;
-let decrypted = cipher.decrypt(&encrypted, &iv)?;
+```grey
+fn key() { generate_key_256() }
+fn cipher() { aes256_cbc(key()) }
+fn encrypted() { cipher_encrypt(cipher(), "secret message") }
+fn decrypted() { cipher_decrypt(cipher(), encrypted()) }
+```
+
+### 8.3 Asymmetric Encryption (`src/crypto/asymmetric.grey`)
+
+```grey
+fn kp() { rsa_generate(2048) }
+fn pub_key() { keypair_public(kp()) }
+fn priv_key() { keypair_private(kp()) }
+fn encrypted() { rsa_encrypt("secret", pub_key()) }
+fn decrypted() { rsa_decrypt(encrypted(), priv_key()) }
+fn sig() { rsa_sign("data", priv_key()) }
+rsa_verify("data", sig(), pub_key())
+```
+
+### 8.4 HMAC (`src/crypto/hmac.grey`)
+
+```grey
+fn mac() { hmac_sha256("message", "secret_key") }
+hmac_verify_sha256("message", "secret_key", mac())
+
+fn tagged() { hmac_tag("important data", "key") }
+hmac_tag_verify(tagged(), "key")  // true
+```
+
+### 8.5 KDF (`src/crypto/kdf.grey`)
+
+```grey
+fn salt() { generate_salt_16() }
+fn derived() { pbkdf2_default("my_password", salt()) }
+fn ph() { password_hash("my_password") }
+password_verify("my_password", ph())  // true
+```
+
+### 8.6 Random (`src/crypto/random.grey`)
+
+```grey
+random_int(1, 100)           // 42
+random_hex(16)               // "a3f2b1c4..."
+random_uuid()                // "550e8400-e29b-..."
+random_string(10)            // "aB3xK9mPq2"
+random_token(32)             // URL-safe token
+random_choice([1, 2, 3])     // 2
+random_shuffle([1, 2, 3, 4]) // [3, 1, 4, 2]
+dice_roll(6)                 // 1-6
+coin_flip()                  // true/false
 ```
 
 ---
@@ -625,22 +630,43 @@ let decrypted = cipher.decrypt(&encrypted, &iv)?;
 
 **Path:** `src/sys/`
 
-OS interfaces — processes, environment, FFI.
+### 9.1 Process (`src/sys/process.grey`)
 
 ```grey
-use greystd::sys::process::Command;
-use greystd::sys::env;
+fn proc() { process_current() }
+fn result() { process_exec("echo hello") }
+get(result(), "stdout")   // "hello\n"
+get(result(), "success")  // true
+process_sleep(1000)
+```
 
-// Spawn a process
-let output = Command::new("ls")
-    .arg("-la")
-    .output()?;
+### 9.2 Environment (`src/sys/env.grey`)
 
-println("stdout: {}", output.stdout);
+```grey
+fn home() { env_get("HOME") }
+fn port() { env_get_num("PORT", 3000) }
+fn debug() { env_get_bool("DEBUG") }
+env_require("DATABASE_URL")  // throws if not set
+fn path() { env_path() }     // array of PATH entries
+fn config() { env_parse_dotenv("KEY=value\nDB=postgres") }
+```
 
-// Environment
-let home = env::var("HOME")?;
-let cwd = env::current_dir();
+### 9.3 Signal (`src/sys/signal.grey`)
+
+```grey
+fn reg() { signal_on(SignalRegistry_new(), SIGINT(), fn(s) { println("caught!") }) }
+fn gs() { shutdown_register(GracefulShutdown_new(), fn() { println("cleaning up") }) }
+```
+
+### 9.4 System Info (`src/sys/info.grey`)
+
+```grey
+fn platform() { sys_platform() }
+sys_os()          // "linux", "darwin", "windows"
+sys_arch()        // "x64", "arm64"
+sys_cpu_count()   // 8
+fn mem() { sys_memory() }
+format_bytes(get(mem(), "total"))  // "16.00 GB"
 ```
 
 ---
@@ -649,18 +675,33 @@ let cwd = env::current_dir();
 
 **Path:** `src/module/`
 
-Package metadata, versioning, and dynamic module loading.
+### 10.1 Loader (`src/module/loader.grey`)
 
 ```grey
-use greystd::module::{ ModuleInfo, Version };
+fn reg() { ModuleRegistry_new() }
+fn desc() { ModuleDescriptor_new("my_lib", "1.0.0", { greet: fn(name) { concat_str("Hi ", name) } }) }
+fn r() { registry_register(reg(), "my_lib", desc()) }
+fn exports() { module_exports(registry_get(r(), "my_lib")) }
+```
 
-let v = Version::parse("1.2.3")?;
-assert_eq(v.major(), 1);
-assert_eq(v.minor(), 2);
-assert_eq(v.patch(), 3);
+### 10.2 Version (`src/module/version.grey`)
 
-// Compare versions
-assert(Version::parse("2.0.0")? > Version::parse("1.9.9")?);
+```grey
+fn v() { version_parse("1.2.3") }
+version_to_string(v())              // "1.2.3"
+fn v2() { version_bump_minor(v()) } // 1.3.0
+version_gt(v2(), v())               // true
+version_compatible(v2(), v())        // true (same major)
+version_is_stable(v())              // true
+```
+
+### 10.3 Metadata (`src/module/metadata.grey`)
+
+```grey
+fn meta() { PackageMeta_new("my_pkg", "1.0.0", "A great package") }
+fn m() { meta_set_license(meta_set_authors(meta(), ["Alice"]), "MIT") }
+fn with_dep() { meta_add_dep(m(), "greystd", "0.1.0") }
+fn toml_str() { meta_to_toml(with_dep()) }
 ```
 
 ---
@@ -669,34 +710,65 @@ assert(Version::parse("2.0.0")? > Version::parse("1.9.9")?);
 
 **Path:** `src/error/`
 
-Structured error types with chaining, categorization, and stack traces.
+### 11.1 Error Types (`src/error/types.grey`)
 
 ```grey
-use greystd::error::{ Error, ErrorKind, AnyError };
+fn e() { Error_new("something went wrong") }
+fn te() { TypeError("expected number") }
+fn wrapped() { error_wrap(te(), "in validate()") }
+error_format(wrapped())  // "[TypeError] in validate(): expected number"
+fn root() { error_root_cause(wrapped()) }  // original TypeError
 
-// Custom errors
-let err = AnyError::new("something failed");
-let wrapped = AnyError::with_source("outer operation", Box::new(inner_err));
-
-// Error kinds
-match err.kind() {
-    ErrorKind::NotFound => println("file not found"),
-    ErrorKind::PermissionDenied => println("access denied"),
-    ErrorKind::Timeout => println("operation timed out"),
-    _ => println("other error: {}", err),
-}
-
-// The ? operator propagates errors automatically
-fn load_config() -> Result<Config, Error> {
-    let text = File::read_to_string("config.toml")?;
-    let config = parse_toml(&text)?;
-    Ok(config)
-}
+fn result() { try_run(fn() { risky_operation() }) }
+fn safe() { try_or(fn() { parse_int("abc") }, 0) }  // 0
 ```
 
-`ErrorKind` variants: `NotFound`, `PermissionDenied`, `AlreadyExists`, `InvalidInput`, `InvalidData`, `Timeout`, `ConnectionRefused`, `ConnectionReset`, `BrokenPipe`, `OutOfMemory`, `Interrupted`, `Other`
+### 11.2 Stack Traces (`src/error/trace.grey`)
 
-All `ErrorKind` values implement `Clone`, `Copy`, `Eq`, and `PartialEq`.
+```grey
+fn frame() { StackFrame_new("my_func", "app.grey", 42) }
+fn trace() { trace_push(StackTrace_empty(), frame()) }
+trace_format(trace())  // "Stack trace:\n  at my_func (app.grey:42)"
+```
+
+### 11.3 Assertions (`src/error/assert.grey`)
+
+```grey
+assert_true(gt(x, 0), "x must be positive")
+assert_eq(result(), 42, "computation result")
+assert_contains(items, "apple", "should have apple")
+assert_throws(fn() { panic("boom") }, "should throw")
+
+fn checks() { check_all([
+  fn() { check(gt(x, 0), "x positive") },
+  fn() { check(lt(x, 100), "x under 100") }
+]) }
+```
+
+### 11.4 Debug (`src/error/debug.grey`)
+
+```grey
+debug_print(some_complex_object)   // pretty-printed
+debug_log("result", computation())
+fn tapped() { tap(value, "step1") }  // logs and passes through
+debug_time("factorial", fn() { factorial(1000) })
+fn info() { debug_inspect(value) }
+```
+
+### 11.5 Logging (`src/error/log.grey`)
+
+```grey
+fn logger() { Logger_new("app") }
+fn l() { log_info(logger(), "Server started") }
+fn l2() { log_error(l(), "Connection failed") }
+fn l3() { log_with(l2(), LOG_WARN(), "High latency", { ms: 500, endpoint: "/api" }) }
+fn child() { logger_child(logger(), "db") }
+
+// Simple global-style logging
+info("Server starting")
+warn("Disk space low")
+error("Connection refused")
+```
 
 ---
 
@@ -704,34 +776,60 @@ All `ErrorKind` values implement `Clone`, `Copy`, `Eq`, and `PartialEq`.
 
 **Path:** `src/test/`
 
-Built-in unit testing with assertions and test runners.
+### 12.1 Test Assertions (`src/test/assert.grey`)
+
+Non-panicking assertions that return pass/fail results.
 
 ```grey
-use greystd::test::{ TestCase, TestSuite, assert_eq, assert_ne, assert };
-
-fn test_addition() {
-    assert_eq(2 + 2, 4, "basic addition");
-}
-
-fn test_string_ops() {
-    let s = String::from("hello");
-    assert(s.contains("ell"), "contains substring");
-    assert_ne(s.len(), 0, "string is not empty");
-}
-
-pub fn main() {
-    let mut suite = TestSuite::new("My Tests");
-    suite.add(TestCase::new("addition", test_addition));
-    suite.add(TestCase::new("string_ops", test_string_ops));
-
-    let report = suite.run();
-    println(report.summary());
-}
+test_eq(actual, expected, "values match")
+test_true(condition, "should be true")
+test_contains(array, value, "should contain")
+test_throws(fn() { panic("boom") }, "should throw")
+test_approx(3.14159, 3.14, 0.01, "close to pi")
 ```
 
-**Assertion functions:** `assert(cond, msg)`, `assert_eq(a, b, msg)`, `assert_ne(a, b, msg)`
+### 12.2 Test Runner (`src/test/runner.grey`)
 
-**Benchmark support:** `src/test/bench.grey` — micro-benchmarking with warm-up, iterations, and statistical reporting.
+```grey
+fn suite() { TestSuite_new("My Tests") }
+fn s() { suite_test(suite(), "addition", fn() {
+  [
+    test_eq(add(1, 2), 3, "1+2=3"),
+    test_eq(add(0, 0), 0, "0+0=0")
+  ]
+}) }
+fn result() { run_suite(s()) }
+print_suite_results(result())
+// Prints: [PASS] addition
+//   Total: 1 | Passed: 1 | ...
+```
+
+### 12.3 Benchmarks (`src/test/bench.grey`)
+
+```grey
+fn b() { Benchmark_new("factorial", fn() { factorial(20) }) }
+fn b_fast() { bench_iterations(b(), 1000) }
+fn result() { run_benchmark(b_fast()) }
+print_bench_result(result())
+// Prints avg, min, max, median, p95, ops/sec
+```
+
+### 12.4 Unit Testing DSL (`src/test/unit.grey`)
+
+```grey
+describe("Math", fn() {
+  [
+    it("adds numbers", fn() { test_eq(add(1, 2), 3, "add") }),
+    it("multiplies", fn() { test_eq(mul(3, 4), 12, "mul") }),
+    it("factorial", fn() { test_eq(factorial(5), 120, "fact") })
+  ]
+})
+
+// Or quick style:
+run_tests("Quick", [
+  it("works", fn() { pass("ok") })
+])
+```
 
 ---
 
@@ -739,24 +837,44 @@ pub fn main() {
 
 **Path:** `src/reflect/`
 
-Runtime type introspection and metadata.
+### 13.1 Type Metadata (`src/reflect/type_meta.grey`)
 
 ```grey
-use greystd::reflect::{ TypeInfo, TypeId, FieldInfo };
+fn tm() { reflect_type(42) }         // TypeMeta for number
+fn obj_tm() { reflect_type({ _type: "Widget", name: "btn" }) }
+typemeta_name(obj_tm())              // "Widget"
+typemeta_fields(obj_tm())            // { name: "string" }
+```
 
-let info = TypeInfo::of::<Vec<i32>>();
-println("Type: {}", info.name());
-println("Size: {} bytes", info.size());
+### 13.2 Attributes (`src/reflect/attribute.grey`)
 
-// Type identity
-let id1 = TypeId::of::<i32>();
-let id2 = TypeId::of::<String>();
-assert_ne(id1, id2);
+```grey
+fn attrs() { attrset_add(attrset_add(AttributeSet_new(), attr_doc("A useful function")), attr_deprecated("use v2")) }
+attrset_has(attrs(), "deprecated")   // true
+fn annotated() { Annotated_new(my_func, attrs()) }
+annotated_get_attr(annotated(), "doc")  // "A useful function"
+```
 
-// Struct field introspection
-for field in info.fields() {
-    println("  {}: {}", field.name(), field.type_name());
-}
+### 13.3 Inspection (`src/reflect/inspect.grey`)
+
+```grey
+fn info() { inspect({ _type: "Config", port: 8080, debug: true }) }
+detailed_type(42)                  // "integer"
+detailed_type("hello")             // "string(5)"
+fn shape() { inspect_shape(value) }
+deep_eq([1, {a: 2}], [1, {a: 2}]) // true
+```
+
+### 13.4 Dynamic Invocation (`src/reflect/invoke.grey`)
+
+```grey
+fn dt() { dispatch_register(DispatchTable_new(), "greet", fn(name) { concat_str("Hi ", name) }) }
+dispatch_call(dt(), "greet", ["Alice"])  // Ok("Hi Alice")
+
+fn add3() { curry(fn(a, b, c) { add(add(a, b), c) }, 3) }
+add3()(1)(2)(3)  // 6
+
+fn result() { pipe(5, [fn(x) { mul(x, 2) }, fn(x) { add(x, 1) }]) }  // 11
 ```
 
 ---
@@ -765,82 +883,68 @@ for field in info.fields() {
 
 **Path:** `src/deterministic/`
 
-Grey++'s unique advantage — deterministic collections, scheduling, and replayable I/O for verifiable computing.
+### 14.1 Ordered Collections (`src/deterministic/collections.grey`)
 
 ```grey
-use greystd::deterministic::{ DeterministicRuntime, ReplayIo };
+fn om() { omap_insert(omap_insert(OrderedMap_new(), "b", 2), "a", 1) }
+omap_keys(om())       // ["b", "a"] (insertion order)
+omap_get(om(), "a")   // 1
 
-// Create a deterministic runtime with a fixed seed
-let rt = DeterministicRuntime::new(42);
-let io = rt.io();
-
-// All randomness, time, and I/O are deterministic and replayable
-let random_bytes = io.random_bytes(16);  // always the same for seed=42
-let now = io.now();                       // controlled clock
-
-// Deterministic collections maintain insertion order
-use greystd::deterministic::det_map::DetHashMap;
-let mut m = DetHashMap::new();
-m.insert("b", 2);
-m.insert("a", 1);
-// Iteration order is guaranteed: [("b", 2), ("a", 1)]
+fn ss() { sset_insert(sset_insert(SortedSet_default(), 3), 1) }
+sset_items(ss())      // [1, 3]
 ```
 
-**Components:** `DetHashMap`, `DetHashSet`, `DetVec`, `ReplayIo`, `DetScheduler`, `DetAllocator`
-
----
-
-## Prelude
-
-The prelude automatically imports the most essential types so you don't have to:
+### 14.2 Deterministic Scheduler (`src/deterministic/scheduler.grey`)
 
 ```grey
-// These are always available without explicit `use`:
-String, Bytes, ByteBuffer, Array, Vec, HashMap, HashSet, Tuple,
-Option (Some, None), Result (Ok, Err),
-Iterator, IntoIterator,
-math,
-Box, Rc, Arc,
-Error, ErrorKind,
-print, println, eprint, eprintln
+fn sched() { DetScheduler_new(42) }
+fn s1() { det_schedule(sched(), "task_a", 1, fn() { "result_a" }) }
+fn s2() { det_schedule(s1(), "task_b", 2, fn() { "result_b" }) }
+fn done() { det_run_all(s2()) }
+det_log(done())  // [{ name: "task_b", tick: 1 }, { name: "task_a", tick: 2 }]
 ```
 
-To use the prelude explicitly:
+### 14.3 IO Replay (`src/deterministic/replay_io.grey`)
 
 ```grey
-use greystd::prelude::*;
+// Record
+fn rec() { io_record_read(io_record_read(IORecorder_new(), "stdin", "hello"), "file", "content") }
+fn json() { io_recording_to_json(rec()) }
+
+// Replay
+fn player() { IOPlayer_from(rec()) }
+fn r1() { io_replay_read(player()) }
+get(r1(), "data")  // "hello"
+fn r2() { io_replay_read(get(r1(), "player")) }
+get(r2(), "data")  // "content"
 ```
 
----
+### 14.4 Pool Allocator (`src/deterministic/allocator.grey`)
 
-## Project Structure
+```grey
+fn pool() { PoolAllocator_new(8) }
+fn r() { pool_alloc(pool(), "value_a") }
+fn p() { get(r(), "allocator") }
+pool_get(p(), get(r(), "handle"))    // "value_a"
+pool_allocated(p())                  // 1
+fn freed() { pool_free(p(), get(r(), "handle")) }
+pool_free_count(freed())             // 8
 
-```
-greystd/
-├── greystd.toml          # Package manifest
-├── LICENSE                # MIT License
-├── README.md              # Project overview
-├── DOCS.md                # This file
-├── src/
-│   ├── lib.grey           # Root module — re-exports all subsystems
-│   ├── core/              # Foundational types
-│   ├── mem/               # Smart pointers & memory
-│   ├── concurrent/        # Async, locks, channels, atomics
-│   ├── io/                # Files, streams, console
-│   ├── net/               # TCP, UDP, HTTP, WebSocket
-│   ├── serial/            # JSON, YAML, TOML, binary
-│   ├── time/              # Clock, duration, scheduling
-│   ├── crypto/            # Hash, AES, RNG
-│   ├── sys/               # Process, env, FFI
-│   ├── module/            # Versioning, module loading
-│   ├── error/             # Error types & diagnostics
-│   ├── test/              # Unit tests & benchmarks
-│   ├── reflect/           # Runtime type info
-│   └── deterministic/     # Deterministic execution
-└── tests/
-    └── validate.grey      # Validation test suite (87 tests)
+fn bump() { BumpAllocator_new(100) }
+fn b() { bump_alloc(bump(), "data") }
+bump_get(get(b(), "allocator"), get(b(), "handle"))
 ```
 
 ---
 
-*GreyStd v1.0.0 — MIT License — Copyright (c) 2026 Robert-Marshall01*
+## Conventions
+
+All GreyStd code follows these Grey++ conventions:
+
+1. **Factory functions**: Types are created via `TypeName_new(args)` returning `{ _type: "TypeName", ... }`
+2. **Method functions**: Operations are `type_method(self, args)` — standalone functions taking the object as first parameter
+3. **Immutability**: Functions return new objects/arrays; they never mutate in place
+4. **No keywords**: No `let`, `var`, `const`, `struct`, `class`, `trait`, `impl`, `enum`, `if`, `else`, `for`, `while`
+5. **Control flow via functions**: `if_then(cond, then_fn, else_fn)`, `cond(...)`, `match(...)`, `when(...)`, `unless(...)`
+6. **Iteration via HOFs**: `map()`, `filter()`, `reduce()`, `fold()`, `forEach()`, or recursion
+7. **Everything is `fn`**: All bindings are `fn name(args) { body }`

@@ -1,140 +1,114 @@
-/// error::assert — Rich assertion utilities for runtime checks.
+// GreyStd Error - Assert
+// Assertion utilities for validation and contracts
 
-use crate::core::string::String;
-use crate::error::trace::Backtrace;
-
-/// Assert two values are equal with a detailed failure message.
-pub fn assert_eq<T: PartialEq + Debug>(left: &T, right: &T) {
-    if left != right {
-        panic!("assertion failed: `(left == right)`\n  left: `{:?}`\n right: `{:?}`", left, right);
-    }
+// Assert a condition is true
+fn assert_true(condition, message) {
+  unless(condition, fn() {
+    panic(concat_str("Assertion failed: ", message))
+  })
 }
 
-/// Assert two values are equal with a custom message.
-pub fn assert_eq_msg<T: PartialEq + Debug>(left: &T, right: &T, msg: &str) {
-    if left != right {
-        panic!("assertion failed: {}\n  left: `{:?}`\n right: `{:?}`", msg, left, right);
-    }
+// Assert a condition is false
+fn assert_false(condition, message) {
+  assert_true(not(condition), message)
 }
 
-/// Assert two values are not equal.
-pub fn assert_ne<T: PartialEq + Debug>(left: &T, right: &T) {
-    if left == right {
-        panic!("assertion failed: `(left != right)`\n  left: `{:?}`\n right: `{:?}`", left, right);
-    }
+// Assert two values are equal
+fn assert_eq(actual, expected, message) {
+  assert_true(eq(actual, expected),
+    concat_str(message, " - expected: ", to_string(expected), ", got: ", to_string(actual))
+  )
 }
 
-/// Assert a predicate holds on a value, with a descriptive label.
-pub fn assert_that<T: Debug>(value: &T, predicate: impl FnOnce(&T) -> bool, description: &str) {
-    if !predicate(value) {
-        panic!("assertion failed: expected {}, got `{:?}`", description, value);
-    }
+// Assert two values are not equal
+fn assert_ne(actual, unexpected, message) {
+  assert_true(not(eq(actual, unexpected)),
+    concat_str(message, " - should not equal: ", to_string(unexpected))
+  )
 }
 
-/// Assert a value is Some.
-pub fn assert_some<T: Debug>(opt: &Option<T>) -> &T {
-    match opt {
-        Some(v) => v,
-        None => panic!("assertion failed: expected Some, got None"),
-    }
+// Assert value is greater than
+fn assert_gt(actual, threshold, message) {
+  assert_true(gt(actual, threshold),
+    concat_str(message, " - expected > ", to_string(threshold), ", got: ", to_string(actual))
+  )
 }
 
-/// Assert a value is None.
-pub fn assert_none<T: Debug>(opt: &Option<T>) {
-    if let Some(v) = opt {
-        panic!("assertion failed: expected None, got Some({:?})", v);
-    }
+// Assert value is less than
+fn assert_lt(actual, threshold, message) {
+  assert_true(lt(actual, threshold),
+    concat_str(message, " - expected < ", to_string(threshold), ", got: ", to_string(actual))
+  )
 }
 
-/// Assert a Result is Ok.
-pub fn assert_ok<T: Debug, E: Debug>(result: &Result<T, E>) -> &T {
-    match result {
-        Ok(v) => v,
-        Err(e) => panic!("assertion failed: expected Ok, got Err({:?})", e),
-    }
+// Assert value is not nil
+fn assert_some(value, message) {
+  assert_true(not(eq(value, nil)), concat_str(message, " - expected non-nil value"))
 }
 
-/// Assert a Result is Err.
-pub fn assert_err<T: Debug, E: Debug>(result: &Result<T, E>) -> &E {
-    match result {
-        Ok(v) => panic!("assertion failed: expected Err, got Ok({:?})", v),
-        Err(e) => e,
-    }
+// Assert value is nil
+fn assert_none(value, message) {
+  assert_true(eq(value, nil), concat_str(message, " - expected nil"))
 }
 
-/// Assert a value is within a range.
-pub fn assert_in_range<T: PartialOrd + Debug>(value: &T, min: &T, max: &T) {
-    if value < min || value > max {
-        panic!("assertion failed: `{:?}` not in range [{:?}, {:?}]", value, min, max);
-    }
+// Assert value is truthy
+fn assert_truthy(value, message) {
+  assert_true(truthy(value), message)
 }
 
-/// Assert a float is approximately equal (within epsilon).
-pub fn assert_approx_eq(left: f64, right: f64, epsilon: f64) {
-    let diff = (left - right).abs();
-    if diff > epsilon {
-        panic!("assertion failed: `{} ≈ {}` (diff={}, epsilon={})", left, right, diff, epsilon);
-    }
+// Assert a function throws
+fn assert_throws(f, message) {
+  fn threw() { try_catch(f, fn(_) { true }, fn(_) { false }) }
+  assert_true(threw(), concat_str(message, " - expected function to throw"))
 }
 
-/// Assert a string contains a substring.
-pub fn assert_contains(haystack: &str, needle: &str) {
-    if !haystack.contains(needle) {
-        panic!("assertion failed: `{:?}` does not contain `{:?}`", haystack, needle);
-    }
+// Assert a function does not throw
+fn assert_no_throw(f, message) {
+  fn threw() { try_catch(f, fn(_) { true }, fn(_) { false }) }
+  assert_false(threw(), concat_str(message, " - expected function not to throw"))
 }
 
-/// Assert a string starts with a prefix.
-pub fn assert_starts_with(s: &str, prefix: &str) {
-    if !s.starts_with(prefix) {
-        panic!("assertion failed: `{:?}` does not start with `{:?}`", s, prefix);
-    }
+// Assert array contains value
+fn assert_contains(arr, value, message) {
+  assert_true(contains(arr, value),
+    concat_str(message, " - expected array to contain: ", to_string(value))
+  )
 }
 
-/// Assert a slice has a specific length.
-pub fn assert_len<T>(slice: &[T], expected: usize) {
-    if slice.len() != expected {
-        panic!("assertion failed: expected length {}, got {}", expected, slice.len());
-    }
+// Assert string contains substring
+fn assert_str_contains(s, substr, message) {
+  assert_true(contains(s, substr),
+    concat_str(message, " - expected string to contain: ", substr)
+  )
 }
 
-/// Assert a slice is empty.
-pub fn assert_empty<T>(slice: &[T]) {
-    if !slice.is_empty() {
-        panic!("assertion failed: expected empty, got {} elements", slice.len());
-    }
+// Assert array length
+fn assert_length(arr, expected_len, message) {
+  assert_eq(length(arr), expected_len, concat_str(message, " (length)"))
 }
 
-/// Soft assertion that collects failures instead of panicking.
-pub struct SoftAssert {
-    failures: Vec<String>,
+// Assert value is of type
+fn assert_type(value, expected_type, message) {
+  assert_eq(type_of(value), expected_type,
+    concat_str(message, " - type mismatch")
+  )
 }
 
-impl SoftAssert {
-    pub fn new() -> SoftAssert {
-        SoftAssert { failures: Vec::new() }
-    }
+// Soft assert (returns result instead of panicking)
+fn check(condition, message) {
+  if_then(condition, fn() { Ok(true) }, fn() { Err(message) })
+}
 
-    pub fn eq<T: PartialEq + Debug>(&mut self, left: &T, right: &T, msg: &str) {
-        if left != right {
-            self.failures.push(format!("{}: left={:?}, right={:?}", msg, left, right));
-        }
-    }
+// Run multiple checks and collect failures
+fn check_all(checks) {
+  fn results() { map(checks, fn(c) { c() }) }
+  fn failures() { filter(results(), fn(r) { is_err(r) }) }
+  if_then(eq(length(failures()), 0),
+    fn() { Ok(length(results())) },
+    fn() { Err(map(failures(), fn(f) { result_unwrap_err(f) })) }
+  )
+}
 
-    pub fn check(&mut self, cond: bool, msg: &str) {
-        if !cond {
-            self.failures.push(String::from(msg));
-        }
-    }
-
-    pub fn has_failures(&self) -> bool { !self.failures.is_empty() }
-    pub fn failure_count(&self) -> usize { self.failures.len() }
-
-    /// Panic if there were any failures.
-    pub fn assert_all(self) {
-        if !self.failures.is_empty() {
-            let msg = self.failures.join("\n  ");
-            panic!("soft assertions failed ({}):\n  {}", self.failures.len(), msg);
-        }
-    }
+fn result_unwrap_err(r) {
+  get(r, "error")
 }

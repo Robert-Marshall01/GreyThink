@@ -1,213 +1,116 @@
-/// error::types — Core error trait and composable error types.
+// GreyStd Error - Types
+// Error type constructors and utilities
 
-use crate::core::string::String;
-use crate::core::vec::Vec;
-use crate::core::option::Option;
-use crate::error::trace::Backtrace;
-
-/// The base error trait for all Grey++ errors.
-pub trait Error: Display + Debug {
-    /// A human-readable error message.
-    fn message(&self) -> String;
-
-    /// The underlying cause of this error, if any.
-    fn source(&self) -> Option<&dyn Error> { None }
-
-    /// The error kind.
-    fn kind(&self) -> ErrorKind { ErrorKind::Other }
-
-    /// Capture a backtrace at the error site.
-    fn backtrace(&self) -> Option<&Backtrace> { None }
+// Create a basic error
+fn Error_new(message) {
+  {
+    _type: "Error",
+    kind: "Error",
+    message: message,
+    timestamp: timestamp()
+  }
 }
 
-/// Broad classification of errors.
-#[derive(Clone, Copy, Eq, PartialEq)]
-pub enum ErrorKind {
-    /// An I/O error.
-    Io,
-    /// A parsing or format error.
-    Parse,
-    /// A validation or constraint error.
-    Validation,
-    /// Permission/access denied.
-    PermissionDenied,
-    /// Resource not found.
-    NotFound,
-    /// Timeout.
-    Timeout,
-    /// Network-related error.
-    Network,
-    /// Encoding/decoding error.
-    Encoding,
-    /// Cryptographic error.
-    Crypto,
-    /// Out of memory.
-    OutOfMemory,
-    /// Internal/logic error (bug).
-    Internal,
-    /// User-cancelled operation.
-    Cancelled,
-    /// Other/unclassified.
-    Other,
+// Create a typed error
+fn Error_typed(kind, message) {
+  {
+    _type: "Error",
+    kind: kind,
+    message: message,
+    timestamp: timestamp()
+  }
 }
 
-impl ErrorKind {
-    pub fn name(&self) -> &str {
-        match self {
-            ErrorKind::Io => "IO", ErrorKind::Parse => "Parse",
-            ErrorKind::Validation => "Validation", ErrorKind::PermissionDenied => "PermissionDenied",
-            ErrorKind::NotFound => "NotFound", ErrorKind::Timeout => "Timeout",
-            ErrorKind::Network => "Network", ErrorKind::Encoding => "Encoding",
-            ErrorKind::Crypto => "Crypto", ErrorKind::OutOfMemory => "OutOfMemory",
-            ErrorKind::Internal => "Internal", ErrorKind::Cancelled => "Cancelled",
-            ErrorKind::Other => "Other",
-        }
-    }
+// Create a typed error with context data
+fn Error_with_context(kind, message, context) {
+  {
+    _type: "Error",
+    kind: kind,
+    message: message,
+    context: context,
+    timestamp: timestamp()
+  }
 }
 
-/// A type-erased boxed error.
-pub type BoxError = Box<dyn Error + Send + Sync>;
+// Common error types
+fn TypeError(msg) { Error_typed("TypeError", msg) }
+fn ValueError(msg) { Error_typed("ValueError", msg) }
+fn IOError(msg) { Error_typed("IOError", msg) }
+fn NetworkError(msg) { Error_typed("NetworkError", msg) }
+fn ParseError(msg) { Error_typed("ParseError", msg) }
+fn NotFoundError(msg) { Error_typed("NotFoundError", msg) }
+fn PermissionError(msg) { Error_typed("PermissionError", msg) }
+fn TimeoutError(msg) { Error_typed("TimeoutError", msg) }
+fn OverflowError(msg) { Error_typed("OverflowError", msg) }
 
-/// A simple concrete error with message and optional source chain.
-pub struct AnyError {
-    message: String,
-    kind: ErrorKind,
-    source: Option<BoxError>,
-    backtrace: Option<Backtrace>,
+// Get error message
+fn error_message(err) {
+  get(err, "message")
 }
 
-impl AnyError {
-    /// Create with a message.
-    pub fn new(message: impl Into<String>) -> AnyError {
-        AnyError {
-            message: message.into(),
-            kind: ErrorKind::Other,
-            source: None,
-            backtrace: None,
-        }
-    }
-
-    /// Create with message and kind.
-    pub fn with_kind(message: impl Into<String>, kind: ErrorKind) -> AnyError {
-        AnyError { message: message.into(), kind, source: None, backtrace: None }
-    }
-
-    /// Attach a source error.
-    pub fn with_source(mut self, source: impl Error + Send + Sync + 'static) -> AnyError {
-        self.source = Some(Box::new(source));
-        self
-    }
-
-    /// Capture a backtrace.
-    pub fn with_backtrace(mut self) -> AnyError {
-        self.backtrace = Some(Backtrace::capture());
-        self
-    }
-
-    /// Set the error kind.
-    pub fn set_kind(mut self, kind: ErrorKind) -> AnyError {
-        self.kind = kind;
-        self
-    }
-
-    /// Walk the entire error chain.
-    pub fn chain(&self) -> ErrorChain {
-        ErrorChain { current: Some(self as &dyn Error) }
-    }
+// Get error kind
+fn error_kind(err) {
+  get(err, "kind")
 }
 
-impl Error for AnyError {
-    fn message(&self) -> String { self.message.clone() }
-    fn source(&self) -> Option<&dyn Error> { self.source.as_deref() }
-    fn kind(&self) -> ErrorKind { self.kind }
-    fn backtrace(&self) -> Option<&Backtrace> { self.backtrace.as_ref() }
+// Get error context
+fn error_context(err) {
+  get(err, "context")
 }
 
-impl Display for AnyError {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(f, "{}", self.message)
-    }
+// Check if value is an error
+fn is_error(val) {
+  and(is_object(val), eq(get(val, "_type"), "Error"))
 }
 
-impl Debug for AnyError {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(f, "AnyError({}: {})", self.kind.name(), self.message)?;
-        if let Some(src) = &self.source {
-            write!(f, "\n  caused by: {:?}", src)?;
-        }
-        if let Some(bt) = &self.backtrace {
-            write!(f, "\n{}", bt.to_string())?;
-        }
-        Ok(())
-    }
+// Check error kind
+fn error_is_kind(err, kind) {
+  eq(get(err, "kind"), kind)
 }
 
-/// Converts any Error into an AnyError for easy error propagation.
-/// Note: self-conversion (AnyError -> AnyError) is handled by the compiler
-/// via the identity From impl and does not go through this blanket impl.
-impl<E: Error + Send + Sync + 'static> From<E> for AnyError {
-    fn from(err: E) -> AnyError {
-        AnyError::new(err.message()).
-            set_kind(err.kind()).
-            with_source(err)
-    }
+// Format error as string
+fn error_format(err) {
+  concat_str("[", get(err, "kind"), "] ", get(err, "message"))
 }
 
-/// An iterator over the error chain.
-pub struct ErrorChain<'a> {
-    current: Option<&'a dyn Error>,
+// Wrap an error with additional context
+fn error_wrap(err, context_msg) {
+  {
+    _type: "Error",
+    kind: get(err, "kind"),
+    message: concat_str(context_msg, ": ", get(err, "message")),
+    cause: err,
+    timestamp: timestamp()
+  }
 }
 
-impl<'a> Iterator for ErrorChain<'a> {
-    type Item = &'a dyn Error;
-    fn next(&mut self) -> Option<&'a dyn Error> {
-        let current = self.current?;
-        self.current = current.source();
-        Some(current)
-    }
+// Get the root cause of a chain of errors
+fn error_root_cause(err) {
+  fn cause() { get(err, "cause") }
+  if_then(eq(cause(), nil), fn() { err }, fn() { error_root_cause(cause()) })
 }
 
-/// Context extension for Result types — wraps errors with additional context.
-pub trait ResultExt<T, E> {
-    /// Wrap the error with additional context message.
-    fn context(self, msg: impl Into<String>) -> Result<T, AnyError>;
-
-    /// Wrap the error with a lazily-evaluated context message.
-    fn with_context<F: FnOnce() -> String>(self, f: F) -> Result<T, AnyError>;
+// Collect error chain as array
+fn error_chain(err) {
+  fn collect(current, acc) {
+    fn next() { get(current, "cause") }
+    fn new_acc() { append(acc, current) }
+    if_then(eq(next(), nil), fn() { new_acc() }, fn() { collect(next(), new_acc()) })
+  }
+  collect(err, [])
 }
 
-impl<T, E: Error + Send + Sync + 'static> ResultExt<T, E> for Result<T, E> {
-    fn context(self, msg: impl Into<String>) -> Result<T, AnyError> {
-        self.map_err(|e| AnyError::new(msg).with_source(e))
-    }
-
-    fn with_context<F: FnOnce() -> String>(self, f: F) -> Result<T, AnyError> {
-        self.map_err(|e| AnyError::new(f()).with_source(e))
-    }
+// Try a function, returning Result
+fn try_run(f) {
+  try_catch(f, fn(e) { Err(e) }, fn(v) { Ok(v) })
 }
 
-/// Create an AnyError from a format string (like `anyhow!`).
-#[macro_export]
-macro_rules! err {
-    ($($arg:tt)*) => {
-        $crate::error::types::AnyError::new(format!($($arg)*))
-    };
+// Try with fallback value
+fn try_or(f, default_val) {
+  try_catch(f, fn(_) { default_val }, fn(v) { v })
 }
 
-/// Shorthand to return early with an error.
-#[macro_export]
-macro_rules! bail {
-    ($($arg:tt)*) => {
-        return Err($crate::error::types::AnyError::new(format!($($arg)*)));
-    };
-}
-
-/// Ensure a condition is true, or return an error.
-#[macro_export]
-macro_rules! ensure {
-    ($cond:expr, $($arg:tt)*) => {
-        if !($cond) {
-            return Err($crate::error::types::AnyError::new(format!($($arg)*)));
-        }
-    };
+// Try with fallback function
+fn try_or_else(f, fallback_fn) {
+  try_catch(f, fn(e) { fallback_fn(e) }, fn(v) { v })
 }

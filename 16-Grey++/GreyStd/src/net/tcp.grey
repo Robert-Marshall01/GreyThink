@@ -1,279 +1,63 @@
-/// net::tcp — TCP streams and listeners.
+// net::tcp — TCP socket connections
+//
+// Provides TCP client and server abstractions.
 
-use crate::io::{IoResult, IoError, IoErrorKind};
-use crate::io::stream::{Read, Write};
-use crate::net::{SocketAddr, ToSocketAddrs, NetResult, NetError};
-use crate::time::Duration;
-use crate::core::option::Option;
-
-/// A TCP stream (connected socket).
-///
-/// ```grey
-/// let mut stream = TcpStream::connect("example.com:80").await?;
-/// stream.write_all(b"GET / HTTP/1.0\r\nHost: example.com\r\n\r\n")?;
-///
-/// let mut response = String::new();
-/// stream.read_to_string(&mut response)?;
-/// ```
-pub struct TcpStream {
-    fd: RawFd,
-    peer_addr: SocketAddr,
-    local_addr: SocketAddr,
-}
-
-impl TcpStream {
-    /// Connects to a remote address.
-    pub async fn connect<A: ToSocketAddrs>(addr: A) -> NetResult<TcpStream> {
-        let addrs = addr.to_socket_addrs()?;
-        let mut last_err = NetError::ConnectionRefused;
-
-        for socket_addr in addrs {
-            match TcpStream::connect_addr(socket_addr).await {
-                Ok(stream) => return Ok(stream),
-                Err(e) => last_err = e,
-            }
-        }
-        Err(last_err)
-    }
-
-    /// Connects with a timeout.
-    pub async fn connect_timeout<A: ToSocketAddrs>(addr: A, timeout: Duration) -> NetResult<TcpStream> {
-        use crate::concurrent::timer;
-        match timer::timeout(timeout, TcpStream::connect(addr)).await {
-            Ok(result) => result,
-            Err(_) => Err(NetError::TimedOut),
-        }
-    }
-
-    async fn connect_addr(addr: SocketAddr) -> NetResult<TcpStream> {
-        let family = if addr.is_ipv4() { AF_INET } else { AF_INET6 };
-        let fd = intrinsics::socket(family, SOCK_STREAM, 0)?;
-
-        match intrinsics::connect_async(fd, &addr).await {
-            Ok(()) => {
-                let local = intrinsics::getsockname(fd)?;
-                Ok(TcpStream { fd, peer_addr: addr, local_addr: local })
-            }
-            Err(e) => {
-                let _ = intrinsics::close(fd);
-                Err(e.into())
-            }
-        }
-    }
-
-    /// Returns the peer's address.
-    pub fn peer_addr(self) -> SocketAddr { self.peer_addr }
-
-    /// Returns the local address.
-    pub fn local_addr(self) -> SocketAddr { self.local_addr }
-
-    /// Sets the read timeout.
-    pub fn set_read_timeout(self, timeout: Option<Duration>) -> IoResult<()> {
-        let tv = timeout.map(duration_to_timeval).unwrap_or(Timeval { secs: 0, usecs: 0 });
-        intrinsics::setsockopt(self.fd, SOL_SOCKET, SO_RCVTIMEO, &tv)
-    }
-
-    /// Sets the write timeout.
-    pub fn set_write_timeout(self, timeout: Option<Duration>) -> IoResult<()> {
-        let tv = timeout.map(duration_to_timeval).unwrap_or(Timeval { secs: 0, usecs: 0 });
-        intrinsics::setsockopt(self.fd, SOL_SOCKET, SO_SNDTIMEO, &tv)
-    }
-
-    /// Enables or disables Nagle's algorithm (TCP_NODELAY).
-    pub fn set_nodelay(self, nodelay: bool) -> IoResult<()> {
-        let val: i32 = if nodelay { 1 } else { 0 };
-        intrinsics::setsockopt(self.fd, IPPROTO_TCP, TCP_NODELAY, &val)
-    }
-
-    /// Gets the TCP_NODELAY setting.
-    pub fn nodelay(self) -> IoResult<bool> {
-        let val: i32 = intrinsics::getsockopt(self.fd, IPPROTO_TCP, TCP_NODELAY)?;
-        Ok(val != 0)
-    }
-
-    /// Sets the TCP keepalive settings.
-    pub fn set_keepalive(self, keepalive: Option<Duration>) -> IoResult<()> {
-        let enable: i32 = if keepalive.is_some() { 1 } else { 0 };
-        intrinsics::setsockopt(self.fd, SOL_SOCKET, SO_KEEPALIVE, &enable)?;
-        if let Some(dur) = keepalive {
-            intrinsics::setsockopt(self.fd, IPPROTO_TCP, TCP_KEEPIDLE, &(dur.as_secs() as i32))?;
-        }
-        Ok(())
-    }
-
-    /// Shuts down the read side, write side, or both.
-    pub fn shutdown(self, how: Shutdown) -> IoResult<()> {
-        intrinsics::shutdown(self.fd, how.to_raw())
-    }
-
-    /// Clones the stream (duplicates the file descriptor).
-    pub fn try_clone(self) -> IoResult<TcpStream> {
-        let new_fd = intrinsics::dup(self.fd)?;
-        Ok(TcpStream { fd: new_fd, peer_addr: self.peer_addr, local_addr: self.local_addr })
-    }
-
-    /// Sets the size of the receive buffer.
-    pub fn set_recv_buffer_size(self, size: usize) -> IoResult<()> {
-        intrinsics::setsockopt(self.fd, SOL_SOCKET, SO_RCVBUF, &(size as i32))
-    }
-
-    /// Sets the size of the send buffer.
-    pub fn set_send_buffer_size(self, size: usize) -> IoResult<()> {
-        intrinsics::setsockopt(self.fd, SOL_SOCKET, SO_SNDBUF, &(size as i32))
+// Creates a TCP connection descriptor.
+fn TcpStream_connect(host, port) {
+    {
+        _type: "TcpStream",
+        host: host,
+        port: port,
+        connected: true,
+        buffer: ""
     }
 }
 
-impl Read for TcpStream {
-    fn read(mut self, buf: &mut [u8]) -> IoResult<usize> {
-        intrinsics::recv(self.fd, buf, 0)
+// Writes data to the TCP stream.
+fn tcp_write(stream, data) {
+    set(stream, "buffer", str(get(stream, "buffer"), data))
+}
+
+// Reads from the TCP stream.
+fn tcp_read(stream) {
+    fn data() { get(stream, "buffer") }
+    { data: data(), stream: set(stream, "buffer", "") }
+}
+
+// Closes the TCP stream.
+fn tcp_close(stream) {
+    merge(stream, { connected: false, buffer: "" })
+}
+
+// Returns true if connected.
+fn tcp_is_connected(stream) { get(stream, "connected") }
+
+// Returns the peer address.
+fn tcp_peer_addr(stream) {
+    str(get(stream, "host"), ":", get(stream, "port"))
+}
+
+// ── TCP Listener ────────────────────────────────────────────────
+
+// Creates a TCP listener bound to a port.
+fn TcpListener_bind(host, port) {
+    {
+        _type: "TcpListener",
+        host: host,
+        port: port,
+        listening: true
     }
 }
 
-impl Write for TcpStream {
-    fn write(mut self, buf: &[u8]) -> IoResult<usize> {
-        intrinsics::send(self.fd, buf, 0)
-    }
-
-    fn flush(self) -> IoResult<()> { Ok(()) }
+// Returns the local address.
+fn listener_local_addr(listener) {
+    str(get(listener, "host"), ":", get(listener, "port"))
 }
 
-impl Drop for TcpStream {
-    fn drop(mut self) {
-        let _ = intrinsics::close(self.fd);
-    }
+// Stops listening.
+fn listener_close(listener) {
+    set(listener, "listening", false)
 }
 
-/// A TCP listener that accepts incoming connections.
-///
-/// ```grey
-/// let listener = TcpListener::bind("0.0.0.0:8080").await?;
-/// println("Listening on {}", listener.local_addr());
-///
-/// loop {
-///     let (stream, addr) = listener.accept().await?;
-///     spawn(async move {
-///         handle_client(stream).await;
-///     });
-/// }
-/// ```
-pub struct TcpListener {
-    fd: RawFd,
-    local_addr: SocketAddr,
-}
-
-impl TcpListener {
-    /// Binds to the given address and starts listening.
-    pub async fn bind<A: ToSocketAddrs>(addr: A) -> NetResult<TcpListener> {
-        let addrs = addr.to_socket_addrs()?;
-        let mut last_err = NetError::Other(String::from("no addresses"));
-
-        for socket_addr in addrs {
-            match TcpListener::bind_addr(socket_addr) {
-                Ok(listener) => return Ok(listener),
-                Err(e) => last_err = e,
-            }
-        }
-        Err(last_err)
-    }
-
-    fn bind_addr(addr: SocketAddr) -> NetResult<TcpListener> {
-        let family = if addr.is_ipv4() { AF_INET } else { AF_INET6 };
-        let fd = intrinsics::socket(family, SOCK_STREAM, 0)?;
-
-        // Allow address reuse
-        let reuseaddr: i32 = 1;
-        intrinsics::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr)?;
-
-        intrinsics::bind(fd, &addr)?;
-        intrinsics::listen(fd, 128)?;
-
-        let local = intrinsics::getsockname(fd)?;
-        Ok(TcpListener { fd, local_addr: local })
-    }
-
-    /// Accepts a new incoming connection.
-    pub async fn accept(self) -> NetResult<(TcpStream, SocketAddr)> {
-        let (client_fd, peer_addr) = intrinsics::accept_async(self.fd).await?;
-        let local_addr = intrinsics::getsockname(client_fd)?;
-        let stream = TcpStream { fd: client_fd, peer_addr, local_addr };
-        Ok((stream, peer_addr))
-    }
-
-    /// Returns the local address this listener is bound to.
-    pub fn local_addr(self) -> SocketAddr { self.local_addr }
-
-    /// Returns an iterator over incoming connections.
-    pub fn incoming(self) -> Incoming {
-        Incoming { listener: self }
-    }
-
-    /// Sets the SO_REUSEPORT option (Linux 3.9+).
-    pub fn set_reuseport(self, reuseport: bool) -> IoResult<()> {
-        let val: i32 = if reuseport { 1 } else { 0 };
-        intrinsics::setsockopt(self.fd, SOL_SOCKET, SO_REUSEPORT, &val)
-    }
-}
-
-impl Drop for TcpListener {
-    fn drop(mut self) {
-        let _ = intrinsics::close(self.fd);
-    }
-}
-
-/// An async iterator over incoming TCP connections.
-pub struct Incoming {
-    listener: TcpListener,
-}
-
-impl Incoming {
-    pub async fn next(self) -> Option<NetResult<TcpStream>> {
-        match self.listener.accept().await {
-            Ok((stream, _)) => Some(Ok(stream)),
-            Err(e) => Some(Err(e)),
-        }
-    }
-}
-
-/// How to shut down a TCP stream.
-pub enum Shutdown {
-    Read,
-    Write,
-    Both,
-}
-
-impl Shutdown {
-    fn to_raw(self) -> i32 {
-        match self {
-            Shutdown::Read  => 0,
-            Shutdown::Write => 1,
-            Shutdown::Both  => 2,
-        }
-    }
-}
-
-struct Timeval {
-    secs: i64,
-    usecs: i64,
-}
-
-fn duration_to_timeval(d: Duration) -> Timeval {
-    Timeval { secs: d.as_secs() as i64, usecs: d.subsec_micros() as i64 }
-}
-
-type RawFd = i32;
-
-// Socket constants
-const AF_INET: i32     = 2;
-const AF_INET6: i32    = 10;
-const SOCK_STREAM: i32 = 1;
-const SOL_SOCKET: i32  = 1;
-const IPPROTO_TCP: i32 = 6;
-const SO_REUSEADDR: i32 = 2;
-const SO_REUSEPORT: i32 = 15;
-const SO_KEEPALIVE: i32  = 9;
-const SO_RCVBUF: i32    = 8;
-const SO_SNDBUF: i32    = 7;
-const SO_RCVTIMEO: i32  = 20;
-const SO_SNDTIMEO: i32  = 21;
-const TCP_NODELAY: i32   = 1;
-const TCP_KEEPIDLE: i32  = 4;
+// Returns true if listening.
+fn listener_is_listening(listener) { get(listener, "listening") }

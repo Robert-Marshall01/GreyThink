@@ -1,196 +1,112 @@
-/// module::metadata — Package metadata and dependency declarations.
+// GreyStd Module - Metadata
+// Package metadata and manifest utilities
 
-use crate::core::string::String;
-use crate::core::vec::Vec;
-use crate::core::map::HashMap;
-use crate::core::option::Option;
-use crate::module::version::{Version, VersionReq};
-
-/// Metadata about a Grey++ module/package.
-pub struct ModuleMeta {
-    /// Package name (e.g. "greystd").
-    pub name: String,
-    /// Semantic version.
-    pub version: Version,
-    /// Human-readable description.
-    pub description: Option<String>,
-    /// List of authors.
-    pub authors: Vec<String>,
-    /// SPDX license identifier (e.g. "MIT OR Apache-2.0").
-    pub license: Option<String>,
-    /// Repository URL.
-    pub repository: Option<String>,
-    /// Homepage URL.
-    pub homepage: Option<String>,
-    /// Documentation URL.
-    pub documentation: Option<String>,
-    /// Keywords for registry search.
-    pub keywords: Vec<String>,
-    /// Categories for registry classification.
-    pub categories: Vec<String>,
-    /// Minimum Grey++ edition required (e.g. "2026").
-    pub edition: Option<String>,
-    /// Dependencies.
-    pub dependencies: Vec<Dependency>,
-    /// Dev-only dependencies.
-    pub dev_dependencies: Vec<Dependency>,
-    /// Feature flags.
-    pub features: HashMap<String, Vec<String>>,
-    /// Default features.
-    pub default_features: Vec<String>,
+// Create package metadata
+fn PackageMeta_new(name, version, description) {
+  {
+    _type: "PackageMeta",
+    name: name,
+    version: version,
+    description: description,
+    authors: [],
+    license: nil,
+    repository: nil,
+    keywords: [],
+    dependencies: {},
+    dev_dependencies: {}
+  }
 }
 
-impl ModuleMeta {
-    /// Create minimal metadata.
-    pub fn new(name: &str, version: Version) -> ModuleMeta {
-        ModuleMeta {
-            name: String::from(name),
-            version,
-            description: None,
-            authors: Vec::new(),
-            license: None,
-            repository: None,
-            homepage: None,
-            documentation: None,
-            keywords: Vec::new(),
-            categories: Vec::new(),
-            edition: None,
-            dependencies: Vec::new(),
-            dev_dependencies: Vec::new(),
-            features: HashMap::new(),
-            default_features: Vec::new(),
-        }
-    }
-
-    /// Parse from a greystd.toml file.
-    pub fn from_toml(content: &str) -> Result<ModuleMeta, String> {
-        let toml = crate::serial::toml::TomlParser::parse(content)
-            .map_err(|e| format!("TOML parse error: {:?}", e))?;
-
-        let pkg = match toml.get("package") {
-            Some(crate::serial::toml::TomlValue::Table(t)) => t,
-            _ => return Err(String::from("missing [package] table")),
-        };
-
-        let name = match pkg.get("name") {
-            Some(crate::serial::toml::TomlValue::String(s)) => s.clone(),
-            _ => return Err(String::from("missing package.name")),
-        };
-
-        let version_str = match pkg.get("version") {
-            Some(crate::serial::toml::TomlValue::String(s)) => s.clone(),
-            _ => return Err(String::from("missing package.version")),
-        };
-        let version = Version::parse(&version_str)
-            .map_err(|e| format!("invalid version: {:?}", e))?;
-
-        let description = pkg.get("description").and_then(|v| {
-            if let crate::serial::toml::TomlValue::String(s) = v { Some(s.clone()) } else { None }
-        });
-
-        let license = pkg.get("license").and_then(|v| {
-            if let crate::serial::toml::TomlValue::String(s) = v { Some(s.clone()) } else { None }
-        });
-
-        let edition = pkg.get("edition").and_then(|v| {
-            if let crate::serial::toml::TomlValue::String(s) = v { Some(s.clone()) } else { None }
-        });
-
-        Ok(ModuleMeta {
-            name, version, description, license, edition,
-            authors: Vec::new(),
-            repository: None, homepage: None, documentation: None,
-            keywords: Vec::new(), categories: Vec::new(),
-            dependencies: Vec::new(), dev_dependencies: Vec::new(),
-            features: HashMap::new(), default_features: Vec::new(),
-        })
-    }
-
-    /// Serialize to TOML format.
-    pub fn to_toml(&self) -> String {
-        let mut out = String::new();
-        out.push_str("[package]\n");
-        out.push_str(&format!("name = \"{}\"\n", self.name));
-        out.push_str(&format!("version = \"{}\"\n", self.version.to_string()));
-        if let Some(desc) = &self.description {
-            out.push_str(&format!("description = \"{}\"\n", desc));
-        }
-        if let Some(lic) = &self.license {
-            out.push_str(&format!("license = \"{}\"\n", lic));
-        }
-        if let Some(ed) = &self.edition {
-            out.push_str(&format!("edition = \"{}\"\n", ed));
-        }
-        if !self.authors.is_empty() {
-            let authors: Vec<String> = self.authors.iter().map(|a| format!("\"{}\"", a)).collect();
-            out.push_str(&format!("authors = [{}]\n", authors.join(", ")));
-        }
-        out
-    }
+// Set authors
+fn meta_set_authors(meta, authors) {
+  merge(meta, { authors: authors })
 }
 
-/// A package dependency.
-pub struct Dependency {
-    /// Package name.
-    pub name: String,
-    /// Version requirement.
-    pub version_req: VersionReq,
-    /// Registry or git source.
-    pub source: DependencySource,
-    /// Optional — only included when feature-flagged.
-    pub optional: bool,
-    /// Features to enable.
-    pub features: Vec<String>,
-    /// Whether to use default features.
-    pub default_features: bool,
+// Set license
+fn meta_set_license(meta, license) {
+  merge(meta, { license: license })
 }
 
-/// Where a dependency is sourced from.
-pub enum DependencySource {
-    /// From the default registry.
-    Registry,
-    /// From a git repository.
-    Git { url: String, branch: Option<String>, tag: Option<String>, rev: Option<String> },
-    /// From a local path.
-    Path(String),
+// Set repository URL
+fn meta_set_repo(meta, url) {
+  merge(meta, { repository: url })
 }
 
-impl Dependency {
-    /// Create a registry dependency with a version requirement string.
-    pub fn registry(name: &str, version: &str) -> Result<Dependency, String> {
-        let version_req = VersionReq::parse(version)
-            .map_err(|e| format!("invalid version requirement: {:?}", e))?;
-        Ok(Dependency {
-            name: String::from(name),
-            version_req,
-            source: DependencySource::Registry,
-            optional: false,
-            features: Vec::new(),
-            default_features: true,
-        })
-    }
+// Add keywords
+fn meta_add_keywords(meta, kws) {
+  merge(meta, { keywords: concat(get(meta, "keywords"), kws) })
+}
 
-    /// Create a git dependency.
-    pub fn git(name: &str, url: &str) -> Dependency {
-        Dependency {
-            name: String::from(name),
-            version_req: VersionReq::any(),
-            source: DependencySource::Git { url: String::from(url), branch: None, tag: None, rev: None },
-            optional: false,
-            features: Vec::new(),
-            default_features: true,
-        }
-    }
+// Add a dependency
+fn meta_add_dep(meta, name, version) {
+  merge(meta, {
+    dependencies: merge(get(meta, "dependencies"), fromEntries([[name, version]]))
+  })
+}
 
-    /// Create a path dependency.
-    pub fn path(name: &str, path: &str) -> Dependency {
-        Dependency {
-            name: String::from(name),
-            version_req: VersionReq::any(),
-            source: DependencySource::Path(String::from(path)),
-            optional: false,
-            features: Vec::new(),
-            default_features: true,
-        }
-    }
+// Add a dev dependency
+fn meta_add_dev_dep(meta, name, version) {
+  merge(meta, {
+    dev_dependencies: merge(get(meta, "dev_dependencies"), fromEntries([[name, version]]))
+  })
+}
+
+// Get package name
+fn meta_name(meta) { get(meta, "name") }
+
+// Get package version
+fn meta_version(meta) { get(meta, "version") }
+
+// Get dependency list
+fn meta_deps(meta) { get(meta, "dependencies") }
+
+// Check if has dependency
+fn meta_has_dep(meta, name) {
+  not(eq(get(get(meta, "dependencies"), name), nil))
+}
+
+// Serialize metadata to TOML-like string
+fn meta_to_toml(meta) {
+  fn lines() { [
+    concat_str("[package]"),
+    concat_str("name = \"", get(meta, "name"), "\""),
+    concat_str("version = \"", get(meta, "version"), "\""),
+    concat_str("description = \"", get(meta, "description"), "\"")
+  ] }
+  fn author_lines() {
+    if_then(gt(length(get(meta, "authors")), 0),
+      fn() { [concat_str("authors = [", join(map(get(meta, "authors"), fn(a) { concat_str("\"", a, "\"") }), ", "), "]")] },
+      fn() { [] }
+    )
+  }
+  fn license_line() {
+    if_then(not(eq(get(meta, "license"), nil)),
+      fn() { [concat_str("license = \"", get(meta, "license"), "\"")] },
+      fn() { [] }
+    )
+  }
+  fn dep_section() {
+    fn deps() { get(meta, "dependencies") }
+    fn dep_keys() { keys(deps()) }
+    if_then(gt(length(dep_keys()), 0),
+      fn() {
+        concat(
+          ["\n[dependencies]"],
+          map(dep_keys(), fn(k) { concat_str(k, " = \"", get(deps(), k), "\"") })
+        )
+      },
+      fn() { [] }
+    )
+  }
+  join(concat(concat(concat(lines(), author_lines()), license_line()), dep_section()), "\n")
+}
+
+// Parse a simple manifest from TOML-like string
+fn meta_from_toml(text) {
+  fn parsed() { toml_parse(text) }
+  PackageMeta_new(
+    get(parsed(), "package.name"),
+    get(parsed(), "package.version"),
+    get(parsed(), "package.description")
+  )
 }

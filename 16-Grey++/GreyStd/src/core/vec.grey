@@ -1,619 +1,199 @@
-/// core::vec — Growable vector (dynamic array).
-///
-/// `Vec<T>` is a heap-allocated, growable, contiguous sequence of `T`.
-/// It is the workhorse collection of Grey++.
+// core::vec — Dynamic array (vector) utilities
+//
+// In Grey++, arrays are already dynamic. This module provides
+// higher-level vector operations including construction patterns,
+// searching, sorting, and functional transformations.
 
-/// A contiguous growable array type.
-pub struct Vec<T> {
-    ptr: *mut T,
-    len: usize,
-    cap: usize,
+// ── Vector Construction ─────────────────────────────────────────
+
+// Creates a new empty vector.
+fn vec_new() { [] }
+
+// Creates a vector with n copies of value.
+fn vec_filled(value, n) { repeat(n, fn(i) { value }) }
+
+// Creates a vector from an iterator (array).
+fn vec_from(arr) { map(arr, fn(x) { x }) }
+
+// Creates a vector from a range.
+fn vec_range(start, end) { range(start, end) }
+
+// ── Vector Operations ───────────────────────────────────────────
+
+// Returns the length.
+fn vec_len(v) { len(v) }
+
+// Returns true if empty.
+fn vec_is_empty(v) { len(v) == 0 }
+
+// Returns the element at index.
+fn vec_get(v, index) { get(v, index) }
+
+// Returns the first element.
+fn vec_first(v) { head(v) }
+
+// Returns the last element.
+fn vec_last(v) { last(v) }
+
+// Appends a value (non-mutating).
+fn vec_push(v, value) { push(v, value) }
+
+// Removes and returns the last element as { value, vec }.
+fn vec_pop(v) {
+    if_then(vec_is_empty(v),
+        fn() { { value: nil, vec: v } },
+        fn() { { value: last(v), vec: take(v, len(v) - 1) } })
 }
 
-impl<T> Vec<T> {
-    /// Creates a new empty vector.
-    pub fn new() -> Vec<T> {
-        Vec { ptr: null_mut(), len: 0, cap: 0 }
+// Inserts a value at index (non-mutating).
+fn vec_insert(v, index, value) {
+    concat(concat(take(v, index), [value]), drop(v, index))
+}
+
+// Removes the element at index (non-mutating).
+fn vec_remove(v, index) {
+    concat(take(v, index), drop(v, index + 1))
+}
+
+// Sets the element at index (non-mutating).
+fn vec_set(v, index, value) {
+    map(range(0, len(v)), fn(i) {
+        if_then(i == index, value, fn() { get(v, i) })
+    })
+}
+
+// Swaps two elements at indices a and b (non-mutating).
+fn vec_swap(v, a, b) {
+    map(range(0, len(v)), fn(i) {
+        cond(
+            i == a, get(v, b),
+            i == b, get(v, a),
+            get(v, i)
+        )
+    })
+}
+
+// ── Vector Search ───────────────────────────────────────────────
+
+// Returns true if the vector contains value.
+fn vec_contains(v, value) { includes(v, value) }
+
+// Returns the index of value, or -1.
+fn vec_index_of(v, value) { index_of(v, value) }
+
+// Binary search on a sorted vector. Returns index or -1.
+fn vec_binary_search(v, target) {
+    fn search(lo, hi) {
+        if_then(lo >= hi, fn() { -1 },
+            fn() {
+                fn mid() { lo + floor((hi - lo) / 2) }
+                fn val() { get(v, mid()) }
+                cond(
+                    val() == target, mid(),
+                    val() < target,  fn() { search(mid() + 1, hi) },
+                    fn() { search(lo, mid()) }
+                )
+            })
     }
+    search(0, len(v))
+}
 
-    /// Creates a vector with pre-allocated capacity.
-    pub fn with_capacity(cap: usize) -> Vec<T> {
-        let ptr = alloc::allocate::<T>(cap);
-        Vec { ptr, len: 0, cap }
-    }
+// ── Vector Transformation ───────────────────────────────────────
 
-    /// Creates a vector from a slice (copies the data).
-    pub fn from_slice(data: &[T]) -> Vec<T> where T: Clone {
-        let mut v = Vec::with_capacity(data.len());
-        for item in data {
-            v.push(item.clone());
-        }
-        v
-    }
+// Maps each element.
+fn vec_map(v, f) { map(v, f) }
 
-    /// Creates a vector with `n` copies of `value`.
-    pub fn filled(value: T, n: usize) -> Vec<T> where T: Clone {
-        let mut v = Vec::with_capacity(n);
-        for _ in 0..n {
-            v.push(value.clone());
-        }
-        v
-    }
+// Filters elements.
+fn vec_filter(v, predicate) { filter(v, predicate) }
 
-    /// Creates a vector from an iterator.
-    pub fn from_iter<I: Iterator<Item = T>>(iter: I) -> Vec<T> {
-        let mut v = Vec::new();
-        for item in iter {
-            v.push(item);
-        }
-        v
-    }
+// Reduces to a single value.
+fn vec_reduce(v, f, init) { reduce(v, f, init) }
 
-    /// Returns the number of elements.
-    pub fn len(self) -> usize {
-        self.len
-    }
+// Sorts the vector.
+fn vec_sort(v, comparator) { sort(v, comparator) }
 
-    /// Returns true if the vector is empty.
-    pub fn is_empty(self) -> bool {
-        self.len == 0
-    }
+// Sorts by a key function.
+fn vec_sort_by_key(v, key_fn) {
+    sort(v, fn(a, b) { key_fn(a) - key_fn(b) })
+}
 
-    /// Returns the current capacity.
-    pub fn capacity(self) -> usize {
-        self.cap
-    }
+// Reverses the vector.
+fn vec_reverse(v) { reverse(v) }
 
-    /// Appends an element to the end.
-    pub fn push(mut self, value: T) {
-        if self.len == self.cap {
-            self.grow();
-        }
-        unsafe { self.ptr.offset(self.len).write(value); }
-        self.len += 1;
-    }
+// Removes consecutive duplicates.
+fn vec_dedup(v) {
+    if_then(vec_is_empty(v), fn() { [] },
+        fn() {
+            reduce(tail(v), fn(acc, item) {
+                if_then(last(acc) == item, fn() { acc },
+                    fn() { push(acc, item) })
+            }, [head(v)])
+        })
+}
 
-    /// Removes and returns the last element.
-    pub fn pop(mut self) -> Option<T> {
-        if self.len == 0 { return None; }
-        self.len -= 1;
-        Some(unsafe { self.ptr.offset(self.len).read() })
-    }
+// Retains only elements for which predicate returns true.
+fn vec_retain(v, predicate) { filter(v, predicate) }
 
-    /// Inserts an element at `index`, shifting subsequent elements right.
-    pub fn insert(mut self, index: usize, value: T) {
-        assert(index <= self.len, "Vec::insert index out of bounds");
-        if self.len == self.cap { self.grow(); }
-        unsafe {
-            // Shift elements right
-            let src = self.ptr.offset(index);
-            let dst = self.ptr.offset(index + 1);
-            ptr::copy(src, dst, self.len - index);
-            src.write(value);
-        }
-        self.len += 1;
-    }
-
-    /// Removes and returns the element at `index`, shifting subsequent elements left.
-    pub fn remove(mut self, index: usize) -> T {
-        assert(index < self.len, "Vec::remove index out of bounds");
-        let value = unsafe { self.ptr.offset(index).read() };
-        unsafe {
-            let src = self.ptr.offset(index + 1);
-            let dst = self.ptr.offset(index);
-            ptr::copy(src, dst, self.len - index - 1);
-        }
-        self.len -= 1;
-        value
-    }
-
-    /// Removes an element by swapping it with the last element (O(1)).
-    pub fn swap_remove(mut self, index: usize) -> T {
-        assert(index < self.len, "Vec::swap_remove index out of bounds");
-        self.len -= 1;
-        unsafe {
-            let last = self.ptr.offset(self.len).read();
-            let removed = self.ptr.offset(index).read();
-            self.ptr.offset(index).write(last);
-            removed
-        }
-    }
-
-    /// Returns a reference to the element at `index`.
-    pub fn get(self, index: usize) -> Option<&T> {
-        if index >= self.len { return None; }
-        Some(unsafe { &*self.ptr.offset(index) })
-    }
-
-    /// Returns a mutable reference to the element at `index`.
-    pub fn get_mut(mut self, index: usize) -> Option<&mut T> {
-        if index >= self.len { return None; }
-        Some(unsafe { &mut *self.ptr.offset(index) })
-    }
-
-    /// Returns a reference to the first element.
-    pub fn first(self) -> Option<&T> { self.get(0) }
-
-    /// Returns a reference to the last element.
-    pub fn last(self) -> Option<&T> {
-        if self.len == 0 { None } else { self.get(self.len - 1) }
-    }
-
-    /// Clears the vector, removing all elements.
-    pub fn clear(mut self) {
-        // Drop all elements
-        for i in 0..self.len {
-            unsafe { self.ptr.offset(i).drop_in_place(); }
-        }
-        self.len = 0;
-    }
-
-    /// Truncates the vector to `new_len` elements.
-    pub fn truncate(mut self, new_len: usize) {
-        if new_len >= self.len { return; }
-        for i in new_len..self.len {
-            unsafe { self.ptr.offset(i).drop_in_place(); }
-        }
-        self.len = new_len;
-    }
-
-    /// Reserves capacity for at least `additional` more elements.
-    pub fn reserve(mut self, additional: usize) {
-        let needed = self.len + additional;
-        if needed <= self.cap { return; }
-        self.realloc(needed);
-    }
-
-    /// Shrinks the capacity to match the current length.
-    pub fn shrink_to_fit(mut self) {
-        if self.cap == self.len { return; }
-        self.realloc(self.len);
-    }
-
-    /// Returns a slice view of the vector.
-    pub fn as_slice(self) -> &[T] {
-        unsafe { slice::from_raw_parts(self.ptr, self.len) }
-    }
-
-    /// Returns a mutable slice view.
-    pub fn as_mut_slice(mut self) -> &mut [T] {
-        unsafe { slice::from_raw_parts_mut(self.ptr, self.len) }
-    }
-
-    /// Returns a raw pointer to the data.
-    pub fn as_ptr(self) -> *const T {
-        self.ptr
-    }
-
-    /// Extends the vector by appending elements from a slice.
-    pub fn extend_from_slice(mut self, slice: &[T]) where T: Clone {
-        self.reserve(slice.len());
-        for item in slice {
-            self.push(item.clone());
-        }
-    }
-
-    /// Extends the vector by consuming an iterator.
-    pub fn extend<I: Iterator<Item = T>>(mut self, iter: I) {
-        for item in iter {
-            self.push(item);
-        }
-    }
-
-    /// Returns an iterator over references.
-    pub fn iter(self) -> VecIter<T> {
-        VecIter { vec: self, pos: 0 }
-    }
-
-    /// Returns a mutable iterator.
-    pub fn iter_mut(mut self) -> VecIterMut<T> {
-        VecIterMut { vec: self, pos: 0 }
-    }
-
-    /// Consumes the vector and returns an iterator over owned elements.
-    pub fn into_iter(self) -> VecIntoIter<T> {
-        VecIntoIter { vec: self, pos: 0 }
-    }
-
-    /// Sorts the vector in-place.
-    pub fn sort(mut self) where T: Ord {
-        self.sort_by(|a, b| a.cmp(b));
-    }
-
-    /// Sorts the vector using a custom comparator.
-    pub fn sort_by(mut self, compare: fn(&T, &T) -> Ordering) {
-        // Timsort-inspired stable sort
-        let slice = self.as_mut_slice();
-        timsort(slice, compare);
-    }
-
-    /// Sorts the vector by a key function.
-    pub fn sort_by_key<K: Ord>(mut self, key: fn(&T) -> K) {
-        self.sort_by(|a, b| key(a).cmp(&key(b)));
-    }
-
-    /// Reverses the order of elements in-place.
-    pub fn reverse(mut self) {
-        let mut lo = 0;
-        let mut hi = self.len.saturating_sub(1);
-        while lo < hi {
-            self.as_mut_slice().swap(lo, hi);
-            lo += 1;
-            hi -= 1;
-        }
-    }
-
-    /// Retains only elements for which the predicate returns true.
-    pub fn retain(mut self, predicate: fn(&T) -> bool) {
-        let mut write = 0;
-        for read in 0..self.len {
-            if predicate(unsafe { &*self.ptr.offset(read) }) {
-                if write != read {
-                    unsafe {
-                        let val = self.ptr.offset(read).read();
-                        self.ptr.offset(write).write(val);
-                    }
-                }
-                write += 1;
-            } else {
-                unsafe { self.ptr.offset(read).drop_in_place(); }
-            }
-        }
-        self.len = write;
-    }
-
-    /// Removes consecutive duplicate elements.
-    pub fn dedup(mut self) where T: Eq {
-        self.dedup_by(|a, b| a == b);
-    }
-
-    /// Removes consecutive elements where the predicate returns true.
-    pub fn dedup_by(mut self, same: fn(&T, &T) -> bool) {
-        if self.len <= 1 { return; }
-        let mut write = 1;
-        for read in 1..self.len {
-            if !same(unsafe { &*self.ptr.offset(write - 1) },
-                     unsafe { &*self.ptr.offset(read) }) {
-                if write != read {
-                    unsafe {
-                        let val = self.ptr.offset(read).read();
-                        self.ptr.offset(write).write(val);
-                    }
-                }
-                write += 1;
-            }
-        }
-        self.len = write;
-    }
-
-    /// Searches for an element and returns its index.
-    pub fn contains(self, value: &T) -> bool where T: Eq {
-        self.position(value).is_some()
-    }
-
-    /// Finds the index of the first occurrence of `value`.
-    pub fn position(self, value: &T) -> Option<usize> where T: Eq {
-        for i in 0..self.len {
-            if unsafe { &*self.ptr.offset(i) } == value {
-                return Some(i);
-            }
-        }
-        None
-    }
-
-    /// Binary search on a sorted vector. Returns Ok(index) if found, Err(insert_index) if not.
-    pub fn binary_search(self, value: &T) -> Result<usize, usize> where T: Ord {
-        let mut lo = 0;
-        let mut hi = self.len;
-        while lo < hi {
-            let mid = lo + (hi - lo) / 2;
-            match unsafe { &*self.ptr.offset(mid) }.cmp(value) {
-                Ordering::Less    => lo = mid + 1,
-                Ordering::Greater => hi = mid,
-                Ordering::Equal   => return Ok(mid),
-            }
-        }
-        Err(lo)
-    }
-
-    /// Maps each element through a function, returning a new Vec.
-    pub fn map<U>(self, f: fn(&T) -> U) -> Vec<U> {
-        let mut result = Vec::with_capacity(self.len);
-        for i in 0..self.len {
-            result.push(f(unsafe { &*self.ptr.offset(i) }));
-        }
-        result
-    }
-
-    /// Filters elements by a predicate, returning a new Vec.
-    pub fn filter(self, predicate: fn(&T) -> bool) -> Vec<T> where T: Clone {
-        let mut result = Vec::new();
-        for i in 0..self.len {
-            let item = unsafe { &*self.ptr.offset(i) };
-            if predicate(item) {
-                result.push(item.clone());
-            }
-        }
-        result
-    }
-
-    /// Folds all elements into a single value.
-    pub fn fold<A>(self, init: A, f: fn(A, &T) -> A) -> A {
-        let mut acc = init;
-        for i in 0..self.len {
-            acc = f(acc, unsafe { &*self.ptr.offset(i) });
-        }
-        acc
-    }
-
-    /// Swaps two elements by index.
-    pub fn swap(mut self, a: usize, b: usize) {
-        assert(a < self.len && b < self.len, "Vec::swap index out of bounds");
-        unsafe {
-            let pa = self.ptr.offset(a);
-            let pb = self.ptr.offset(b);
-            ptr::swap(pa, pb);
-        }
-    }
-
-    /// Drains a range of elements, removing and returning them as a Vec.
-    pub fn drain(mut self, start: usize, end: usize) -> Vec<T> {
-        assert(start <= end && end <= self.len, "Vec::drain range out of bounds");
-        let mut drained = Vec::with_capacity(end - start);
-        for i in start..end {
-            drained.push(unsafe { self.ptr.offset(i).read() });
-        }
-        // Shift remaining elements left
-        unsafe {
-            ptr::copy(self.ptr.offset(end), self.ptr.offset(start), self.len - end);
-        }
-        self.len -= end - start;
-        drained
-    }
-
-    /// Splices a range with elements from an iterator.
-    pub fn splice<I: Iterator<Item = T>>(mut self, start: usize, end: usize, iter: I) {
-        let removed = self.drain(start, end);
-        let new_elements: Vec<T> = Vec::from_iter(iter);
-        let new_len = new_elements.len();
-        // Insert new elements at `start`
-        self.reserve(new_len);
-        unsafe {
-            ptr::copy(self.ptr.offset(start),
-                      self.ptr.offset(start + new_len),
-                      self.len - start);
-        }
-        for (i, item) in new_elements.into_iter().enumerate() {
-            unsafe { self.ptr.offset(start + i).write(item); }
-        }
-        self.len += new_len;
-        drop(removed);
-    }
-
-    // ── Private ─────────────────────────────────────────────────────────
-
-    fn grow(mut self) {
-        let new_cap = if self.cap == 0 { 4 } else { self.cap * 2 };
-        self.realloc(new_cap);
-    }
-
-    fn realloc(mut self, new_cap: usize) {
-        let new_ptr = alloc::reallocate(self.ptr, self.cap, new_cap);
-        self.ptr = new_ptr;
-        self.cap = new_cap;
+// Drains a range, returning { drained, remaining }.
+fn vec_drain(v, start, end) {
+    {
+        drained: slice(v, start, end),
+        remaining: concat(take(v, start), drop(v, end))
     }
 }
 
-impl<T> Drop for Vec<T> {
-    fn drop(mut self) {
-        self.clear();
-        if self.cap > 0 {
-            alloc::deallocate(self.ptr, self.cap);
-        }
-    }
+// Extends a vector with another.
+fn vec_extend(v, other) { concat(v, other) }
+
+// Flattens one level.
+fn vec_flatten(v) { flat(v) }
+
+// Maps then flattens.
+fn vec_flat_map(v, f) { flat_map(v, f) }
+
+// ── Vector Slicing ──────────────────────────────────────────────
+
+// Returns a sub-vector.
+fn vec_slice(v, start, end) { slice(v, start, end) }
+
+// Returns first n elements.
+fn vec_take(v, n) { take(v, n) }
+
+// Drops first n elements.
+fn vec_drop(v, n) { drop(v, n) }
+
+// Chunks the vector into sub-vectors of given size.
+fn vec_chunk(v, size) { chunk(v, size) }
+
+// Sliding windows.
+fn vec_windows(v, size) {
+    if_then(size > len(v), fn() { [] },
+        fn() { map(range(0, len(v) - size + 1), fn(i) {
+            slice(v, i, i + size)
+        }) })
 }
 
-impl<T: Clone> Clone for Vec<T> {
-    fn clone(self) -> Vec<T> {
-        Vec::from_slice(self.as_slice())
+// ── Vector Aggregation ──────────────────────────────────────────
+
+// Returns the sum of numeric elements.
+fn vec_sum(v) { sum(v) }
+
+// Returns the average of numeric elements.
+fn vec_avg(v) { avg(v) }
+
+// Returns the minimum element.
+fn vec_min(v) { reduce(tail(v), fn(a, b) { min(a, b) }, head(v)) }
+
+// Returns the maximum element.
+fn vec_max(v) { reduce(tail(v), fn(a, b) { max(a, b) }, head(v)) }
+
+// Folds all elements.
+fn vec_fold(v, init, f) { reduce(v, f, init) }
+
+// Partitions into passing and failing.
+fn vec_partition(v, predicate) {
+    {
+        pass: filter(v, predicate),
+        fail: filter(v, fn(x) { not(predicate(x)) })
     }
-}
-
-impl<T: Eq> Eq for Vec<T> {
-    fn eq(self, other: Vec<T>) -> bool {
-        if self.len != other.len { return false; }
-        for i in 0..self.len {
-            if self[i] != other[i] { return false; }
-        }
-        true
-    }
-}
-
-impl<T: Debug> Debug for Vec<T> {
-    fn debug_fmt(self, f: &mut Formatter) -> Result<(), FormatError> {
-        f.write_str("[")?;
-        for i in 0..self.len {
-            if i > 0 { f.write_str(", ")?; }
-            self[i].debug_fmt(f)?;
-        }
-        f.write_str("]")
-    }
-}
-
-impl<T> Index<usize> for Vec<T> {
-    type Output = T;
-    fn index(self, idx: usize) -> &T {
-        self.get(idx).expect("Vec index out of bounds")
-    }
-}
-
-impl<T> IndexMut<usize> for Vec<T> {
-    fn index_mut(mut self, idx: usize) -> &mut T {
-        self.get_mut(idx).expect("Vec index out of bounds")
-    }
-}
-impl<T> IntoIterator for Vec<T> {
-    type Item = T;
-    type IntoIter = VecIntoIter<T>;
-
-    fn into_iter(self) -> VecIntoIter<T> {
-        VecIntoIter { vec: self, pos: 0 }
-    }
-}
-// ─── Iterators ──────────────────────────────────────────────────────────────
-
-pub struct VecIter<T> {
-    vec: &Vec<T>,
-    pos: usize,
-}
-
-impl<T> Iterator for VecIter<T> {
-    type Item = &T;
-    fn next(mut self) -> Option<&T> {
-        if self.pos >= self.vec.len { return None; }
-        let item = &self.vec[self.pos];
-        self.pos += 1;
-        Some(item)
-    }
-}
-
-pub struct VecIterMut<T> {
-    vec: &mut Vec<T>,
-    pos: usize,
-}
-
-impl<T> Iterator for VecIterMut<T> {
-    type Item = &mut T;
-    fn next(mut self) -> Option<&mut T> {
-        if self.pos >= self.vec.len { return None; }
-        let item = &mut self.vec[self.pos];
-        self.pos += 1;
-        Some(item)
-    }
-}
-
-pub struct VecIntoIter<T> {
-    vec: Vec<T>,
-    pos: usize,
-}
-
-impl<T> Iterator for VecIntoIter<T> {
-    type Item = T;
-    fn next(mut self) -> Option<T> {
-        if self.pos >= self.vec.len { return None; }
-        let item = unsafe { self.vec.ptr.offset(self.pos).read() };
-        self.pos += 1;
-        Some(item)
-    }
-}
-
-// ─── Sorting ────────────────────────────────────────────────────────────────
-
-/// Timsort-inspired stable sort.
-fn timsort<T>(slice: &mut [T], compare: fn(&T, &T) -> Ordering) {
-    let len = slice.len();
-    if len <= 1 { return; }
-
-    // Insertion sort for small slices
-    if len <= 64 {
-        insertion_sort(slice, compare);
-        return;
-    }
-
-    // Find runs and merge them
-    let min_run = compute_min_run(len);
-    let mut runs: Vec<(usize, usize)> = Vec::new();
-    let mut i = 0;
-
-    while i < len {
-        let mut run_end = i + 1;
-        if run_end < len {
-            if compare(&slice[run_end], &slice[i]) == Ordering::Less {
-                // Descending run — find end, then reverse
-                while run_end < len && compare(&slice[run_end], &slice[run_end - 1]) == Ordering::Less {
-                    run_end += 1;
-                }
-                slice[i..run_end].reverse();
-            } else {
-                while run_end < len && compare(&slice[run_end], &slice[run_end - 1]) != Ordering::Less {
-                    run_end += 1;
-                }
-            }
-        }
-
-        // Extend short runs with insertion sort
-        let target = min(i + min_run, len);
-        while run_end < target {
-            run_end += 1;
-        }
-        insertion_sort(&mut slice[i..run_end], compare);
-
-        runs.push((i, run_end - i));
-        i = run_end;
-    }
-
-    // Merge runs
-    while runs.len() > 1 {
-        let mut new_runs: Vec<(usize, usize)> = Vec::new();
-        let mut j = 0;
-        while j + 1 < runs.len() {
-            let (start_a, len_a) = runs[j];
-            let (start_b, len_b) = runs[j + 1];
-            merge(slice, start_a, len_a, len_b, compare);
-            new_runs.push((start_a, len_a + len_b));
-            j += 2;
-        }
-        if j < runs.len() {
-            new_runs.push(runs[j]);
-        }
-        runs = new_runs;
-    }
-}
-
-fn insertion_sort<T>(slice: &mut [T], compare: fn(&T, &T) -> Ordering) {
-    for i in 1..slice.len() {
-        let mut j = i;
-        while j > 0 && compare(&slice[j], &slice[j - 1]) == Ordering::Less {
-            slice.swap(j, j - 1);
-            j -= 1;
-        }
-    }
-}
-
-fn merge<T>(slice: &mut [T], start: usize, len_a: usize, len_b: usize, compare: fn(&T, &T) -> Ordering) {
-    let mut temp = Vec::with_capacity(len_a);
-    for i in start..start + len_a {
-        temp.push(unsafe { ptr::read(&slice[i]) });
-    }
-
-    let mut i = 0;       // index into temp (left)
-    let mut j = start + len_a; // index into right half
-    let mut k = start;   // write index
-
-    while i < len_a && j < start + len_a + len_b {
-        if compare(&temp[i], &slice[j]) != Ordering::Greater {
-            unsafe { ptr::write(&mut slice[k], ptr::read(&temp[i])); }
-            i += 1;
-        } else {
-            unsafe { ptr::write(&mut slice[k], ptr::read(&slice[j])); }
-            j += 1;
-        }
-        k += 1;
-    }
-
-    while i < len_a {
-        unsafe { ptr::write(&mut slice[k], ptr::read(&temp[i])); }
-        i += 1;
-        k += 1;
-    }
-}
-
-fn compute_min_run(n: usize) -> usize {
-    let mut r = 0;
-    let mut n = n;
-    while n >= 64 {
-        r |= n & 1;
-        n >>= 1;
-    }
-    n + r
 }

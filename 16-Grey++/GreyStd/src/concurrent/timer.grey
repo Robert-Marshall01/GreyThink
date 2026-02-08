@@ -1,368 +1,117 @@
-/// concurrent::timer — Async timers, sleep, intervals, and timeouts.
+// concurrent::timer — Sleep, delay, interval, timeout
+//
+// Timer utilities for scheduling and delays.
+// Uses the built-in sleep() function.
 
-use crate::core::option::Option;
-use crate::time::{Duration, Instant};
-use crate::concurrent::future::{Future, Poll, Context};
+// Sleeps for the given number of milliseconds.
+fn timer_sleep(ms) { sleep(ms) }
 
-/// Asynchronously sleeps for the given duration.
-///
-/// ```grey
-/// async fn example() {
-///     println("before");
-///     sleep(Duration::from_secs(1)).await;
-///     println("after 1 second");
-/// }
-/// ```
-pub fn sleep(duration: Duration) -> Sleep {
-    Sleep {
-        deadline: Instant::now() + duration,
-        registered: false,
+// Sleeps for the given number of seconds.
+fn timer_sleep_secs(secs) { sleep(secs * 1000) }
+
+// Creates a delay that resolves after ms milliseconds.
+fn Delay_new(ms) {
+    {
+        _type: "Delay",
+        duration_ms: ms,
+        start: timestamp(),
+        resolved: false
     }
 }
 
-/// Synchronous (blocking) sleep for the given duration.
-/// Used by deterministic replay and contexts without an async runtime.
-pub fn sleep_sync(duration: Duration) {
-    extern fn __grey_thread_sleep_nanos(nanos: u64);
-    unsafe { __grey_thread_sleep_nanos(duration.as_nanos() as u64); }
+// Checks if a delay has elapsed.
+fn delay_is_elapsed(delay) {
+    elapsed(get(delay, "start")) >= get(delay, "duration_ms")
 }
 
-/// Asynchronously sleeps until the given deadline.
-pub fn sleep_until(deadline: Instant) -> Sleep {
-    Sleep {
-        deadline,
-        registered: false,
+// Waits for the delay to complete.
+fn delay_wait(delay) {
+    fn remaining() { get(delay, "duration_ms") - elapsed(get(delay, "start")) }
+    when(remaining() > 0, fn() { sleep(remaining()) })
+    set(delay, "resolved", true)
+}
+
+// Creates a periodic interval.
+fn Interval_new(period_ms) {
+    {
+        _type: "Interval",
+        period_ms: period_ms,
+        last_tick: timestamp(),
+        tick_count: 0
     }
 }
 
-/// A future that resolves after a specified duration.
-pub struct Sleep {
-    deadline: Instant,
-    registered: bool,
-}
-
-impl Future for Sleep {
-    type Output = ();
-
-    fn poll(mut self, cx: &mut Context) -> Poll<()> {
-        if Instant::now() >= self.deadline {
-            Poll::Ready(())
-        } else {
-            if !self.registered {
-                // Register with the timer driver
-                self.registered = true;
+// Ticks the interval. Returns true if the period has elapsed.
+fn interval_tick(interval) {
+    fn elapsed_ms() { elapsed(get(interval, "last_tick")) }
+    if_then(elapsed_ms() >= get(interval, "period_ms"),
+        fn() {
+            {
+                fired: true,
+                interval: merge(interval, {
+                    last_tick: timestamp(),
+                    tick_count: get(interval, "tick_count") + 1
+                })
             }
-            cx.waker().register_timer(self.deadline);
-            Poll::Pending
-        }
+        },
+        fn() { { fired: false, interval: interval } })
+}
+
+// Returns the tick count.
+fn interval_count(interval) { get(interval, "tick_count") }
+
+// Creates a timeout wrapper. If the work doesn't complete
+// in time, returns an error result.
+fn Timeout_new(work_fn, timeout_ms) {
+    {
+        _type: "Timeout",
+        work: work_fn,
+        timeout_ms: timeout_ms
     }
 }
 
-/// Creates a repeating interval that ticks at the specified period.
-///
-/// ```grey
-/// async fn heartbeat() {
-///     let mut ticker = interval(Duration::from_secs(5));
-///     loop {
-///         ticker.tick().await;
-///         send_heartbeat();
-///     }
-/// }
-/// ```
-pub fn interval(period: Duration) -> Interval {
-    Interval {
-        period,
-        next_tick: Instant::now() + period,
-        missed_tick_behavior: MissedTickBehavior::Burst,
-    }
+// Runs a function with a timeout. Returns Ok(result) or Err("timeout").
+fn timeout_run(timeout) {
+    fn start_time() { timestamp() }
+    try_catch(
+        fn() {
+            fn result() { get(timeout, "work")() }
+            if_then(elapsed(start_time()) > get(timeout, "timeout_ms"),
+                fn() { Err("timeout") },
+                fn() { Ok(result()) })
+        },
+        fn(e) { Err(to_string(e)) }
+    )
 }
 
-/// Creates an interval starting at the given instant.
-pub fn interval_at(start: Instant, period: Duration) -> Interval {
-    Interval {
-        period,
-        next_tick: start,
-        missed_tick_behavior: MissedTickBehavior::Burst,
-    }
+// ── Stopwatch ───────────────────────────────────────────────────
+
+// Creates a new stopwatch (not started).
+fn Stopwatch_new() {
+    { _type: "Stopwatch", start_time: nil, elapsed_ms: 0, running: false }
 }
 
-/// Behavior when an interval tick is missed.
-pub enum MissedTickBehavior {
-    /// Fire all missed ticks immediately (catch up).
-    Burst,
-    /// Skip missed ticks and schedule next tick from now.
-    Delay,
-    /// Skip missed ticks and schedule next tick aligned to the original cadence.
-    Skip,
+// Starts the stopwatch.
+fn stopwatch_start(sw) {
+    merge(sw, { start_time: timestamp(), running: true })
 }
 
-/// A repeating interval timer.
-pub struct Interval {
-    period: Duration,
-    next_tick: Instant,
-    missed_tick_behavior: MissedTickBehavior,
+// Stops the stopwatch.
+fn stopwatch_stop(sw) {
+    if_then(get(sw, "running"),
+        fn() {
+            fn total() { get(sw, "elapsed_ms") + elapsed(get(sw, "start_time")) }
+            merge(sw, { elapsed_ms: total(), running: false })
+        },
+        fn() { sw })
 }
 
-impl Interval {
-    /// Waits for the next tick of the interval.
-    pub async fn tick(mut self) -> Instant {
-        let now = Instant::now();
-
-        if now >= self.next_tick {
-            let tick_time = self.next_tick;
-            match self.missed_tick_behavior {
-                MissedTickBehavior::Burst => {
-                    self.next_tick = self.next_tick + self.period;
-                }
-                MissedTickBehavior::Delay => {
-                    self.next_tick = now + self.period;
-                }
-                MissedTickBehavior::Skip => {
-                    let elapsed = now.duration_since(tick_time);
-                    let periods_missed = elapsed.as_nanos() / self.period.as_nanos();
-                    self.next_tick = tick_time + self.period * (periods_missed + 1) as u32;
-                }
-            }
-            tick_time
-        } else {
-            sleep_until(self.next_tick).await;
-            let tick_time = self.next_tick;
-            self.next_tick = self.next_tick + self.period;
-            tick_time
-        }
-    }
-
-    /// Sets the missed tick behavior.
-    pub fn set_missed_tick_behavior(mut self, behavior: MissedTickBehavior) {
-        self.missed_tick_behavior = behavior;
-    }
-
-    /// Returns the period of this interval.
-    pub fn period(self) -> Duration {
-        self.period
-    }
-
-    /// Resets the interval so the next tick fires after `period` from now.
-    pub fn reset(mut self) {
-        self.next_tick = Instant::now() + self.period;
-    }
+// Returns total elapsed milliseconds.
+fn stopwatch_elapsed(sw) {
+    if_then(get(sw, "running"),
+        fn() { get(sw, "elapsed_ms") + elapsed(get(sw, "start_time")) },
+        fn() { get(sw, "elapsed_ms") })
 }
 
-/// Wraps a future with a timeout, returning an error if it doesn't complete in time.
-///
-/// ```grey
-/// async fn example() {
-///     match timeout(Duration::from_secs(5), fetch_data()).await {
-///         Ok(data) => println("Got: {}", data),
-///         Err(_) => println("Timed out!"),
-///     }
-/// }
-/// ```
-pub fn timeout<F: Future<Output = T>, T>(duration: Duration, future: F) -> Timeout<F> {
-    Timeout {
-        future,
-        deadline: Instant::now() + duration,
-    }
-}
-
-/// A future that wraps another future with a deadline.
-pub struct Timeout<F> {
-    future: F,
-    deadline: Instant,
-}
-
-/// Error returned when a timeout expires.
-pub struct Elapsed;
-
-impl<F: Future<Output = T>, T> Future for Timeout<F> {
-    type Output = Result<T, Elapsed>;
-
-    fn poll(mut self, cx: &mut Context) -> Poll<Result<T, Elapsed>> {
-        // First, try polling the inner future
-        match self.future.poll(cx) {
-            Poll::Ready(value) => Poll::Ready(Ok(value)),
-            Poll::Pending => {
-                // Check if we've exceeded the deadline
-                if Instant::now() >= self.deadline {
-                    Poll::Ready(Err(Elapsed))
-                } else {
-                    cx.waker().register_timer(self.deadline);
-                    Poll::Pending
-                }
-            }
-        }
-    }
-}
-
-/// A one-shot timer that fires exactly once after a delay.
-pub struct Delay {
-    sleep: Sleep,
-    fired: bool,
-}
-
-impl Delay {
-    /// Creates a new delay that fires after the given duration.
-    pub fn new(duration: Duration) -> Delay {
-        Delay {
-            sleep: sleep(duration),
-            fired: false,
-        }
-    }
-
-    /// Creates a new delay that fires at the given instant.
-    pub fn at(deadline: Instant) -> Delay {
-        Delay {
-            sleep: sleep_until(deadline),
-            fired: false,
-        }
-    }
-
-    /// Returns true if this delay has already fired.
-    pub fn is_fired(self) -> bool {
-        self.fired
-    }
-
-    /// Resets the delay to fire again after the given duration from now.
-    pub fn reset(mut self, duration: Duration) {
-        self.sleep = sleep(duration);
-        self.fired = false;
-    }
-}
-
-impl Future for Delay {
-    type Output = ();
-
-    fn poll(mut self, cx: &mut Context) -> Poll<()> {
-        if self.fired {
-            // Already fired; return Ready immediately
-            return Poll::Ready(());
-        }
-        match self.sleep.poll(cx) {
-            Poll::Ready(()) => {
-                self.fired = true;
-                Poll::Ready(())
-            }
-            Poll::Pending => Poll::Pending,
-        }
-    }
-}
-
-/// A debouncer that delays action until a quiet period has elapsed.
-///
-/// ```grey
-/// let debounce = Debounce::new(Duration::from_millis(300));
-/// // On each event:
-/// debounce.trigger();
-/// // Will only fire after 300ms of no triggers
-/// debounce.wait().await;
-/// ```
-pub struct Debounce {
-    duration: Duration,
-    deadline: Mutex<Option<Instant>>,
-}
-
-impl Debounce {
-    pub fn new(duration: Duration) -> Debounce {
-        Debounce {
-            duration,
-            deadline: Mutex::new(None),
-        }
-    }
-
-    /// Triggers/resets the debounce timer.
-    pub fn trigger(self) {
-        let mut deadline = self.deadline.lock();
-        *deadline = Some(Instant::now() + self.duration);
-    }
-
-    /// Waits for the debounced event (quiet period elapsed after last trigger).
-    pub async fn wait(self) {
-        loop {
-            let deadline = {
-                let guard = self.deadline.lock();
-                *guard
-            };
-            match deadline {
-                Some(dl) => {
-                    sleep_until(dl).await;
-                    // Check if deadline moved (re-triggered)
-                    let current = self.deadline.lock();
-                    if let Some(new_dl) = *current {
-                        if new_dl <= Instant::now() {
-                            // Quiet period elapsed
-                            break;
-                        }
-                        // Otherwise loop and wait for new deadline
-                    }
-                }
-                None => {
-                    // Not yet triggered, yield and retry
-                    crate::concurrent::task::yield_now().await;
-                }
-            }
-        }
-    }
-}
-
-/// A throttle that limits how often an action can occur.
-pub struct Throttle {
-    period: Duration,
-    last_allowed: Mutex<Option<Instant>>,
-}
-
-impl Throttle {
-    pub fn new(period: Duration) -> Throttle {
-        Throttle {
-            period,
-            last_allowed: Mutex::new(None),
-        }
-    }
-
-    /// Returns true if the action is allowed now (enough time has passed).
-    pub fn try_acquire(self) -> bool {
-        let now = Instant::now();
-        let mut last = self.last_allowed.lock();
-        match *last {
-            None => {
-                *last = Some(now);
-                true
-            }
-            Some(prev) => {
-                if now.duration_since(prev) >= self.period {
-                    *last = Some(now);
-                    true
-                } else {
-                    false
-                }
-            }
-        }
-    }
-
-    /// Asynchronously waits until the action is allowed, then acquires.
-    pub async fn acquire(self) {
-        loop {
-            let wait_duration = {
-                let last = self.last_allowed.lock();
-                match *last {
-                    None => Duration::from_nanos(0),
-                    Some(prev) => {
-                        let elapsed = Instant::now().duration_since(prev);
-                        if elapsed >= self.period {
-                            Duration::from_nanos(0)
-                        } else {
-                            self.period - elapsed
-                        }
-                    }
-                }
-            };
-
-            if wait_duration == Duration::from_nanos(0) {
-                if self.try_acquire() {
-                    return;
-                }
-            } else {
-                sleep(wait_duration).await;
-            }
-        }
-    }
-}
+// Resets the stopwatch.
+fn stopwatch_reset(sw) { Stopwatch_new() }

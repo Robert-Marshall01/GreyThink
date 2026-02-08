@@ -1,339 +1,83 @@
-/// concurrent::channel — Go-style CSP channels for task communication.
-///
-/// Channels provide type-safe, async-aware message passing between tasks.
+// concurrent::channel — Message passing (MPSC)
+//
+// Channels provide communication between concurrent tasks.
+// Uses the built-in channel(), send(), receive() functions.
 
-/// Creates an unbounded channel.
-pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
-    unbounded()
-}
-
-/// Creates an unbounded (unlimited buffer) channel.
-pub fn unbounded<T>() -> (Sender<T>, Receiver<T>) {
-    let inner = Arc::new(ChannelInner {
-        queue: Mutex::new(VecDeque::new()),
-        closed: AtomicBool::new(false),
-        sender_count: AtomicUsize::new(1),
-        receiver_count: AtomicUsize::new(1),
-        recv_wakers: Mutex::new(Vec::new()),
-        send_wakers: Mutex::new(Vec::new()),
-        capacity: None,
-    });
-    (Sender { inner: inner.clone() }, Receiver { inner })
-}
-
-/// Creates a bounded channel with the given capacity.
-pub fn bounded<T>(capacity: usize) -> (Sender<T>, Receiver<T>) {
-    assert(capacity > 0, "channel capacity must be > 0");
-    let inner = Arc::new(ChannelInner {
-        queue: Mutex::new(VecDeque::with_capacity(capacity)),
-        closed: AtomicBool::new(false),
-        sender_count: AtomicUsize::new(1),
-        receiver_count: AtomicUsize::new(1),
-        recv_wakers: Mutex::new(Vec::new()),
-        send_wakers: Mutex::new(Vec::new()),
-        capacity: Some(capacity),
-    });
-    (Sender { inner: inner.clone() }, Receiver { inner })
-}
-
-/// Creates a one-shot channel (capacity = 1, single use).
-pub fn oneshot<T>() -> (OneshotSender<T>, OneshotReceiver<T>) {
-    let inner = Arc::new(OneshotInner {
-        value: Mutex::new(None),
-        completed: AtomicBool::new(false),
-        waker: AtomicWaker::new(),
-    });
-    (OneshotSender { inner: inner.clone() }, OneshotReceiver { inner })
-}
-
-// ─── Shared channel internals ───────────────────────────────────────────────
-
-struct ChannelInner<T> {
-    queue: Mutex<VecDeque<T>>,
-    closed: AtomicBool,
-    sender_count: AtomicUsize,
-    receiver_count: AtomicUsize,
-    recv_wakers: Mutex<Vec<Waker>>,
-    send_wakers: Mutex<Vec<Waker>>,
-    capacity: Option<usize>,
-}
-
-// ─── Sender ─────────────────────────────────────────────────────────────────
-
-/// The sending half of a channel.
-pub struct Sender<T> {
-    inner: Arc<ChannelInner<T>>,
-}
-
-impl<T> Sender<T> {
-    /// Sends a value into the channel. Blocks (async) if the channel is full.
-    pub async fn send(self, value: T) -> Result<(), SendError<T>> {
-        loop {
-            if self.inner.closed.load(Ordering::Acquire) {
-                return Err(SendError(value));
-            }
-            if self.inner.receiver_count.load(Ordering::Acquire) == 0 {
-                return Err(SendError(value));
-            }
-
-            {
-                let mut queue = self.inner.queue.lock();
-                if let Some(cap) = self.inner.capacity {
-                    if queue.len() >= cap {
-                        // Channel full — register waker and wait
-                        drop(queue);
-                        SendFuture { sender: self, value: Some(value) }.await;
-                        continue;
-                    }
-                }
-                queue.push_back(value);
-            }
-
-            // Wake a waiting receiver
-            let mut wakers = self.inner.recv_wakers.lock();
-            if let Some(waker) = wakers.pop() {
-                waker.wake();
-            }
-
-            return Ok(());
-        }
-    }
-
-    /// Attempts to send without blocking.
-    pub fn try_send(self, value: T) -> Result<(), TrySendError<T>> {
-        if self.inner.closed.load(Ordering::Acquire) {
-            return Err(TrySendError::Closed(value));
-        }
-        let mut queue = self.inner.queue.lock();
-        if let Some(cap) = self.inner.capacity {
-            if queue.len() >= cap {
-                return Err(TrySendError::Full(value));
-            }
-        }
-        queue.push_back(value);
-
-        let mut wakers = self.inner.recv_wakers.lock();
-        if let Some(waker) = wakers.pop() { waker.wake(); }
-        Ok(())
-    }
-
-    /// Returns true if the channel is closed.
-    pub fn is_closed(self) -> bool {
-        self.inner.closed.load(Ordering::Acquire)
-    }
-
-    /// Returns the number of messages in the channel.
-    pub fn len(self) -> usize {
-        self.inner.queue.lock().len()
-    }
-
-    /// Closes the sending side.
-    pub fn close(self) {
-        self.inner.closed.store(true, Ordering::Release);
-        // Wake all waiting receivers
-        let mut wakers = self.inner.recv_wakers.lock();
-        for waker in wakers.drain(..) { waker.wake(); }
+// Creates a new unbounded channel. Returns { sender, receiver }.
+fn Channel_new() {
+    fn ch() { channel() }
+    {
+        sender: { _type: "Sender", channel: ch() },
+        receiver: { _type: "Receiver", channel: ch() }
     }
 }
 
-impl<T> Clone for Sender<T> {
-    fn clone(self) -> Sender<T> {
-        self.inner.sender_count.fetch_add(1, Ordering::Relaxed);
-        Sender { inner: self.inner.clone() }
+// Creates a bounded channel with a capacity limit.
+fn Channel_bounded(capacity) {
+    {
+        sender: { _type: "Sender", buffer: [], capacity: capacity },
+        receiver: { _type: "Receiver", buffer: [] }
     }
 }
 
-impl<T> Drop for Sender<T> {
-    fn drop(self) {
-        if self.inner.sender_count.fetch_sub(1, Ordering::Release) == 1 {
-            self.inner.closed.store(true, Ordering::Release);
-            let mut wakers = self.inner.recv_wakers.lock();
-            for waker in wakers.drain(..) { waker.wake(); }
-        }
+// Sends a message through the sender.
+fn channel_send(sender, message) {
+    send(get(sender, "channel"), message)
+}
+
+// Receives a message from the receiver (blocking).
+fn channel_recv(receiver) {
+    receive(get(receiver, "channel"))
+}
+
+// Tries to receive without blocking. Returns Some(msg) or None.
+fn channel_try_recv(receiver) {
+    try_catch(
+        fn() { Some(receive(get(receiver, "channel"))) },
+        fn(e) { None() }
+    )
+}
+
+// Closes the sender side of the channel.
+fn channel_close(sender) {
+    set(sender, "closed", true)
+}
+
+// Returns true if the sender is closed.
+fn channel_is_closed(sender) {
+    get(sender, "closed") == true
+}
+
+// ── Broadcast Channel ───────────────────────────────────────────
+
+// Creates a broadcast channel (one sender, multiple receivers).
+fn Broadcast_new() {
+    { _type: "Broadcast", subscribers: [], messages: [] }
+}
+
+// Subscribes to the broadcast channel.
+fn broadcast_subscribe(bc) {
+    fn sub_id() { len(get(bc, "subscribers")) }
+    fn subscriber() { { id: sub_id(), queue: [] } }
+    {
+        broadcast: set(bc, "subscribers", push(get(bc, "subscribers"), subscriber())),
+        subscription: subscriber()
     }
 }
 
-// ─── Receiver ───────────────────────────────────────────────────────────────
-
-/// The receiving half of a channel.
-pub struct Receiver<T> {
-    inner: Arc<ChannelInner<T>>,
+// Broadcasts a message to all subscribers.
+fn broadcast_send(bc, message) {
+    set(bc, "messages", push(get(bc, "messages"), message))
 }
 
-impl<T> Receiver<T> {
-    /// Receives a value from the channel. Blocks (async) until available.
-    pub async fn recv(self) -> Result<T, RecvError> {
-        loop {
-            {
-                let mut queue = self.inner.queue.lock();
-                if let Some(value) = queue.pop_front() {
-                    // Wake a waiting sender
-                    let mut wakers = self.inner.send_wakers.lock();
-                    if let Some(waker) = wakers.pop() { waker.wake(); }
-                    return Ok(value);
-                }
-            }
-
-            if self.inner.closed.load(Ordering::Acquire)
-               && self.inner.queue.lock().is_empty() {
-                return Err(RecvError);
-            }
-
-            // Register waker and wait
-            RecvFuture { receiver: self }.await;
-        }
-    }
-
-    /// Attempts to receive without blocking.
-    pub fn try_recv(self) -> Result<T, TryRecvError> {
-        let mut queue = self.inner.queue.lock();
-        match queue.pop_front() {
-            Some(value) => {
-                let mut wakers = self.inner.send_wakers.lock();
-                if let Some(waker) = wakers.pop() { waker.wake(); }
-                Ok(value)
-            }
-            None => {
-                if self.inner.closed.load(Ordering::Acquire) {
-                    Err(TryRecvError::Closed)
-                } else {
-                    Err(TryRecvError::Empty)
-                }
-            }
-        }
-    }
-
-    /// Returns an async iterator over received values.
-    pub fn iter(self) -> RecvIter<T> {
-        RecvIter { receiver: self }
-    }
-
-    /// Returns true if the channel is closed and empty.
-    pub fn is_closed(self) -> bool {
-        self.inner.closed.load(Ordering::Acquire) && self.inner.queue.lock().is_empty()
-    }
-}
-
-impl<T> Clone for Receiver<T> {
-    fn clone(self) -> Receiver<T> {
-        self.inner.receiver_count.fetch_add(1, Ordering::Relaxed);
-        Receiver { inner: self.inner.clone() }
-    }
-}
-
-impl<T> Drop for Receiver<T> {
-    fn drop(self) {
-        if self.inner.receiver_count.fetch_sub(1, Ordering::Release) == 1 {
-            let mut wakers = self.inner.send_wakers.lock();
-            for waker in wakers.drain(..) { waker.wake(); }
-        }
-    }
-}
-
-// ─── Async Stream Iterator ─────────────────────────────────────────────────
-
-pub struct RecvIter<T> {
-    receiver: &Receiver<T>,
-}
-
-impl<T> RecvIter<T> {
-    pub async fn next(self) -> Option<T> {
-        self.receiver.recv().await.ok()
-    }
-}
-
-// ─── Oneshot Channel ────────────────────────────────────────────────────────
-
-struct OneshotInner<T> {
-    value: Mutex<Option<T>>,
-    completed: AtomicBool,
-    waker: AtomicWaker,
-}
-
-pub struct OneshotSender<T> {
-    inner: Arc<OneshotInner<T>>,
-}
-
-impl<T> OneshotSender<T> {
-    /// Sends a single value (consumes the sender).
-    pub fn send(self, value: T) -> Result<(), T> {
-        if self.inner.completed.load(Ordering::Acquire) {
-            return Err(value);
-        }
-        *self.inner.value.lock() = Some(value);
-        self.inner.completed.store(true, Ordering::Release);
-        self.inner.waker.wake();
-        Ok(())
-    }
-}
-
-pub struct OneshotReceiver<T> {
-    inner: Arc<OneshotInner<T>>,
-}
-
-impl<T> OneshotReceiver<T> {
-    pub async fn recv(self) -> Result<T, RecvError> {
-        loop {
-            if self.inner.completed.load(Ordering::Acquire) {
-                return self.inner.value.lock().take().ok_or(RecvError);
-            }
-            self.inner.waker.register(current_task_waker());
-            yield_now().await;
-        }
-    }
-}
-
-impl<T> Future for OneshotReceiver<T> {
-    type Output = Result<T, RecvError>;
-
-    fn poll(self, cx: &mut Context) -> Poll<Self::Output> {
-        if self.inner.completed.load(Ordering::Acquire) {
-            Poll::Ready(self.inner.value.lock().take().ok_or(RecvError))
-        } else {
-            self.inner.waker.register(cx.waker().clone());
-            Poll::Pending
-        }
-    }
-}
-
-// ─── Error Types ────────────────────────────────────────────────────────────
-
-pub struct SendError<T>(pub T);
-pub struct RecvError;
-
-pub enum TrySendError<T> {
-    Full(T),
-    Closed(T),
-}
-
-pub enum TryRecvError {
-    Empty,
-    Closed,
-}
-
-// ─── Internal Futures ───────────────────────────────────────────────────────
-
-struct SendFuture<T> {
-    sender: &Sender<T>,
-    value: Option<T>,
-}
-
-impl<T> Future for SendFuture<T> {
-    type Output = ();
-    fn poll(mut self, cx: &mut Context) -> Poll<()> {
-        self.sender.inner.send_wakers.lock().push(cx.waker().clone());
-        Poll::Pending
-    }
-}
-
-struct RecvFuture<T> {
-    receiver: &Receiver<T>,
-}
-
-impl<T> Future for RecvFuture<T> {
-    type Output = ();
-    fn poll(self, cx: &mut Context) -> Poll<()> {
-        self.receiver.inner.recv_wakers.lock().push(cx.waker().clone());
-        Poll::Pending
-    }
+// Receives from a subscription.
+fn broadcast_recv(bc, subscription) {
+    fn id() { get(subscription, "id") }
+    fn msgs() { get(bc, "messages") }
+    fn read_pos() { get(subscription, "read_pos") }
+    if_then(is_nil(read_pos()),
+        fn() { if_then(len(msgs()) > 0, fn() { head(msgs()) }, fn() { nil }) },
+        fn() { if_then(read_pos() < len(msgs()),
+            fn() { get(msgs(), read_pos()) },
+            fn() { nil }) })
 }

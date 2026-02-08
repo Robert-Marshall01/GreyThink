@@ -1,188 +1,55 @@
-/// net::udp — UDP datagram sockets.
+// net::udp — UDP datagram sockets
+//
+// Provides UDP socket abstractions for connectionless communication.
 
-use crate::io::{IoResult, IoError};
-use crate::net::{SocketAddr, ToSocketAddrs, NetResult, NetError};
-use crate::time::Duration;
-use crate::core::option::Option;
-
-/// A UDP socket for sending and receiving datagrams.
-///
-/// ```grey
-/// // Echo server
-/// let socket = UdpSocket::bind("0.0.0.0:9000").await?;
-/// let mut buf = [0u8; 1500];
-/// loop {
-///     let (n, src) = socket.recv_from(&mut buf).await?;
-///     socket.send_to(&buf[..n], src).await?;
-/// }
-/// ```
-pub struct UdpSocket {
-    fd: RawFd,
-    local_addr: SocketAddr,
+// Creates a UDP socket bound to a port.
+fn UdpSocket_bind(host, port) {
+    {
+        _type: "UdpSocket",
+        host: host,
+        port: port,
+        bound: true,
+        buffer: []
+    }
 }
 
-impl UdpSocket {
-    /// Binds a UDP socket to the given address.
-    pub async fn bind<A: ToSocketAddrs>(addr: A) -> NetResult<UdpSocket> {
-        let addrs = addr.to_socket_addrs()?;
-        let mut last_err = NetError::Other(String::from("no addresses"));
-
-        for socket_addr in addrs {
-            match UdpSocket::bind_addr(socket_addr) {
-                Ok(socket) => return Ok(socket),
-                Err(e) => last_err = e,
-            }
+// Sends a datagram to a target address.
+fn udp_send_to(socket, data, target_host, target_port) {
+    fn datagram() {
+        {
+            data: data,
+            to_host: target_host,
+            to_port: target_port,
+            from_host: get(socket, "host"),
+            from_port: get(socket, "port")
         }
-        Err(last_err)
     }
+    set(socket, "buffer", push(get(socket, "buffer"), datagram()))
+}
 
-    fn bind_addr(addr: SocketAddr) -> NetResult<UdpSocket> {
-        let family = if addr.is_ipv4() { AF_INET } else { AF_INET6 };
-        let fd = intrinsics::socket(family, SOCK_DGRAM, 0)?;
-        intrinsics::bind(fd, &addr)?;
-        let local = intrinsics::getsockname(fd)?;
-        Ok(UdpSocket { fd, local_addr: local })
-    }
-
-    /// Creates an unbound UDP socket.
-    pub fn unbound() -> NetResult<UdpSocket> {
-        let fd = intrinsics::socket(AF_INET, SOCK_DGRAM, 0)?;
-        let local = intrinsics::getsockname(fd)?;
-        Ok(UdpSocket { fd, local_addr: local })
-    }
-
-    /// Connects to a remote address, allowing use of send/recv instead of send_to/recv_from.
-    pub fn connect<A: ToSocketAddrs>(mut self, addr: A) -> NetResult<()> {
-        let addrs = addr.to_socket_addrs()?;
-        for socket_addr in addrs {
-            match intrinsics::connect(self.fd, &socket_addr) {
-                Ok(()) => return Ok(()),
-                Err(_) => continue,
+// Receives a datagram (returns { data, from_addr } or nil).
+fn udp_recv_from(socket) {
+    fn buf() { get(socket, "buffer") }
+    if_then(len(buf()) == 0, fn() { nil },
+        fn() {
+            fn dgram() { head(buf()) }
+            {
+                data: get(dgram(), "data"),
+                from_addr: str(get(dgram(), "from_host"), ":", get(dgram(), "from_port")),
+                socket: set(socket, "buffer", tail(buf()))
             }
-        }
-        Err(NetError::ConnectionRefused)
-    }
-
-    /// Sends data to the connected peer.
-    pub async fn send(self, buf: &[u8]) -> IoResult<usize> {
-        intrinsics::send_async(self.fd, buf, 0).await
-    }
-
-    /// Receives data from the connected peer.
-    pub async fn recv(self, buf: &mut [u8]) -> IoResult<usize> {
-        intrinsics::recv_async(self.fd, buf, 0).await
-    }
-
-    /// Sends data to a specific address.
-    pub async fn send_to<A: ToSocketAddrs>(self, buf: &[u8], target: A) -> NetResult<usize> {
-        let addr = target.to_socket_addrs()?.next()
-            .ok_or(NetError::InvalidAddress)?;
-        Ok(intrinsics::sendto_async(self.fd, buf, 0, &addr).await?)
-    }
-
-    /// Receives data, returning the number of bytes and the source address.
-    pub async fn recv_from(self, buf: &mut [u8]) -> IoResult<(usize, SocketAddr)> {
-        intrinsics::recvfrom_async(self.fd, buf, 0).await
-    }
-
-    /// Peeks at data without consuming it.
-    pub async fn peek(self, buf: &mut [u8]) -> IoResult<usize> {
-        intrinsics::recv_async(self.fd, buf, MSG_PEEK).await
-    }
-
-    /// Peeks at data with source address.
-    pub async fn peek_from(self, buf: &mut [u8]) -> IoResult<(usize, SocketAddr)> {
-        intrinsics::recvfrom_async(self.fd, buf, MSG_PEEK).await
-    }
-
-    /// Returns the local address.
-    pub fn local_addr(self) -> SocketAddr { self.local_addr }
-
-    /// Sets the broadcast option.
-    pub fn set_broadcast(self, broadcast: bool) -> IoResult<()> {
-        let val: i32 = if broadcast { 1 } else { 0 };
-        intrinsics::setsockopt(self.fd, SOL_SOCKET, SO_BROADCAST, &val)
-    }
-
-    /// Gets the broadcast option.
-    pub fn broadcast(self) -> IoResult<bool> {
-        let val: i32 = intrinsics::getsockopt(self.fd, SOL_SOCKET, SO_BROADCAST)?;
-        Ok(val != 0)
-    }
-
-    /// Sets the multicast TTL.
-    pub fn set_multicast_ttl_v4(self, ttl: u32) -> IoResult<()> {
-        intrinsics::setsockopt(self.fd, IPPROTO_IP, IP_MULTICAST_TTL, &(ttl as i32))
-    }
-
-    /// Sets the unicast TTL.
-    pub fn set_ttl(self, ttl: u32) -> IoResult<()> {
-        intrinsics::setsockopt(self.fd, IPPROTO_IP, IP_TTL, &(ttl as i32))
-    }
-
-    /// Gets the TTL.
-    pub fn ttl(self) -> IoResult<u32> {
-        let val: i32 = intrinsics::getsockopt(self.fd, IPPROTO_IP, IP_TTL)?;
-        Ok(val as u32)
-    }
-
-    /// Joins a multicast group.
-    pub fn join_multicast_v4(self, multiaddr: &Ipv4Addr, interface: &Ipv4Addr) -> IoResult<()> {
-        let mreq = IpMreq { multiaddr: *multiaddr, interface: *interface };
-        intrinsics::setsockopt(self.fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq)
-    }
-
-    /// Leaves a multicast group.
-    pub fn leave_multicast_v4(self, multiaddr: &Ipv4Addr, interface: &Ipv4Addr) -> IoResult<()> {
-        let mreq = IpMreq { multiaddr: *multiaddr, interface: *interface };
-        intrinsics::setsockopt(self.fd, IPPROTO_IP, IP_DROP_MEMBERSHIP, &mreq)
-    }
-
-    /// Sets the receive buffer size.
-    pub fn set_recv_buffer_size(self, size: usize) -> IoResult<()> {
-        intrinsics::setsockopt(self.fd, SOL_SOCKET, SO_RCVBUF, &(size as i32))
-    }
-
-    /// Sets the send buffer size.
-    pub fn set_send_buffer_size(self, size: usize) -> IoResult<()> {
-        intrinsics::setsockopt(self.fd, SOL_SOCKET, SO_SNDBUF, &(size as i32))
-    }
-
-    /// Sets non-blocking mode.
-    pub fn set_nonblocking(self, nonblocking: bool) -> IoResult<()> {
-        intrinsics::set_nonblocking(self.fd, nonblocking)
-    }
-
-    /// Clones the socket (duplicates the file descriptor).
-    pub fn try_clone(self) -> IoResult<UdpSocket> {
-        let new_fd = intrinsics::dup(self.fd)?;
-        Ok(UdpSocket { fd: new_fd, local_addr: self.local_addr })
-    }
+        })
 }
 
-impl Drop for UdpSocket {
-    fn drop(mut self) {
-        let _ = intrinsics::close(self.fd);
-    }
+// Returns the local address.
+fn udp_local_addr(socket) {
+    str(get(socket, "host"), ":", get(socket, "port"))
 }
 
-struct IpMreq {
-    multiaddr: Ipv4Addr,
-    interface: Ipv4Addr,
+// Closes the socket.
+fn udp_close(socket) {
+    merge(socket, { bound: false, buffer: [] })
 }
 
-type RawFd = i32;
-
-const AF_INET: i32    = 2;
-const AF_INET6: i32   = 10;
-const SOCK_DGRAM: i32 = 2;
-const SOL_SOCKET: i32 = 1;
-const IPPROTO_IP: i32 = 0;
-const SO_BROADCAST: i32 = 6;
-const SO_RCVBUF: i32    = 8;
-const SO_SNDBUF: i32    = 7;
-const IP_TTL: i32       = 2;
-const IP_MULTICAST_TTL: i32  = 33;
-const IP_ADD_MEMBERSHIP: i32 = 35;
-const IP_DROP_MEMBERSHIP: i32 = 36;
-const MSG_PEEK: i32 = 2;
+// Returns true if the socket is bound.
+fn udp_is_bound(socket) { get(socket, "bound") }
