@@ -1,0 +1,140 @@
+/// error::assert — Rich assertion utilities for runtime checks.
+
+use crate::core::string::String;
+use crate::error::trace::Backtrace;
+
+/// Assert two values are equal with a detailed failure message.
+pub fn assert_eq<T: PartialEq + Debug>(left: &T, right: &T) {
+    if left != right {
+        panic!("assertion failed: `(left == right)`\n  left: `{:?}`\n right: `{:?}`", left, right);
+    }
+}
+
+/// Assert two values are equal with a custom message.
+pub fn assert_eq_msg<T: PartialEq + Debug>(left: &T, right: &T, msg: &str) {
+    if left != right {
+        panic!("assertion failed: {}\n  left: `{:?}`\n right: `{:?}`", msg, left, right);
+    }
+}
+
+/// Assert two values are not equal.
+pub fn assert_ne<T: PartialEq + Debug>(left: &T, right: &T) {
+    if left == right {
+        panic!("assertion failed: `(left != right)`\n  left: `{:?}`\n right: `{:?}`", left, right);
+    }
+}
+
+/// Assert a predicate holds on a value, with a descriptive label.
+pub fn assert_that<T: Debug>(value: &T, predicate: impl FnOnce(&T) -> bool, description: &str) {
+    if !predicate(value) {
+        panic!("assertion failed: expected {}, got `{:?}`", description, value);
+    }
+}
+
+/// Assert a value is Some.
+pub fn assert_some<T: Debug>(opt: &Option<T>) -> &T {
+    match opt {
+        Some(v) => v,
+        None => panic!("assertion failed: expected Some, got None"),
+    }
+}
+
+/// Assert a value is None.
+pub fn assert_none<T: Debug>(opt: &Option<T>) {
+    if let Some(v) = opt {
+        panic!("assertion failed: expected None, got Some({:?})", v);
+    }
+}
+
+/// Assert a Result is Ok.
+pub fn assert_ok<T: Debug, E: Debug>(result: &Result<T, E>) -> &T {
+    match result {
+        Ok(v) => v,
+        Err(e) => panic!("assertion failed: expected Ok, got Err({:?})", e),
+    }
+}
+
+/// Assert a Result is Err.
+pub fn assert_err<T: Debug, E: Debug>(result: &Result<T, E>) -> &E {
+    match result {
+        Ok(v) => panic!("assertion failed: expected Err, got Ok({:?})", v),
+        Err(e) => e,
+    }
+}
+
+/// Assert a value is within a range.
+pub fn assert_in_range<T: PartialOrd + Debug>(value: &T, min: &T, max: &T) {
+    if value < min || value > max {
+        panic!("assertion failed: `{:?}` not in range [{:?}, {:?}]", value, min, max);
+    }
+}
+
+/// Assert a float is approximately equal (within epsilon).
+pub fn assert_approx_eq(left: f64, right: f64, epsilon: f64) {
+    let diff = (left - right).abs();
+    if diff > epsilon {
+        panic!("assertion failed: `{} ≈ {}` (diff={}, epsilon={})", left, right, diff, epsilon);
+    }
+}
+
+/// Assert a string contains a substring.
+pub fn assert_contains(haystack: &str, needle: &str) {
+    if !haystack.contains(needle) {
+        panic!("assertion failed: `{:?}` does not contain `{:?}`", haystack, needle);
+    }
+}
+
+/// Assert a string starts with a prefix.
+pub fn assert_starts_with(s: &str, prefix: &str) {
+    if !s.starts_with(prefix) {
+        panic!("assertion failed: `{:?}` does not start with `{:?}`", s, prefix);
+    }
+}
+
+/// Assert a slice has a specific length.
+pub fn assert_len<T>(slice: &[T], expected: usize) {
+    if slice.len() != expected {
+        panic!("assertion failed: expected length {}, got {}", expected, slice.len());
+    }
+}
+
+/// Assert a slice is empty.
+pub fn assert_empty<T>(slice: &[T]) {
+    if !slice.is_empty() {
+        panic!("assertion failed: expected empty, got {} elements", slice.len());
+    }
+}
+
+/// Soft assertion that collects failures instead of panicking.
+pub struct SoftAssert {
+    failures: Vec<String>,
+}
+
+impl SoftAssert {
+    pub fn new() -> SoftAssert {
+        SoftAssert { failures: Vec::new() }
+    }
+
+    pub fn eq<T: PartialEq + Debug>(&mut self, left: &T, right: &T, msg: &str) {
+        if left != right {
+            self.failures.push(format!("{}: left={:?}, right={:?}", msg, left, right));
+        }
+    }
+
+    pub fn check(&mut self, cond: bool, msg: &str) {
+        if !cond {
+            self.failures.push(String::from(msg));
+        }
+    }
+
+    pub fn has_failures(&self) -> bool { !self.failures.is_empty() }
+    pub fn failure_count(&self) -> usize { self.failures.len() }
+
+    /// Panic if there were any failures.
+    pub fn assert_all(self) {
+        if !self.failures.is_empty() {
+            let msg = self.failures.join("\n  ");
+            panic!("soft assertions failed ({}):\n  {}", self.failures.len(), msg);
+        }
+    }
+}

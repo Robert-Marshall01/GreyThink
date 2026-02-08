@@ -1,0 +1,232 @@
+/// time::clock — Wall-clock, monotonic, and custom clock abstractions.
+
+use crate::time::instant::Instant;
+use crate::time::duration::Duration;
+use crate::time::timezone::{DateTime, TimeZone, UtcOffset};
+
+/// A clock trait to abstract time sources (useful for testing).
+pub trait Clock {
+    /// Current instant.
+    fn now(&self) -> Instant;
+
+    /// Current wall-clock unix timestamp in seconds.
+    fn unix_timestamp(&self) -> i64;
+
+    /// Current wall-clock unix timestamp in milliseconds.
+    fn unix_timestamp_millis(&self) -> i64;
+
+    /// Current wall-clock unix timestamp in nanoseconds.
+    fn unix_timestamp_nanos(&self) -> i128;
+}
+
+// ─── SystemClock ────────────────────────────────────────────
+
+/// The system real-time clock (wall-clock). Subject to NTP adjustments.
+pub struct SystemClock;
+
+impl SystemClock {
+    /// Returns the current UNIX timestamp (seconds since 1970-01-01 00:00:00 UTC).
+    pub fn unix_now() -> i64 {
+        extern fn __grey_system_time_secs() -> i64;
+        unsafe { __grey_system_time_secs() }
+    }
+
+    /// Returns the current UNIX timestamp in milliseconds.
+    pub fn unix_now_millis() -> i64 {
+        extern fn __grey_system_time_millis() -> i64;
+        unsafe { __grey_system_time_millis() }
+    }
+
+    /// Returns the current UNIX timestamp in nanoseconds.
+    pub fn unix_now_nanos() -> i128 {
+        extern fn __grey_system_time_nanos() -> i128;
+        unsafe { __grey_system_time_nanos() }
+    }
+
+    /// Returns the current date-time in UTC.
+    pub fn now_utc() -> DateTime {
+        DateTime::from_unix_timestamp(SystemClock::unix_now(), UtcOffset::UTC)
+    }
+
+    /// Returns the current date-time in the given timezone.
+    pub fn now_in(tz: &TimeZone) -> DateTime {
+        let ts = SystemClock::unix_now();
+        let offset = tz.offset_at(ts);
+        DateTime::from_unix_timestamp(ts, offset)
+    }
+
+    /// Returns the current date-time in the local timezone.
+    pub fn now_local() -> DateTime {
+        let ts = SystemClock::unix_now();
+        let offset = UtcOffset::local();
+        DateTime::from_unix_timestamp(ts, offset)
+    }
+}
+
+impl Clock for SystemClock {
+    fn now(&self) -> Instant { Instant::now() }
+    fn unix_timestamp(&self) -> i64 { SystemClock::unix_now() }
+    fn unix_timestamp_millis(&self) -> i64 { SystemClock::unix_now_millis() }
+    fn unix_timestamp_nanos(&self) -> i128 { SystemClock::unix_now_nanos() }
+}
+
+// ─── MonotonicClock ─────────────────────────────────────────
+
+/// A monotonic clock that never goes backwards. Suitable for measuring durations.
+pub struct MonotonicClock;
+
+impl MonotonicClock {
+    /// Returns the current monotonic instant.
+    pub fn now() -> Instant {
+        Instant::now()
+    }
+
+    /// Measures elapsed time executing a closure.
+    pub fn elapsed<T, F: FnOnce() -> T>(f: F) -> (T, Duration) {
+        let start = Instant::now();
+        let result = f();
+        (result, start.elapsed())
+    }
+}
+
+impl Clock for MonotonicClock {
+    fn now(&self) -> Instant { Instant::now() }
+    fn unix_timestamp(&self) -> i64 { SystemClock::unix_now() }
+    fn unix_timestamp_millis(&self) -> i64 { SystemClock::unix_now_millis() }
+    fn unix_timestamp_nanos(&self) -> i128 { SystemClock::unix_now_nanos() }
+}
+
+// ─── FakeClock ──────────────────────────────────────────────
+
+/// A manually-controlled clock for deterministic testing.
+pub struct FakeClock {
+    instant: Instant,
+    unix_ts: i64,
+    unix_ts_nanos: i128,
+}
+
+impl FakeClock {
+    /// Create a fake clock with the given initial unix timestamp.
+    pub fn new(unix_ts: i64) -> FakeClock {
+        FakeClock { instant: Instant::now(), unix_ts, unix_ts_nanos: 0 }
+    }
+
+    /// Advance the clock by the given duration.
+    pub fn advance(&mut self, d: Duration) {
+        self.instant = self.instant + d;
+        self.unix_ts += d.as_secs() as i64;
+        self.unix_ts_nanos += d.subsec_nanos() as i128;
+        // Carry over nanos to seconds
+        if self.unix_ts_nanos >= 1_000_000_000 {
+            self.unix_ts += (self.unix_ts_nanos / 1_000_000_000) as i64;
+            self.unix_ts_nanos = self.unix_ts_nanos % 1_000_000_000;
+        }
+    }
+
+    /// Set the clock to a specific unix timestamp.
+    pub fn set(&mut self, unix_ts: i64) {
+        self.unix_ts = unix_ts;
+    }
+}
+
+impl Clock for FakeClock {
+    fn now(&self) -> Instant { self.instant }
+    fn unix_timestamp(&self) -> i64 { self.unix_ts }
+    fn unix_timestamp_millis(&self) -> i64 {
+        self.unix_ts * 1000 + (self.unix_ts_nanos / 1_000_000) as i64
+    }
+    fn unix_timestamp_nanos(&self) -> i128 {
+        self.unix_ts as i128 * 1_000_000_000 + self.unix_ts_nanos
+    }
+}
+
+// ─── Stopwatch ──────────────────────────────────────────────
+
+/// A simple stopwatch for measuring elapsed time with lap support.
+pub struct Stopwatch {
+    start: Option<Instant>,
+    elapsed: Duration,
+    laps: Vec<Duration>,
+    running: bool,
+}
+
+impl Stopwatch {
+    /// Create a new stopped stopwatch.
+    pub fn new() -> Stopwatch {
+        Stopwatch { start: None, elapsed: Duration::ZERO, laps: Vec::new(), running: false }
+    }
+
+    /// Create and start a stopwatch.
+    pub fn start_new() -> Stopwatch {
+        let mut sw = Stopwatch::new();
+        sw.start();
+        sw
+    }
+
+    /// Start or resume the stopwatch.
+    pub fn start(&mut self) {
+        if !self.running {
+            self.start = Some(Instant::now());
+            self.running = true;
+        }
+    }
+
+    /// Stop the stopwatch, accumulating elapsed time.
+    pub fn stop(&mut self) {
+        if self.running {
+            if let Some(start) = self.start {
+                self.elapsed = self.elapsed + start.elapsed();
+            }
+            self.start = None;
+            self.running = false;
+        }
+    }
+
+    /// Reset the stopwatch to zero and stop it.
+    pub fn reset(&mut self) {
+        self.start = None;
+        self.elapsed = Duration::ZERO;
+        self.laps.clear();
+        self.running = false;
+    }
+
+    /// Restart: reset and start immediately.
+    pub fn restart(&mut self) {
+        self.reset();
+        self.start();
+    }
+
+    /// Record a lap. Returns the lap duration.
+    pub fn lap(&mut self) -> Duration {
+        let now = Instant::now();
+        let lap_dur = if let Some(start) = self.start {
+            start.elapsed()
+        } else {
+            Duration::ZERO
+        };
+        self.laps.push(lap_dur);
+        self.elapsed = self.elapsed + lap_dur;
+        self.start = Some(now);
+        lap_dur
+    }
+
+    /// Total elapsed time.
+    pub fn elapsed(&self) -> Duration {
+        let running_extra = if self.running {
+            self.start.map(|s| s.elapsed()).unwrap_or(Duration::ZERO)
+        } else {
+            Duration::ZERO
+        };
+        self.elapsed + running_extra
+    }
+
+    /// All recorded lap durations.
+    pub fn laps(&self) -> &[Duration] {
+        &self.laps
+    }
+
+    /// Whether the stopwatch is currently running.
+    pub fn is_running(&self) -> bool {
+        self.running
+    }
+}

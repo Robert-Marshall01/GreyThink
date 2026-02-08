@@ -1,0 +1,144 @@
+/// net — Networking: TCP, UDP, HTTP, WebSocket, DNS, and TLS.
+
+pub mod tcp;
+pub mod udp;
+pub mod http;
+pub mod websocket;
+pub mod dns;
+pub mod tls;
+
+// Re-exports
+pub use tcp::{TcpListener, TcpStream};
+pub use udp::UdpSocket;
+pub use http::{HttpClient, HttpRequest, HttpResponse, HttpMethod, HttpStatus};
+pub use websocket::{WebSocket, WsMessage};
+pub use dns::{resolve, lookup_host, IpAddr, Ipv4Addr, Ipv6Addr};
+pub use tls::{TlsConnector, TlsAcceptor, TlsStream};
+
+/// A socket address: an IP address plus a port.
+pub struct SocketAddr {
+    ip: IpAddr,
+    port: u16,
+}
+
+impl SocketAddr {
+    pub fn new(ip: IpAddr, port: u16) -> SocketAddr {
+        SocketAddr { ip, port }
+    }
+
+    pub fn ip(self) -> IpAddr { self.ip }
+    pub fn port(self) -> u16 { self.port }
+
+    pub fn set_ip(mut self, ip: IpAddr) { self.ip = ip; }
+    pub fn set_port(mut self, port: u16) { self.port = port; }
+
+    pub fn is_ipv4(self) -> bool {
+        match self.ip {
+            IpAddr::V4(_) => true,
+            IpAddr::V6(_) => false,
+        }
+    }
+
+    pub fn is_ipv6(self) -> bool {
+        !self.is_ipv4()
+    }
+}
+
+impl Display for SocketAddr {
+    fn fmt(self, f: &mut Formatter) -> Result<(), FmtError> {
+        match self.ip {
+            IpAddr::V4(v4) => write!(f, "{}:{}", v4, self.port),
+            IpAddr::V6(v6) => write!(f, "[{}]:{}", v6, self.port),
+        }
+    }
+}
+
+/// Parses a "host:port" string into a SocketAddr.
+pub fn parse_socket_addr(s: &str) -> Result<SocketAddr, NetError> {
+    // Handle [ipv6]:port format
+    if s.starts_with('[') {
+        let close = s.find(']').ok_or(NetError::InvalidAddress)?;
+        let ip_str = &s[1..close];
+        let port_str = &s[close + 2..]; // skip ']:' 
+        let ip = Ipv6Addr::parse(ip_str)?;
+        let port = port_str.parse::<u16>().map_err(|_| NetError::InvalidAddress)?;
+        Ok(SocketAddr::new(IpAddr::V6(ip), port))
+    } else {
+        let colon = s.rfind(':').ok_or(NetError::InvalidAddress)?;
+        let ip_str = &s[..colon];
+        let port_str = &s[colon + 1..];
+        let ip = Ipv4Addr::parse(ip_str)?;
+        let port = port_str.parse::<u16>().map_err(|_| NetError::InvalidAddress)?;
+        Ok(SocketAddr::new(IpAddr::V4(ip), port))
+    }
+}
+
+/// Trait for types that can be converted to socket addresses.
+pub trait ToSocketAddrs {
+    type Iter: Iterator<Item = SocketAddr>;
+    fn to_socket_addrs(self) -> Result<Self::Iter, NetError>;
+}
+
+impl ToSocketAddrs for SocketAddr {
+    type Iter = core::iter::Once<SocketAddr>;
+    fn to_socket_addrs(self) -> Result<core::iter::Once<SocketAddr>, NetError> {
+        Ok(core::iter::once(self))
+    }
+}
+
+impl ToSocketAddrs for (&str, u16) {
+    type Iter = Vec<SocketAddr>;
+    fn to_socket_addrs(self) -> Result<Vec<SocketAddr>, NetError> {
+        let (host, port) = self;
+        let addrs = dns::resolve(host)?;
+        Ok(addrs.into_iter().map(|ip| SocketAddr::new(ip, port)).collect())
+    }
+}
+
+impl ToSocketAddrs for &str {
+    type Iter = Vec<SocketAddr>;
+    fn to_socket_addrs(self) -> Result<Vec<SocketAddr>, NetError> {
+        let addr = parse_socket_addr(self)?;
+        Ok(vec![addr])
+    }
+}
+
+/// Network error type.
+pub enum NetError {
+    Io(IoError),
+    InvalidAddress,
+    DnsFailure(String),
+    ConnectionRefused,
+    ConnectionReset,
+    ConnectionAborted,
+    TimedOut,
+    TlsError(String),
+    HttpError(String),
+    WebSocketError(String),
+    Other(String),
+}
+
+impl Display for NetError {
+    fn fmt(self, f: &mut Formatter) -> Result<(), FmtError> {
+        match self {
+            NetError::Io(e) => write!(f, "io error: {}", e),
+            NetError::InvalidAddress => write!(f, "invalid address"),
+            NetError::DnsFailure(s) => write!(f, "dns failure: {}", s),
+            NetError::ConnectionRefused => write!(f, "connection refused"),
+            NetError::ConnectionReset => write!(f, "connection reset"),
+            NetError::ConnectionAborted => write!(f, "connection aborted"),
+            NetError::TimedOut => write!(f, "timed out"),
+            NetError::TlsError(s) => write!(f, "tls error: {}", s),
+            NetError::HttpError(s) => write!(f, "http error: {}", s),
+            NetError::WebSocketError(s) => write!(f, "websocket error: {}", s),
+            NetError::Other(s) => write!(f, "{}", s),
+        }
+    }
+}
+
+impl From<IoError> for NetError {
+    fn from(e: IoError) -> NetError { NetError::Io(e) }
+}
+
+/// Shorthand for network results.
+pub type NetResult<T> = Result<T, NetError>;

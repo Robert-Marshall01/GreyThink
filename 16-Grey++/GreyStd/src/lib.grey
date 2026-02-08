@@ -1,0 +1,36 @@
+/// GreyStd — The Grey++ Standard Library
+///
+/// Root module that re-exports all subsystems.
+
+pub mod core;
+pub mod mem;
+pub mod concurrent;
+pub mod io;
+pub mod net;
+pub mod serial;
+pub mod time;
+pub mod crypto;
+pub mod sys;
+pub mod module;
+pub mod error;
+pub mod test;
+pub mod reflect;
+pub mod deterministic;
+
+/// Prelude — commonly used types automatically available.
+pub mod prelude {
+    pub use crate::core::string::String;
+    pub use crate::core::bytes::{ Bytes, ByteBuffer };
+    pub use crate::core::array::Array;
+    pub use crate::core::vec::Vec;
+    pub use crate::core::map::HashMap;
+    pub use crate::core::set::HashSet;
+    pub use crate::core::tuple::Tuple;
+    pub use crate::core::option::Option::{ self, Some, None };
+    pub use crate::core::result::Result::{ self, Ok, Err };
+    pub use crate::core::iter::{ Iterator, IntoIterator };
+    pub use crate::core::math;
+    pub use crate::mem::{ Box, Rc, Arc };
+    pub use crate::error::{ Error, ErrorKind };
+    pub use crate::io::{ print, println, eprint, eprintln };
+}

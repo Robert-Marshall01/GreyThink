@@ -1,0 +1,393 @@
+/// core::map — Hash map implementation.
+///
+/// `HashMap<K, V>` is an unordered associative container using open addressing
+/// with Robin Hood hashing for excellent performance.
+
+/// An unordered hash map using Robin Hood hashing.
+pub struct HashMap<K, V> {
+    buckets: Vec<Option<Bucket<K, V>>>,
+    len: usize,
+    capacity: usize,
+}
+
+struct Bucket<K, V> {
+    key: K,
+    value: V,
+    hash: u64,
+    probe_distance: usize,
+}
+
+impl<K: Hash + Eq, V> HashMap<K, V> {
+    /// Creates a new empty map.
+    pub fn new() -> HashMap<K, V> {
+        HashMap::with_capacity(16)
+    }
+
+    /// Creates a map with at least the given capacity.
+    pub fn with_capacity(cap: usize) -> HashMap<K, V> {
+        let capacity = cap.next_power_of_two();
+        let mut buckets = Vec::with_capacity(capacity);
+        for _ in 0..capacity {
+            buckets.push(None);
+        }
+        HashMap { buckets, len: 0, capacity }
+    }
+
+    /// Returns the number of key-value pairs.
+    pub fn len(self) -> usize {
+        self.len
+    }
+
+    /// Returns true if the map is empty.
+    pub fn is_empty(self) -> bool {
+        self.len == 0
+    }
+
+    /// Inserts a key-value pair. Returns the old value if the key existed.
+    pub fn insert(mut self, key: K, value: V) -> Option<V> {
+        if self.should_grow() {
+            self.resize(self.capacity * 2);
+        }
+
+        let hash = self.hash_key(&key);
+        let mut bucket = Bucket { key, value, hash, probe_distance: 0 };
+        let mut pos = self.bucket_index(hash);
+        let mut displaced: Option<V> = None;
+
+        loop {
+            match &mut self.buckets[pos] {
+                None => {
+                    self.buckets[pos] = Some(bucket);
+                    self.len += 1;
+                    return displaced;
+                }
+                Some(existing) => {
+                    if existing.hash == bucket.hash && existing.key == bucket.key {
+                        // Key exists — replace value
+                        let old = mem::replace(&mut existing.value, bucket.value);
+                        return Some(old);
+                    }
+
+                    // Robin Hood: steal from the rich
+                    if bucket.probe_distance > existing.probe_distance {
+                        let tmp = mem::replace(&mut self.buckets[pos], Some(bucket));
+                        bucket = tmp.unwrap();
+                    }
+
+                    bucket.probe_distance += 1;
+                    pos = (pos + 1) & (self.capacity - 1);
+                }
+            }
+        }
+    }
+
+    /// Returns a reference to the value for the given key.
+    pub fn get(self, key: &K) -> Option<&V> {
+        let hash = self.hash_key(key);
+        let mut pos = self.bucket_index(hash);
+        let mut distance = 0;
+
+        loop {
+            match &self.buckets[pos] {
+                None => return None,
+                Some(bucket) => {
+                    if distance > bucket.probe_distance {
+                        return None;
+                    }
+                    if bucket.hash == hash && bucket.key == *key {
+                        return Some(&bucket.value);
+                    }
+                    distance += 1;
+                    pos = (pos + 1) & (self.capacity - 1);
+                }
+            }
+        }
+    }
+
+    /// Returns a mutable reference to the value for the given key.
+    pub fn get_mut(mut self, key: &K) -> Option<&mut V> {
+        let hash = self.hash_key(key);
+        let mut pos = self.bucket_index(hash);
+        let mut distance = 0;
+
+        loop {
+            match &mut self.buckets[pos] {
+                None => return None,
+                Some(bucket) => {
+                    if distance > bucket.probe_distance {
+                        return None;
+                    }
+                    if bucket.hash == hash && bucket.key == *key {
+                        return Some(&mut bucket.value);
+                    }
+                    distance += 1;
+                    pos = (pos + 1) & (self.capacity - 1);
+                }
+            }
+        }
+    }
+
+    /// Returns true if the map contains the given key.
+    pub fn contains_key(self, key: &K) -> bool {
+        self.get(key).is_some()
+    }
+
+    /// Removes a key-value pair. Returns the value if the key existed.
+    pub fn remove(mut self, key: &K) -> Option<V> {
+        let hash = self.hash_key(key);
+        let mut pos = self.bucket_index(hash);
+        let mut distance = 0;
+
+        loop {
+            match &self.buckets[pos] {
+                None => return None,
+                Some(bucket) => {
+                    if distance > bucket.probe_distance {
+                        return None;
+                    }
+                    if bucket.hash == hash && bucket.key == *key {
+                        let removed = self.buckets[pos].take().unwrap();
+
+                        // Backward shift deletion
+                        let mut prev = pos;
+                        let mut curr = (pos + 1) & (self.capacity - 1);
+                        loop {
+                            match &self.buckets[curr] {
+                                None => break,
+                                Some(b) if b.probe_distance == 0 => break,
+                                Some(_) => {
+                                    self.buckets.swap(prev, curr);
+                                    if let Some(b) = &mut self.buckets[prev] {
+                                        b.probe_distance -= 1;
+                                    }
+                                    prev = curr;
+                                    curr = (curr + 1) & (self.capacity - 1);
+                                }
+                            }
+                        }
+
+                        self.len -= 1;
+                        return Some(removed.value);
+                    }
+                    distance += 1;
+                    pos = (pos + 1) & (self.capacity - 1);
+                }
+            }
+        }
+    }
+
+    /// Gets or inserts a value with the given key.
+    pub fn entry(mut self, key: K) -> Entry<K, V> {
+        let hash = self.hash_key(&key);
+        let mut pos = self.bucket_index(hash);
+        let mut distance = 0;
+
+        loop {
+            match &self.buckets[pos] {
+                None => {
+                    return Entry::Vacant(VacantEntry { map: self, key, pos });
+                }
+                Some(bucket) => {
+                    if distance > bucket.probe_distance {
+                        return Entry::Vacant(VacantEntry { map: self, key, pos });
+                    }
+                    if bucket.hash == hash && bucket.key == key {
+                        return Entry::Occupied(OccupiedEntry { map: self, pos });
+                    }
+                    distance += 1;
+                    pos = (pos + 1) & (self.capacity - 1);
+                }
+            }
+        }
+    }
+
+    /// Clears all entries.
+    pub fn clear(mut self) {
+        for i in 0..self.capacity {
+            self.buckets[i] = None;
+        }
+        self.len = 0;
+    }
+
+    /// Returns an iterator over key-value pairs.
+    pub fn iter(self) -> HashMapIter<K, V> {
+        HashMapIter { map: self, pos: 0 }
+    }
+
+    /// Returns an iterator over keys.
+    pub fn keys(self) -> impl Iterator<Item = &K> {
+        self.iter().map(|(k, _)| k)
+    }
+
+    /// Returns an iterator over values.
+    pub fn values(self) -> impl Iterator<Item = &V> {
+        self.iter().map(|(_, v)| v)
+    }
+
+    /// Collects all keys into a Vec.
+    pub fn keys_vec(self) -> Vec<K> where K: Clone {
+        self.iter().map(|(k, _)| k.clone()).collect()
+    }
+
+    /// Collects all values into a Vec.
+    pub fn values_vec(self) -> Vec<V> where V: Clone {
+        self.iter().map(|(_, v)| v.clone()).collect()
+    }
+
+    /// Merges another map into this one. Existing keys are overwritten.
+    pub fn extend(mut self, other: HashMap<K, V>) {
+        for (k, v) in other.into_iter() {
+            self.insert(k, v);
+        }
+    }
+
+    // ── Private ─────────────────────────────────────────────────────
+
+    fn hash_key(self, key: &K) -> u64 {
+        let mut hasher = SipHasher::new();
+        key.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    fn bucket_index(self, hash: u64) -> usize {
+        (hash as usize) & (self.capacity - 1)
+    }
+
+    fn should_grow(self) -> bool {
+        // Load factor threshold: 87.5%
+        self.len * 8 >= self.capacity * 7
+    }
+
+    fn resize(mut self, new_capacity: usize) {
+        let old_buckets = mem::replace(&mut self.buckets, Vec::new());
+        self.capacity = new_capacity;
+        self.len = 0;
+        self.buckets = Vec::with_capacity(new_capacity);
+        for _ in 0..new_capacity {
+            self.buckets.push(None);
+        }
+        for bucket in old_buckets.into_iter() {
+            if let Some(b) = bucket {
+                self.insert(b.key, b.value);
+            }
+        }
+    }
+}
+
+impl<K: Clone + Hash + Eq, V: Clone> Clone for HashMap<K, V> {
+    fn clone(self) -> HashMap<K, V> {
+        let mut new_map = HashMap::with_capacity(self.capacity);
+        for (k, v) in self.iter() {
+            new_map.insert(k.clone(), v.clone());
+        }
+        new_map
+    }
+}
+
+impl<K: Debug + Hash + Eq, V: Debug> Debug for HashMap<K, V> {
+    fn debug_fmt(self, f: &mut Formatter) -> Result<(), FormatError> {
+        f.write_str("{")?;
+        let mut first = true;
+        for (k, v) in self.iter() {
+            if !first { f.write_str(", ")?; }
+            k.debug_fmt(f)?;
+            f.write_str(": ")?;
+            v.debug_fmt(f)?;
+            first = false;
+        }
+        f.write_str("}")
+    }
+}
+
+// ─── Entry API ──────────────────────────────────────────────────────────────
+
+pub enum Entry<K, V> {
+    Occupied(OccupiedEntry<K, V>),
+    Vacant(VacantEntry<K, V>),
+}
+
+impl<K: Hash + Eq, V> Entry<K, V> {
+    /// Returns a mutable reference to the value, inserting `default` if vacant.
+    pub fn or_insert(self, default: V) -> &mut V {
+        match self {
+            Entry::Occupied(e) => e.into_mut(),
+            Entry::Vacant(e)   => e.insert(default),
+        }
+    }
+
+    /// Returns a mutable reference to the value, inserting the result of `f` if vacant.
+    pub fn or_insert_with(self, f: fn() -> V) -> &mut V {
+        match self {
+            Entry::Occupied(e) => e.into_mut(),
+            Entry::Vacant(e)   => e.insert(f()),
+        }
+    }
+}
+
+pub struct OccupiedEntry<K, V> {
+    map: &mut HashMap<K, V>,
+    pos: usize,
+}
+
+impl<K, V> OccupiedEntry<K, V> {
+    pub fn get(self) -> &V {
+        &self.map.buckets[self.pos].as_ref().unwrap().value
+    }
+
+    pub fn get_mut(self) -> &mut V {
+        &mut self.map.buckets[self.pos].as_mut().unwrap().value
+    }
+
+    pub fn into_mut(self) -> &mut V {
+        &mut self.map.buckets[self.pos].as_mut().unwrap().value
+    }
+
+    pub fn insert(self, value: V) -> V {
+        mem::replace(&mut self.map.buckets[self.pos].as_mut().unwrap().value, value)
+    }
+
+    pub fn remove(self) -> V {
+        let key = &self.map.buckets[self.pos].as_ref().unwrap().key;
+        self.map.remove(key).unwrap()
+    }
+}
+
+pub struct VacantEntry<K, V> {
+    map: &mut HashMap<K, V>,
+    key: K,
+    pos: usize,
+}
+
+impl<K: Hash + Eq, V> VacantEntry<K, V> {
+    pub fn insert(self, value: V) -> &mut V {
+        self.map.insert(self.key, value);
+        // After insert, find the value we just inserted
+        self.map.get_mut(&self.key).unwrap()
+    }
+
+    pub fn key(self) -> &K {
+        &self.key
+    }
+}
+
+// ─── Iterator ───────────────────────────────────────────────────────────────
+
+pub struct HashMapIter<K, V> {
+    map: &HashMap<K, V>,
+    pos: usize,
+}
+
+impl<K, V> Iterator for HashMapIter<K, V> {
+    type Item = (&K, &V);
+
+    fn next(mut self) -> Option<(&K, &V)> {
+        while self.pos < self.map.capacity {
+            if let Some(bucket) = &self.map.buckets[self.pos] {
+                self.pos += 1;
+                return Some((&bucket.key, &bucket.value));
+            }
+            self.pos += 1;
+        }
+        None
+    }
+}

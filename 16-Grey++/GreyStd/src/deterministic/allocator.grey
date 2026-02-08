@@ -1,0 +1,285 @@
+/// deterministic::allocator — Deterministic memory allocators.
+///
+/// Provides allocators with reproducible behavior: same allocation
+/// sequence always produces the same memory layout. Useful for
+/// snapshot hashing, deterministic replay, and testing.
+
+use crate::core::string::String;
+use crate::core::vec::Vec;
+use crate::core::option::Option;
+use crate::core::result::Result;
+
+/// Error from deterministic allocation.
+#[derive(Debug, Clone)]
+pub enum AllocError {
+    /// Out of memory in the arena.
+    OutOfMemory { requested: usize, available: usize },
+    /// Alignment requirement not met.
+    BadAlignment { requested: usize, supported: usize },
+    /// Double free detected.
+    DoubleFree { address: usize },
+    /// Use after free detected.
+    UseAfterFree { address: usize },
+}
+
+impl Display for AllocError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        match self {
+            AllocError::OutOfMemory { requested, available } =>
+                write!(f, "out of memory: requested {} bytes, {} available", requested, available),
+            AllocError::BadAlignment { requested, supported } =>
+                write!(f, "bad alignment: requested {}, max supported {}", requested, supported),
+            AllocError::DoubleFree { address } =>
+                write!(f, "double free at address 0x{:x}", address),
+            AllocError::UseAfterFree { address } =>
+                write!(f, "use after free at address 0x{:x}", address),
+        }
+    }
+}
+
+/// Record of a single allocation for auditing.
+#[derive(Debug, Clone)]
+pub struct AllocationRecord {
+    /// Logical address (offset within arena).
+    pub address: usize,
+    /// Size in bytes.
+    pub size: usize,
+    /// Alignment.
+    pub align: usize,
+    /// Whether this allocation is still live.
+    pub live: bool,
+    /// Allocation sequence number.
+    pub sequence: u64,
+    /// Optional label for debugging.
+    pub label: Option<String>,
+}
+
+/// Trait for deterministic allocators.
+pub trait DetAllocator {
+    /// Allocate `size` bytes with `align` alignment.
+    fn alloc(&mut self, size: usize, align: usize) -> Result<usize, AllocError>;
+
+    /// Free a previously allocated block.
+    fn dealloc(&mut self, address: usize) -> Result<(), AllocError>;
+
+    /// Current number of live allocations.
+    fn live_count(&self) -> usize;
+
+    /// Total bytes currently allocated.
+    fn bytes_allocated(&self) -> usize;
+
+    /// Get full allocation history.
+    fn history(&self) -> &[AllocationRecord];
+
+    /// Reset to initial state.
+    fn reset(&mut self);
+}
+
+// ─── BumpAllocator ────────────────────────────────────────────────────────────
+
+/// Bump allocator: fast, deterministic, no individual frees.
+/// Allocations are contiguous. Reset frees everything at once.
+/// Perfect for per-frame or per-transaction scratch memory.
+pub struct BumpAllocator {
+    /// Total capacity in bytes.
+    capacity: usize,
+    /// Current allocation pointer (offset).
+    cursor: usize,
+    /// High-water mark.
+    peak: usize,
+    /// Allocation sequence counter.
+    sequence: u64,
+    /// Full history.
+    records: Vec<AllocationRecord>,
+}
+
+impl BumpAllocator {
+    pub fn new(capacity: usize) -> BumpAllocator {
+        BumpAllocator {
+            capacity,
+            cursor: 0,
+            peak: 0,
+            sequence: 0,
+            records: Vec::new(),
+        }
+    }
+
+    /// Remaining capacity.
+    pub fn remaining(&self) -> usize { self.capacity - self.cursor }
+
+    /// Peak usage.
+    pub fn peak_usage(&self) -> usize { self.peak }
+
+    /// Allocate with a debug label.
+    pub fn alloc_labeled(&mut self, size: usize, align: usize, label: &str) -> Result<usize, AllocError> {
+        // Align the cursor
+        let aligned = (self.cursor + align - 1) & !(align - 1);
+        let end = aligned + size;
+
+        if end > self.capacity {
+            return Result::Err(AllocError::OutOfMemory {
+                requested: size,
+                available: self.capacity - self.cursor,
+            });
+        }
+
+        let address = aligned;
+        self.cursor = end;
+        if self.cursor > self.peak { self.peak = self.cursor; }
+        self.sequence += 1;
+
+        self.records.push(AllocationRecord {
+            address,
+            size,
+            align,
+            live: true,
+            sequence: self.sequence,
+            label: Option::Some(String::from(label)),
+        });
+
+        Result::Ok(address)
+    }
+
+    /// Usage ratio (0.0 to 1.0).
+    pub fn usage_ratio(&self) -> f64 {
+        self.cursor as f64 / self.capacity as f64
+    }
+}
+
+impl DetAllocator for BumpAllocator {
+    fn alloc(&mut self, size: usize, align: usize) -> Result<usize, AllocError> {
+        self.alloc_labeled(size, align, "")
+    }
+
+    fn dealloc(&mut self, _address: usize) -> Result<(), AllocError> {
+        // Bump allocator does not support individual frees — no-op.
+        Result::Ok(())
+    }
+
+    fn live_count(&self) -> usize {
+        self.records.iter().filter(|r| r.live).count()
+    }
+
+    fn bytes_allocated(&self) -> usize { self.cursor }
+
+    fn history(&self) -> &[AllocationRecord] { &self.records }
+
+    fn reset(&mut self) {
+        for r in &mut self.records { r.live = false; }
+        self.cursor = 0;
+        // peak is not reset — it's a high-water mark
+    }
+}
+
+// ─── PoolAllocator ────────────────────────────────────────────────────────────
+
+/// Fixed-size block pool allocator. All blocks are the same size.
+/// Deterministic allocation and deallocation in O(1).
+pub struct PoolAllocator {
+    block_size: usize,
+    block_count: usize,
+    free_list: Vec<usize>,
+    used: Vec<bool>,
+    sequence: u64,
+    records: Vec<AllocationRecord>,
+}
+
+impl PoolAllocator {
+    pub fn new(block_size: usize, block_count: usize) -> PoolAllocator {
+        let mut free_list = Vec::with_capacity(block_count);
+        for i in (0..block_count).rev() {
+            free_list.push(i);
+        }
+        PoolAllocator {
+            block_size,
+            block_count,
+            free_list,
+            used: vec![false; block_count],
+            sequence: 0,
+            records: Vec::new(),
+        }
+    }
+
+    pub fn block_size(&self) -> usize { self.block_size }
+    pub fn total_blocks(&self) -> usize { self.block_count }
+    pub fn free_blocks(&self) -> usize { self.free_list.len() }
+    pub fn used_blocks(&self) -> usize { self.block_count - self.free_list.len() }
+}
+
+impl DetAllocator for PoolAllocator {
+    fn alloc(&mut self, size: usize, _align: usize) -> Result<usize, AllocError> {
+        if size > self.block_size {
+            return Result::Err(AllocError::OutOfMemory {
+                requested: size,
+                available: self.block_size,
+            });
+        }
+        match self.free_list.pop() {
+            Option::Some(idx) => {
+                self.used[idx] = true;
+                self.sequence += 1;
+                let address = idx * self.block_size;
+                self.records.push(AllocationRecord {
+                    address, size: self.block_size, align: 1,
+                    live: true, sequence: self.sequence, label: Option::None,
+                });
+                Result::Ok(address)
+            }
+            Option::None => Result::Err(AllocError::OutOfMemory {
+                requested: size,
+                available: 0,
+            }),
+        }
+    }
+
+    fn dealloc(&mut self, address: usize) -> Result<(), AllocError> {
+        let idx = address / self.block_size;
+        if idx >= self.block_count || !self.used[idx] {
+            return Result::Err(AllocError::DoubleFree { address });
+        }
+        self.used[idx] = false;
+        self.free_list.push(idx);
+        // Mark record as freed
+        for r in self.records.iter_mut().rev() {
+            if r.address == address && r.live {
+                r.live = false;
+                break;
+            }
+        }
+        Result::Ok(())
+    }
+
+    fn live_count(&self) -> usize { self.used_blocks() }
+    fn bytes_allocated(&self) -> usize { self.used_blocks() * self.block_size }
+    fn history(&self) -> &[AllocationRecord] { &self.records }
+
+    fn reset(&mut self) {
+        self.free_list.clear();
+        for i in (0..self.block_count).rev() {
+            self.free_list.push(i);
+            self.used[i] = false;
+        }
+        for r in &mut self.records { r.live = false; }
+    }
+}
+
+// ─── Allocation auditor ──────────────────────────────────────────────────────
+
+/// Audit an allocator's history for leaks.
+pub fn find_leaks(allocator: &dyn DetAllocator) -> Vec<&AllocationRecord> {
+    allocator.history().iter().filter(|r| r.live).collect()
+}
+
+/// Compute a deterministic hash of the allocation history for snapshot comparison.
+pub fn allocation_fingerprint(allocator: &dyn DetAllocator) -> u64 {
+    let mut hash: u64 = 0xcbf29ce484222325; // FNV offset basis
+    for record in allocator.history() {
+        hash ^= record.address as u64;
+        hash = hash.wrapping_mul(0x100000001b3); // FNV prime
+        hash ^= record.size as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+        hash ^= record.sequence;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}

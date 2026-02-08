@@ -1,0 +1,42 @@
+/// time — Time, duration, clock, timezone, and scheduling utilities.
+
+pub mod instant;
+pub mod duration;
+pub mod clock;
+pub mod timezone;
+pub mod schedule;
+
+pub use instant::Instant;
+pub use duration::Duration;
+pub use clock::{Clock, SystemClock, MonotonicClock};
+pub use timezone::{TimeZone, UtcOffset, DateTime, Date, Time};
+pub use schedule::{CronExpr, Scheduler, ScheduledTask};
+
+/// Common result type for time operations.
+pub type TimeResult<T> = Result<T, TimeError>;
+
+/// Error type for time operations.
+pub enum TimeError {
+    /// The operation would overflow representable range.
+    Overflow,
+    /// Invalid date or time component value.
+    InvalidComponent { name: String, value: i64 },
+    /// Failed to parse a datetime string.
+    ParseError(String),
+    /// Timezone not found.
+    UnknownTimezone(String),
+    /// System clock error.
+    SystemClockError(String),
+}
+
+impl TimeError {
+    pub fn message(&self) -> String {
+        match self {
+            TimeError::Overflow => String::from("time overflow"),
+            TimeError::InvalidComponent { name, value } => format!("invalid {}: {}", name, value),
+            TimeError::ParseError(s) => format!("parse error: {}", s),
+            TimeError::UnknownTimezone(s) => format!("unknown timezone: {}", s),
+            TimeError::SystemClockError(s) => format!("clock error: {}", s),
+        }
+    }
+}

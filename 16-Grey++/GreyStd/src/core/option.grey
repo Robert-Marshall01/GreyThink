@@ -1,0 +1,308 @@
+/// core::option — The Option type for nullable values.
+///
+/// `Option<T>` represents a value that may or may not be present.
+/// It eliminates null pointer errors by making absence explicit.
+///
+/// ```grey
+/// let name: Option<String> = Some("Grey++");
+/// let missing: Option<i32> = None;
+/// ```
+
+/// A value that is either `Some(T)` or `None`.
+pub enum Option<T> {
+    /// Some value is present.
+    Some(T),
+    /// No value is present.
+    None,
+}
+
+impl<T> Option<T> {
+    // ── Querying ────────────────────────────────────────────────────
+
+    /// Returns true if the option contains a value.
+    pub fn is_some(self) -> bool {
+        match self {
+            Some(_) => true,
+            None    => false,
+        }
+    }
+
+    /// Returns true if the option is None.
+    pub fn is_none(self) -> bool {
+        !self.is_some()
+    }
+
+    /// Returns true if the option contains a value that satisfies the predicate.
+    pub fn is_some_and(self, predicate: fn(&T) -> bool) -> bool {
+        match self {
+            Some(ref v) => predicate(v),
+            None        => false,
+        }
+    }
+
+    // ── Extracting ──────────────────────────────────────────────────
+
+    /// Returns the contained value, panicking with `msg` if None.
+    pub fn expect(self, msg: &str) -> T {
+        match self {
+            Some(v) => v,
+            None    => panic(msg),
+        }
+    }
+
+    /// Returns the contained value, panicking if None.
+    pub fn unwrap(self) -> T {
+        self.expect("called Option::unwrap() on a None value")
+    }
+
+    /// Returns the contained value, or `default` if None.
+    pub fn unwrap_or(self, default: T) -> T {
+        match self {
+            Some(v) => v,
+            None    => default,
+        }
+    }
+
+    /// Returns the contained value, or computes it from `f` if None.
+    pub fn unwrap_or_else(self, f: fn() -> T) -> T {
+        match self {
+            Some(v) => v,
+            None    => f(),
+        }
+    }
+
+    /// Returns the contained value, or the default for the type.
+    pub fn unwrap_or_default(self) -> T where T: Default {
+        match self {
+            Some(v) => v,
+            None    => T::default(),
+        }
+    }
+
+    // ── Transforming ────────────────────────────────────────────────
+
+    /// Maps the contained value through `f`.
+    pub fn map<U>(self, f: fn(T) -> U) -> Option<U> {
+        match self {
+            Some(v) => Some(f(v)),
+            None    => None,
+        }
+    }
+
+    /// Maps the contained value through `f`, or returns `default` if None.
+    pub fn map_or<U>(self, default: U, f: fn(T) -> U) -> U {
+        match self {
+            Some(v) => f(v),
+            None    => default,
+        }
+    }
+
+    /// Maps the contained value or computes a default.
+    pub fn map_or_else<U>(self, default: fn() -> U, f: fn(T) -> U) -> U {
+        match self {
+            Some(v) => f(v),
+            None    => default(),
+        }
+    }
+
+    /// Applies a function that returns an Option, flattening the result.
+    pub fn and_then<U>(self, f: fn(T) -> Option<U>) -> Option<U> {
+        match self {
+            Some(v) => f(v),
+            None    => None,
+        }
+    }
+
+    /// Filters the option by a predicate.
+    pub fn filter(self, predicate: fn(&T) -> bool) -> Option<T> {
+        match self {
+            Some(ref v) if predicate(v) => self,
+            _ => None,
+        }
+    }
+
+    /// Returns `self` if it contains a value, otherwise returns `other`.
+    pub fn or(self, other: Option<T>) -> Option<T> {
+        match self {
+            Some(_) => self,
+            None    => other,
+        }
+    }
+
+    /// Returns `self` if it contains a value, otherwise calls `f`.
+    pub fn or_else(self, f: fn() -> Option<T>) -> Option<T> {
+        match self {
+            Some(_) => self,
+            None    => f(),
+        }
+    }
+
+    /// Returns Some if exactly one of `self` or `other` is Some.
+    pub fn xor(self, other: Option<T>) -> Option<T> {
+        match (self, other) {
+            (Some(v), None) => Some(v),
+            (None, Some(v)) => Some(v),
+            _               => None,
+        }
+    }
+
+    /// Zips this Option with another.
+    pub fn zip<U>(self, other: Option<U>) -> Option<Tuple2<T, U>> {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(Tuple2::new(a, b)),
+            _                  => None,
+        }
+    }
+
+    /// Flattens a nested Option<Option<T>> into Option<T>.
+    /// This method is only callable when T is itself an Option.
+    // Note: The compiler internally resolves this via specialization.
+    pub fn flatten<U>(self) -> Option<U>
+    where Self: Option<Option<U>>
+    {
+        match self {
+            Some(inner) => inner,
+            None        => None,
+        }
+    }
+
+    // ── References ──────────────────────────────────────────────────
+
+    /// Converts `&Option<T>` to `Option<&T>`.
+    pub fn as_ref(self) -> Option<&T> {
+        match self {
+            Some(ref v) => Some(v),
+            None        => None,
+        }
+    }
+
+    /// Converts `&mut Option<T>` to `Option<&mut T>`.
+    pub fn as_mut(mut self) -> Option<&mut T> {
+        match self {
+            Some(ref mut v) => Some(v),
+            None            => None,
+        }
+    }
+
+    // ── Conversion ──────────────────────────────────────────────────
+
+    /// Converts an `Option<T>` into a `Result<T, E>`.
+    pub fn ok_or<E>(self, err: E) -> Result<T, E> {
+        match self {
+            Some(v) => Ok(v),
+            None    => Err(err),
+        }
+    }
+
+    /// Converts an `Option<T>` into a `Result<T, E>` with a lazy error.
+    pub fn ok_or_else<E>(self, err_fn: fn() -> E) -> Result<T, E> {
+        match self {
+            Some(v) => Ok(v),
+            None    => Err(err_fn()),
+        }
+    }
+
+    // ── Side Effects ────────────────────────────────────────────────
+
+    /// Calls `f` with the contained value if Some.
+    pub fn inspect(self, f: fn(&T)) -> Option<T> {
+        if let Some(ref v) = self {
+            f(v);
+        }
+        self
+    }
+
+    /// Takes the value out, leaving None in its place.
+    pub fn take(mut self) -> Option<T> {
+        mem::replace(self, None)
+    }
+
+    /// Replaces the contained value with `value`, returning the old value.
+    pub fn replace(mut self, value: T) -> Option<T> {
+        mem::replace(self, Some(value))
+    }
+
+    // ── Iterator ────────────────────────────────────────────────────
+
+    /// Returns an iterator over the contained value (0 or 1 elements).
+    pub fn iter(&self) -> OptionIter<T> {
+        OptionIter { option: self.as_ref(), done: false }
+    }
+}
+
+impl<T> IntoIterator for Option<T> {
+    type Item = T;
+    type IntoIter = OptionIntoIter<T>;
+
+    fn into_iter(self) -> OptionIntoIter<T> {
+        OptionIntoIter { value: self }
+    }
+}
+
+impl<T: Clone> Clone for Option<T> {
+    fn clone(self) -> Option<T> {
+        match self {
+            Some(v) => Some(v.clone()),
+            None    => None,
+        }
+    }
+}
+
+impl<T: Eq> Eq for Option<T> {
+    fn eq(self, other: Option<T>) -> bool {
+        match (self, other) {
+            (Some(a), Some(b)) => a == b,
+            (None, None)       => true,
+            _                  => false,
+        }
+    }
+}
+
+impl<T: Debug> Debug for Option<T> {
+    fn debug_fmt(self, f: &mut Formatter) -> Result<(), FormatError> {
+        match self {
+            Some(v) => {
+                f.write_str("Some(")?;
+                v.debug_fmt(f)?;
+                f.write_str(")")
+            }
+            None => f.write_str("None"),
+        }
+    }
+}
+
+impl<T: Default> Default for Option<T> {
+    fn default() -> Option<T> {
+        None
+    }
+}
+
+// ─── OptionIter ─────────────────────────────────────────────────────────────
+
+pub struct OptionIter<T> {
+    option: Option<&T>,
+    done: bool,
+}
+
+impl<T> Iterator for OptionIter<T> {
+    type Item = &T;
+
+    fn next(mut self) -> Option<&T> {
+        if self.done { return None; }
+        self.done = true;
+        self.option
+    }
+}
+
+/// Owned iterator over an Option, yielding the contained value.
+pub struct OptionIntoIter<T> {
+    value: Option<T>,
+}
+
+impl<T> Iterator for OptionIntoIter<T> {
+    type Item = T;
+
+    fn next(mut self) -> Option<T> {
+        self.value.take()
+    }
+}

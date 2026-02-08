@@ -1,0 +1,239 @@
+/// error::log — Structured logging framework with levels, targets, and formatting.
+
+use crate::core::string::String;
+use crate::core::vec::Vec;
+use crate::core::option::Option;
+use crate::time::timezone::DateTime;
+use crate::time::clock::SystemClock;
+
+/// Log severity levels.
+pub enum LogLevel {
+    /// Extremely verbose: function entry/exit, loop iterations.
+    Trace,
+    /// Diagnostics useful during development.
+    Debug,
+    /// Normal operational messages.
+    Info,
+    /// Something unexpected but recoverable happened.
+    Warn,
+    /// A significant error occurred.
+    Error,
+    /// Disable all logging.
+    Off,
+}
+
+impl LogLevel {
+    pub fn name(&self) -> &str {
+        match self {
+            LogLevel::Trace => "TRACE", LogLevel::Debug => "DEBUG",
+            LogLevel::Info => "INFO", LogLevel::Warn => "WARN",
+            LogLevel::Error => "ERROR", LogLevel::Off => "OFF",
+        }
+    }
+
+    pub fn severity(&self) -> u8 {
+        match self {
+            LogLevel::Trace => 0, LogLevel::Debug => 1,
+            LogLevel::Info => 2, LogLevel::Warn => 3,
+            LogLevel::Error => 4, LogLevel::Off => 5,
+        }
+    }
+}
+
+impl PartialOrd for LogLevel {
+    fn partial_cmp(&self, other: &LogLevel) -> Option<Ordering> {
+        self.severity().partial_cmp(&other.severity())
+    }
+}
+
+impl PartialEq for LogLevel {
+    fn eq(&self, other: &LogLevel) -> bool { self.severity() == other.severity() }
+}
+
+/// A log record.
+pub struct LogRecord {
+    pub level: LogLevel,
+    pub message: String,
+    pub target: String,
+    pub timestamp: DateTime,
+    pub file: Option<String>,
+    pub line: Option<u32>,
+    pub fields: Vec<(String, String)>,
+}
+
+/// A logging backend.
+pub trait LogSink: Send + Sync {
+    /// Called for each log record that passes the filter.
+    fn log(&self, record: &LogRecord);
+
+    /// Flush buffered output.
+    fn flush(&self);
+}
+
+/// A log output that writes to stderr.
+pub struct StderrSink {
+    format: LogFormat,
+}
+
+pub enum LogFormat {
+    /// Human-readable: "2025-07-10T12:00:00Z INFO [target] message"
+    Pretty,
+    /// JSON: {"timestamp":"...", "level":"INFO", "target":"...", "message":"..."}
+    Json,
+    /// Compact: "INFO message"
+    Compact,
+}
+
+impl StderrSink {
+    pub fn new(format: LogFormat) -> StderrSink {
+        StderrSink { format }
+    }
+}
+
+impl LogSink for StderrSink {
+    fn log(&self, record: &LogRecord) {
+        let line = match &self.format {
+            LogFormat::Pretty => {
+                format!("{} {:>5} [{}] {}",
+                    record.timestamp.to_rfc3339(),
+                    record.level.name(),
+                    record.target,
+                    record.message)
+            }
+            LogFormat::Json => {
+                let fields: Vec<String> = record.fields.iter()
+                    .map(|(k, v)| format!("\"{}\":\"{}\"", k, v)).collect();
+                let extra = if fields.is_empty() { String::new() } else { format!(",{}", fields.join(",")) };
+                format!("{{\"timestamp\":\"{}\",\"level\":\"{}\",\"target\":\"{}\",\"message\":\"{}\"{}}}",
+                    record.timestamp.to_rfc3339(), record.level.name(), record.target, record.message, extra)
+            }
+            LogFormat::Compact => {
+                format!("{:>5} {}", record.level.name(), record.message)
+            }
+        };
+        eprintln!("{}", line);
+    }
+
+    fn flush(&self) {
+        // stderr is unbuffered
+    }
+}
+
+/// A log output that writes to a file.
+pub struct FileSink {
+    path: String,
+}
+
+impl FileSink {
+    pub fn new(path: &str) -> FileSink {
+        FileSink { path: String::from(path) }
+    }
+}
+
+impl LogSink for FileSink {
+    fn log(&self, record: &LogRecord) {
+        let line = format!("{} {:>5} [{}] {}\n",
+            record.timestamp.to_rfc3339(), record.level.name(), record.target, record.message);
+        let _ = crate::io::file::File::append(&self.path, line.as_bytes());
+    }
+
+    fn flush(&self) {}
+}
+
+/// The global logger.
+pub struct Logger {
+    sinks: Vec<Box<dyn LogSink>>,
+    min_level: LogLevel,
+    target_filter: Option<String>,
+}
+
+impl Logger {
+    /// Create a new logger with stderr output at INFO level.
+    pub fn new() -> Logger {
+        Logger {
+            sinks: vec![Box::new(StderrSink::new(LogFormat::Pretty))],
+            min_level: LogLevel::Info,
+            target_filter: None,
+        }
+    }
+
+    /// Set minimum log level.
+    pub fn level(mut self, level: LogLevel) -> Logger {
+        self.min_level = level;
+        self
+    }
+
+    /// Add a sink.
+    pub fn sink(mut self, sink: impl LogSink + 'static) -> Logger {
+        self.sinks.push(Box::new(sink));
+        self
+    }
+
+    /// Set a target filter prefix.
+    pub fn filter(mut self, target: &str) -> Logger {
+        self.target_filter = Some(String::from(target));
+        self
+    }
+
+    /// Initialize as the global logger.
+    pub fn init(self) {
+        // Store in global static
+        extern fn __grey_set_global_logger(logger: Logger);
+        unsafe { __grey_set_global_logger(self) }
+    }
+
+    /// Log a record.
+    pub fn log_record(&self, record: &LogRecord) {
+        if record.level < self.min_level { return; }
+        if let Some(filter) = &self.target_filter {
+            if !record.target.starts_with(filter) { return; }
+        }
+        for sink in &self.sinks {
+            sink.log(record);
+        }
+    }
+}
+
+// ─── Convenience functions ──────────────────────────────────
+
+fn log_impl(level: LogLevel, target: &str, message: String) {
+    let record = LogRecord {
+        level,
+        message,
+        target: String::from(target),
+        timestamp: SystemClock::now_utc(),
+        file: None,
+        line: None,
+        fields: Vec::new(),
+    };
+    extern fn __grey_get_global_logger() -> &Logger;
+    unsafe { __grey_get_global_logger() }.log_record(&record);
+}
+
+pub fn log(level: LogLevel, message: &str) { log_impl(level, "", String::from(message)); }
+pub fn trace(message: &str) { log_impl(LogLevel::Trace, "", String::from(message)); }
+pub fn debug(message: &str) { log_impl(LogLevel::Debug, "", String::from(message)); }
+pub fn info(message: &str) { log_impl(LogLevel::Info, "", String::from(message)); }
+pub fn warn(message: &str) { log_impl(LogLevel::Warn, "", String::from(message)); }
+pub fn error(message: &str) { log_impl(LogLevel::Error, "", String::from(message)); }
+
+/// Log macros for formatted messages.
+#[macro_export]
+macro_rules! log_info {
+    ($($arg:tt)*) => { $crate::error::log::info(&format!($($arg)*)) };
+}
+
+#[macro_export]
+macro_rules! log_warn {
+    ($($arg:tt)*) => { $crate::error::log::warn(&format!($($arg)*)) };
+}
+
+#[macro_export]
+macro_rules! log_error {
+    ($($arg:tt)*) => { $crate::error::log::error(&format!($($arg)*)) };
+}
+
+#[macro_export]
+macro_rules! log_debug {
+    ($($arg:tt)*) => { $crate::error::log::debug(&format!($($arg)*)) };
+}

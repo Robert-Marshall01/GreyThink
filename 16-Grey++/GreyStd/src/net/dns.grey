@@ -1,0 +1,256 @@
+/// net::dns — DNS resolution and IP address types.
+
+use crate::core::string::String;
+use crate::core::vec::Vec;
+use crate::core::option::Option;
+use crate::net::{NetResult, NetError};
+
+/// An IP address, either v4 or v6.
+pub enum IpAddr {
+    V4(Ipv4Addr),
+    V6(Ipv6Addr),
+}
+
+impl IpAddr {
+    pub fn is_loopback(self) -> bool {
+        match self {
+            IpAddr::V4(v4) => v4.is_loopback(),
+            IpAddr::V6(v6) => v6.is_loopback(),
+        }
+    }
+
+    pub fn is_unspecified(self) -> bool {
+        match self {
+            IpAddr::V4(v4) => v4.is_unspecified(),
+            IpAddr::V6(v6) => v6.is_unspecified(),
+        }
+    }
+
+    pub fn is_multicast(self) -> bool {
+        match self {
+            IpAddr::V4(v4) => v4.is_multicast(),
+            IpAddr::V6(v6) => v6.is_multicast(),
+        }
+    }
+
+    pub fn is_ipv4(self) -> bool {
+        match self { IpAddr::V4(_) => true, _ => false }
+    }
+
+    pub fn is_ipv6(self) -> bool {
+        match self { IpAddr::V6(_) => true, _ => false }
+    }
+}
+
+impl Display for IpAddr {
+    fn fmt(self, f: &mut Formatter) -> Result<(), FmtError> {
+        match self {
+            IpAddr::V4(v4) => v4.fmt(f),
+            IpAddr::V6(v6) => v6.fmt(f),
+        }
+    }
+}
+
+/// An IPv4 address.
+#[derive(Copy, Clone, Eq, PartialEq, Hash)]
+pub struct Ipv4Addr {
+    octets: [u8; 4],
+}
+
+impl Ipv4Addr {
+    pub const LOCALHOST: Ipv4Addr = Ipv4Addr { octets: [127, 0, 0, 1] };
+    pub const UNSPECIFIED: Ipv4Addr = Ipv4Addr { octets: [0, 0, 0, 0] };
+    pub const BROADCAST: Ipv4Addr = Ipv4Addr { octets: [255, 255, 255, 255] };
+
+    pub fn new(a: u8, b: u8, c: u8, d: u8) -> Ipv4Addr {
+        Ipv4Addr { octets: [a, b, c, d] }
+    }
+
+    pub fn octets(self) -> [u8; 4] { self.octets }
+
+    pub fn is_loopback(self) -> bool { self.octets[0] == 127 }
+    pub fn is_unspecified(self) -> bool { self.octets == [0, 0, 0, 0] }
+    pub fn is_broadcast(self) -> bool { self.octets == [255, 255, 255, 255] }
+    pub fn is_multicast(self) -> bool { self.octets[0] >= 224 && self.octets[0] <= 239 }
+    pub fn is_link_local(self) -> bool { self.octets[0] == 169 && self.octets[1] == 254 }
+
+    pub fn is_private(self) -> bool {
+        self.octets[0] == 10
+        || (self.octets[0] == 172 && self.octets[1] >= 16 && self.octets[1] <= 31)
+        || (self.octets[0] == 192 && self.octets[1] == 168)
+    }
+
+    pub fn to_ipv6_mapped(self) -> Ipv6Addr {
+        let [a, b, c, d] = self.octets;
+        Ipv6Addr {
+            segments: [0, 0, 0, 0, 0, 0xFFFF, ((a as u16) << 8) | b as u16, ((c as u16) << 8) | d as u16],
+        }
+    }
+
+    pub fn parse(s: &str) -> NetResult<Ipv4Addr> {
+        let parts: Vec<&str> = s.split('.').collect();
+        if parts.len() != 4 {
+            return Err(NetError::InvalidAddress);
+        }
+        let mut octets = [0u8; 4];
+        for i in 0..4 {
+            octets[i] = parts[i].parse::<u8>().map_err(|_| NetError::InvalidAddress)?;
+        }
+        Ok(Ipv4Addr { octets })
+    }
+}
+
+impl Display for Ipv4Addr {
+    fn fmt(self, f: &mut Formatter) -> Result<(), FmtError> {
+        write!(f, "{}.{}.{}.{}", self.octets[0], self.octets[1], self.octets[2], self.octets[3])
+    }
+}
+
+/// An IPv6 address.
+#[derive(Copy, Clone, Eq, PartialEq, Hash)]
+pub struct Ipv6Addr {
+    segments: [u16; 8],
+}
+
+impl Ipv6Addr {
+    pub const LOCALHOST: Ipv6Addr = Ipv6Addr { segments: [0, 0, 0, 0, 0, 0, 0, 1] };
+    pub const UNSPECIFIED: Ipv6Addr = Ipv6Addr { segments: [0, 0, 0, 0, 0, 0, 0, 0] };
+
+    pub fn new(a: u16, b: u16, c: u16, d: u16, e: u16, f: u16, g: u16, h: u16) -> Ipv6Addr {
+        Ipv6Addr { segments: [a, b, c, d, e, f, g, h] }
+    }
+
+    pub fn segments(self) -> [u16; 8] { self.segments }
+
+    pub fn is_loopback(self) -> bool { self.segments == [0, 0, 0, 0, 0, 0, 0, 1] }
+    pub fn is_unspecified(self) -> bool { self.segments == [0, 0, 0, 0, 0, 0, 0, 0] }
+    pub fn is_multicast(self) -> bool { self.segments[0] & 0xFF00 == 0xFF00 }
+
+    pub fn is_ipv4_mapped(self) -> bool {
+        self.segments[0..5] == [0, 0, 0, 0, 0] && self.segments[5] == 0xFFFF
+    }
+
+    pub fn to_ipv4(self) -> Option<Ipv4Addr> {
+        if self.is_ipv4_mapped() {
+            let a = (self.segments[6] >> 8) as u8;
+            let b = self.segments[6] as u8;
+            let c = (self.segments[7] >> 8) as u8;
+            let d = self.segments[7] as u8;
+            Some(Ipv4Addr::new(a, b, c, d))
+        } else {
+            None
+        }
+    }
+
+    pub fn parse(s: &str) -> NetResult<Ipv6Addr> {
+        // Simplified parser — handles :: notation
+        let mut segments = [0u16; 8];
+        let parts: Vec<&str> = s.split(':').collect();
+
+        if let Some(dbl) = parts.iter().position(|&p| p.is_empty()) {
+            // Has :: — fill zeros in the middle
+            let before = &parts[..dbl];
+            let after_start = if dbl + 1 < parts.len() && parts[dbl + 1].is_empty() {
+                dbl + 2
+            } else {
+                dbl + 1
+            };
+            let after = if after_start < parts.len() { &parts[after_start..] } else { &[] };
+
+            for (i, part) in before.iter().enumerate() {
+                if !part.is_empty() {
+                    segments[i] = u16::from_str_radix(part, 16).map_err(|_| NetError::InvalidAddress)?;
+                }
+            }
+            let offset = 8 - after.len();
+            for (i, part) in after.iter().enumerate() {
+                segments[offset + i] = u16::from_str_radix(part, 16).map_err(|_| NetError::InvalidAddress)?;
+            }
+        } else if parts.len() == 8 {
+            for (i, part) in parts.iter().enumerate() {
+                segments[i] = u16::from_str_radix(part, 16).map_err(|_| NetError::InvalidAddress)?;
+            }
+        } else {
+            return Err(NetError::InvalidAddress);
+        }
+
+        Ok(Ipv6Addr { segments })
+    }
+}
+
+impl Display for Ipv6Addr {
+    fn fmt(self, f: &mut Formatter) -> Result<(), FmtError> {
+        // Find longest run of zeros for :: notation
+        let mut longest_start = 0;
+        let mut longest_len = 0;
+        let mut current_start = 0;
+        let mut current_len = 0;
+
+        for i in 0..8 {
+            if self.segments[i] == 0 {
+                if current_len == 0 { current_start = i; }
+                current_len = current_len + 1;
+                if current_len > longest_len {
+                    longest_start = current_start;
+                    longest_len = current_len;
+                }
+            } else {
+                current_len = 0;
+            }
+        }
+
+        if longest_len >= 2 {
+            for i in 0..longest_start {
+                if i > 0 { write!(f, ":")?; }
+                write!(f, "{:x}", self.segments[i])?;
+            }
+            write!(f, "::")?;
+            let after_start = longest_start + longest_len;
+            for i in after_start..8 {
+                if i > after_start { write!(f, ":")?; }
+                write!(f, "{:x}", self.segments[i])?;
+            }
+        } else {
+            for i in 0..8 {
+                if i > 0 { write!(f, ":")?; }
+                write!(f, "{:x}", self.segments[i])?;
+            }
+        }
+        Ok(())
+    }
+}
+
+// ─── DNS Resolution ─────────────────────────────────────────
+
+/// Resolves a hostname to a list of IP addresses.
+///
+/// ```grey
+/// let addrs = resolve("example.com")?;
+/// for addr in addrs {
+///     println("{}", addr);
+/// }
+/// ```
+pub fn resolve(host: &str) -> NetResult<Vec<IpAddr>> {
+    // Try parsing as IP first
+    if let Ok(v4) = Ipv4Addr::parse(host) {
+        return Ok(vec![IpAddr::V4(v4)]);
+    }
+    if let Ok(v6) = Ipv6Addr::parse(host) {
+        return Ok(vec![IpAddr::V6(v6)]);
+    }
+
+    // Perform DNS lookup via system resolver
+    intrinsics::getaddrinfo(host)
+        .map_err(|e| NetError::DnsFailure(format!("failed to resolve '{}': {}", host, e)))
+}
+
+/// Resolves a hostname to a list of IP addresses (alias for resolve).
+pub fn lookup_host(host: &str) -> NetResult<Vec<IpAddr>> {
+    resolve(host)
+}
+
+/// Performs a reverse DNS lookup.
+pub fn reverse_lookup(addr: &IpAddr) -> NetResult<String> {
+    intrinsics::getnameinfo(addr)
+        .map_err(|e| NetError::DnsFailure(format!("reverse lookup failed: {}", e)))
+}

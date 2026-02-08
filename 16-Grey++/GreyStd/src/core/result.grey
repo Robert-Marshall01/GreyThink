@@ -1,0 +1,332 @@
+/// core::result — The Result type for error-safe programming.
+///
+/// `Result<T, E>` represents either success (`Ok(T)`) or failure (`Err(E)`).
+/// Combined with the `?` operator, it enables clean error propagation.
+///
+/// ```grey
+/// fn parse_port(s: &str) -> Result<u16, ParseError> {
+///     let n = s.parse::<u32>()?;
+///     if n > 65535 { return Err(ParseError::new("port out of range")); }
+///     Ok(n as u16)
+/// }
+/// ```
+
+/// A result that is either `Ok(T)` (success) or `Err(E)` (failure).
+pub enum Result<T, E> {
+    /// The operation succeeded with value `T`.
+    Ok(T),
+    /// The operation failed with error `E`.
+    Err(E),
+}
+
+impl<T, E> Result<T, E> {
+    // ── Querying ────────────────────────────────────────────────────
+
+    /// Returns true if the result is Ok.
+    pub fn is_ok(self) -> bool {
+        match self {
+            Ok(_)  => true,
+            Err(_) => false,
+        }
+    }
+
+    /// Returns true if the result is Err.
+    pub fn is_err(self) -> bool {
+        !self.is_ok()
+    }
+
+    /// Returns true if Ok and the value satisfies the predicate.
+    pub fn is_ok_and(self, predicate: fn(&T) -> bool) -> bool {
+        match self {
+            Ok(ref v) => predicate(v),
+            Err(_)    => false,
+        }
+    }
+
+    /// Returns true if Err and the error satisfies the predicate.
+    pub fn is_err_and(self, predicate: fn(&E) -> bool) -> bool {
+        match self {
+            Ok(_)      => false,
+            Err(ref e) => predicate(e),
+        }
+    }
+
+    // ── Extracting ──────────────────────────────────────────────────
+
+    /// Returns the Ok value, panicking with `msg` if Err.
+    pub fn expect(self, msg: &str) -> T {
+        match self {
+            Ok(v)  => v,
+            Err(_) => panic(msg),
+        }
+    }
+
+    /// Returns the Ok value, panicking if Err.
+    pub fn unwrap(self) -> T where E: Debug {
+        match self {
+            Ok(v)  => v,
+            Err(e) => panic(format("called Result::unwrap() on Err: {:?}", e)),
+        }
+    }
+
+    /// Returns the Ok value, or `default` if Err.
+    pub fn unwrap_or(self, default: T) -> T {
+        match self {
+            Ok(v)  => v,
+            Err(_) => default,
+        }
+    }
+
+    /// Returns the Ok value, or computes it from `f` if Err.
+    pub fn unwrap_or_else(self, f: fn(E) -> T) -> T {
+        match self {
+            Ok(v)  => v,
+            Err(e) => f(e),
+        }
+    }
+
+    /// Returns the Ok value, or the default for the type.
+    pub fn unwrap_or_default(self) -> T where T: Default {
+        match self {
+            Ok(v)  => v,
+            Err(_) => T::default(),
+        }
+    }
+
+    /// Returns the Err value, panicking with `msg` if Ok.
+    pub fn expect_err(self, msg: &str) -> E {
+        match self {
+            Ok(_)  => panic(msg),
+            Err(e) => e,
+        }
+    }
+
+    /// Returns the Err value, panicking if Ok.
+    pub fn unwrap_err(self) -> E where T: Debug {
+        match self {
+            Ok(v)  => panic(format("called Result::unwrap_err() on Ok: {:?}", v)),
+            Err(e) => e,
+        }
+    }
+
+    // ── Transforming ────────────────────────────────────────────────
+
+    /// Maps the Ok value through `f`.
+    pub fn map<U>(self, f: fn(T) -> U) -> Result<U, E> {
+        match self {
+            Ok(v)  => Ok(f(v)),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Maps the Err value through `f`.
+    pub fn map_err<F>(self, f: fn(E) -> F) -> Result<T, F> {
+        match self {
+            Ok(v)  => Ok(v),
+            Err(e) => Err(f(e)),
+        }
+    }
+
+    /// Maps the Ok value, or returns `default` if Err.
+    pub fn map_or<U>(self, default: U, f: fn(T) -> U) -> U {
+        match self {
+            Ok(v)  => f(v),
+            Err(_) => default,
+        }
+    }
+
+    /// Maps the Ok value, or computes a default if Err.
+    pub fn map_or_else<U>(self, default: fn(E) -> U, f: fn(T) -> U) -> U {
+        match self {
+            Ok(v)  => f(v),
+            Err(e) => default(e),
+        }
+    }
+
+    /// Chains a computation on the Ok value.
+    pub fn and_then<U>(self, f: fn(T) -> Result<U, E>) -> Result<U, E> {
+        match self {
+            Ok(v)  => f(v),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Returns `self` if Ok, otherwise returns `other`.
+    pub fn or(self, other: Result<T, E>) -> Result<T, E> {
+        match self {
+            Ok(_)  => self,
+            Err(_) => other,
+        }
+    }
+
+    /// Returns `self` if Ok, otherwise calls `f`.
+    pub fn or_else<F>(self, f: fn(E) -> Result<T, F>) -> Result<T, F> {
+        match self {
+            Ok(v)  => Ok(v),
+            Err(e) => f(e),
+        }
+    }
+
+    // ── Conversion ──────────────────────────────────────────────────
+
+    /// Converts to `Option<T>`, discarding the error.
+    pub fn ok(self) -> Option<T> {
+        match self {
+            Ok(v)  => Some(v),
+            Err(_) => None,
+        }
+    }
+
+    /// Converts to `Option<E>`, discarding the success value.
+    pub fn err(self) -> Option<E> {
+        match self {
+            Ok(_)  => None,
+            Err(e) => Some(e),
+        }
+    }
+
+    /// Transposes a `Result<Option<T>, E>` into `Option<Result<T, E>>`.
+    /// This method is available when the Ok type is Option<U>.
+    // Note: The compiler internally resolves this via specialization.
+    pub fn transpose<U>(self) -> Option<Result<U, E>>
+    where T = Option<U>
+    {
+        match self {
+            Ok(Some(v)) => Some(Ok(v)),
+            Ok(None)    => None,
+            Err(e)      => Some(Err(e)),
+        }
+    }
+
+    // ── References ──────────────────────────────────────────────────
+
+    /// Converts `&Result<T, E>` to `Result<&T, &E>`.
+    pub fn as_ref(self) -> Result<&T, &E> {
+        match self {
+            Ok(ref v)  => Ok(v),
+            Err(ref e) => Err(e),
+        }
+    }
+
+    /// Converts `&mut Result<T, E>` to `Result<&mut T, &mut E>`.
+    pub fn as_mut(mut self) -> Result<&mut T, &mut E> {
+        match self {
+            Ok(ref mut v)  => Ok(v),
+            Err(ref mut e) => Err(e),
+        }
+    }
+
+    // ── Side Effects ────────────────────────────────────────────────
+
+    /// Calls `f` with the Ok value if present.
+    pub fn inspect(self, f: fn(&T)) -> Result<T, E> {
+        if let Ok(ref v) = self {
+            f(v);
+        }
+        self
+    }
+
+    /// Calls `f` with the Err value if present.
+    pub fn inspect_err(self, f: fn(&E)) -> Result<T, E> {
+        if let Err(ref e) = self {
+            f(e);
+        }
+        self
+    }
+
+    // ── Iterator ────────────────────────────────────────────────────
+
+    /// Returns an iterator yielding the Ok value (0 or 1 elements).
+    pub fn iter(self) -> ResultIter<T> {
+        ResultIter { value: self.ok(), done: false }
+    }
+
+    /// Flattens a nested Result<Result<T, E>, E> into Result<T, E>.
+    /// This method is available when the Ok type is Result<U, E>.
+    // Note: The compiler internally resolves this via specialization.
+    pub fn flatten<U>(self) -> Result<U, E>
+    where T = Result<U, E>
+    {
+        match self {
+            Ok(inner) => inner,
+            Err(e)    => Err(e),
+        }
+    }
+}
+
+impl<T, E> IntoIterator for Result<T, E> {
+    type Item = T;
+    type IntoIter = ResultIter<T>;
+
+    fn into_iter(self) -> ResultIter<T> {
+        ResultIter { value: self.ok(), done: false }
+    }
+}
+
+impl<T: Clone, E: Clone> Clone for Result<T, E> {
+    fn clone(self) -> Result<T, E> {
+        match self {
+            Ok(v)  => Ok(v.clone()),
+            Err(e) => Err(e.clone()),
+        }
+    }
+}
+
+impl<T: Eq, E: Eq> Eq for Result<T, E> {
+    fn eq(self, other: Result<T, E>) -> bool {
+        match (self, other) {
+            (Ok(a), Ok(b))   => a == b,
+            (Err(a), Err(b)) => a == b,
+            _                => false,
+        }
+    }
+}
+
+impl<T: Debug, E: Debug> Debug for Result<T, E> {
+    fn debug_fmt(self, f: &mut Formatter) -> Result<(), FormatError> {
+        match self {
+            Ok(v) => {
+                f.write_str("Ok(")?;
+                v.debug_fmt(f)?;
+                f.write_str(")")
+            }
+            Err(e) => {
+                f.write_str("Err(")?;
+                e.debug_fmt(f)?;
+                f.write_str(")")
+            }
+        }
+    }
+}
+
+// ─── ResultIter ─────────────────────────────────────────────────────────────
+
+pub struct ResultIter<T> {
+    value: Option<T>,
+    done: bool,
+}
+
+impl<T> Iterator for ResultIter<T> {
+    type Item = T;
+
+    fn next(mut self) -> Option<T> {
+        if self.done { return None; }
+        self.done = true;
+        self.value.take()
+    }
+}
+
+// ─── Collect Results ────────────────────────────────────────────────────────
+
+/// Collects an iterator of Results into a Result of Vec.
+/// Short-circuits on the first Err.
+pub fn collect_results<T, E, I: Iterator<Item = Result<T, E>>>(iter: I) -> Result<Vec<T>, E> {
+    let mut results = Vec::new();
+    for item in iter {
+        match item {
+            Ok(v)  => results.push(v),
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(results)
+}

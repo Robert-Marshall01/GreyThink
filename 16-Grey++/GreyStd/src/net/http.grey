@@ -1,0 +1,466 @@
+/// net::http — HTTP client with async support.
+
+use crate::core::string::String;
+use crate::core::vec::Vec;
+use crate::core::map::HashMap;
+use crate::core::option::Option;
+use crate::net::{NetResult, NetError, TcpStream, SocketAddr};
+use crate::net::tls::TlsStream;
+use crate::io::stream::{Read, Write};
+use crate::time::Duration;
+
+/// HTTP request methods.
+pub enum HttpMethod {
+    Get,
+    Post,
+    Put,
+    Delete,
+    Patch,
+    Head,
+    Options,
+    Connect,
+    Trace,
+}
+
+impl HttpMethod {
+    pub fn as_str(self) -> &str {
+        match self {
+            HttpMethod::Get     => "GET",
+            HttpMethod::Post    => "POST",
+            HttpMethod::Put     => "PUT",
+            HttpMethod::Delete  => "DELETE",
+            HttpMethod::Patch   => "PATCH",
+            HttpMethod::Head    => "HEAD",
+            HttpMethod::Options => "OPTIONS",
+            HttpMethod::Connect => "CONNECT",
+            HttpMethod::Trace   => "TRACE",
+        }
+    }
+}
+
+/// HTTP status codes.
+pub struct HttpStatus {
+    code: u16,
+}
+
+impl HttpStatus {
+    pub fn new(code: u16) -> HttpStatus { HttpStatus { code } }
+    pub fn code(self) -> u16 { self.code }
+
+    pub fn is_informational(self) -> bool { self.code >= 100 && self.code < 200 }
+    pub fn is_success(self) -> bool       { self.code >= 200 && self.code < 300 }
+    pub fn is_redirection(self) -> bool   { self.code >= 300 && self.code < 400 }
+    pub fn is_client_error(self) -> bool  { self.code >= 400 && self.code < 500 }
+    pub fn is_server_error(self) -> bool  { self.code >= 500 && self.code < 600 }
+
+    pub fn reason_phrase(self) -> &str {
+        match self.code {
+            200 => "OK",
+            201 => "Created",
+            204 => "No Content",
+            301 => "Moved Permanently",
+            302 => "Found",
+            304 => "Not Modified",
+            400 => "Bad Request",
+            401 => "Unauthorized",
+            403 => "Forbidden",
+            404 => "Not Found",
+            405 => "Method Not Allowed",
+            408 => "Request Timeout",
+            409 => "Conflict",
+            429 => "Too Many Requests",
+            500 => "Internal Server Error",
+            502 => "Bad Gateway",
+            503 => "Service Unavailable",
+            504 => "Gateway Timeout",
+            _   => "Unknown",
+        }
+    }
+
+    // Common status constants
+    pub const OK: HttpStatus = HttpStatus { code: 200 };
+    pub const CREATED: HttpStatus = HttpStatus { code: 201 };
+    pub const NO_CONTENT: HttpStatus = HttpStatus { code: 204 };
+    pub const NOT_MODIFIED: HttpStatus = HttpStatus { code: 304 };
+    pub const BAD_REQUEST: HttpStatus = HttpStatus { code: 400 };
+    pub const UNAUTHORIZED: HttpStatus = HttpStatus { code: 401 };
+    pub const FORBIDDEN: HttpStatus = HttpStatus { code: 403 };
+    pub const NOT_FOUND: HttpStatus = HttpStatus { code: 404 };
+    pub const INTERNAL_SERVER_ERROR: HttpStatus = HttpStatus { code: 500 };
+}
+
+/// An HTTP request builder.
+///
+/// ```grey
+/// let response = HttpClient::new()
+///     .get("https://api.example.com/users")
+///     .header("Authorization", "Bearer token123")
+///     .timeout(Duration::from_secs(30))
+///     .send().await?;
+///
+/// println("Status: {}", response.status().code());
+/// println("Body: {}", response.text().await?);
+/// ```
+pub struct HttpRequest {
+    method: HttpMethod,
+    url: String,
+    headers: HashMap<String, String>,
+    body: Option<Vec<u8>>,
+    timeout: Option<Duration>,
+    follow_redirects: bool,
+    max_redirects: u32,
+}
+
+impl HttpRequest {
+    pub fn new(method: HttpMethod, url: &str) -> HttpRequest {
+        HttpRequest {
+            method,
+            url: String::from(url),
+            headers: HashMap::new(),
+            body: None,
+            timeout: None,
+            follow_redirects: true,
+            max_redirects: 10,
+        }
+    }
+
+    /// Sets a header.
+    pub fn header(mut self, key: &str, value: &str) -> HttpRequest {
+        self.headers.insert(String::from(key), String::from(value));
+        self
+    }
+
+    /// Sets multiple headers.
+    pub fn headers(mut self, headers: HashMap<String, String>) -> HttpRequest {
+        for (k, v) in headers {
+            self.headers.insert(k, v);
+        }
+        self
+    }
+
+    /// Sets the request body as bytes.
+    pub fn body(mut self, body: Vec<u8>) -> HttpRequest {
+        self.body = Some(body);
+        self
+    }
+
+    /// Sets the request body as a string.
+    pub fn body_string(mut self, body: &str) -> HttpRequest {
+        self.body = Some(body.as_bytes().to_vec());
+        self
+    }
+
+    /// Sets the request body as JSON.
+    pub fn json<T: Serialize>(mut self, value: &T) -> HttpRequest {
+        let json_str = crate::serial::json::to_string(value).unwrap_or_default();
+        self.headers.insert(String::from("Content-Type"), String::from("application/json"));
+        self.body = Some(json_str.into_bytes());
+        self
+    }
+
+    /// Sets the request timeout.
+    pub fn timeout(mut self, duration: Duration) -> HttpRequest {
+        self.timeout = Some(duration);
+        self
+    }
+
+    /// Enables or disables following redirects.
+    pub fn follow_redirects(mut self, follow: bool) -> HttpRequest {
+        self.follow_redirects = follow;
+        self
+    }
+
+    /// Sends the request and returns the response.
+    pub async fn send(self) -> NetResult<HttpResponse> {
+        let parsed = parse_url(&self.url)?;
+        let is_https = parsed.scheme == "https";
+        let port = parsed.port.unwrap_or(if is_https { 443 } else { 80 });
+
+        let mut stream = TcpStream::connect((&*parsed.host, port)).await?;
+
+        // Build HTTP/1.1 request
+        let mut request_line = format!("{} {} HTTP/1.1\r\n", self.method.as_str(), parsed.path);
+
+        // Add Host header
+        request_line.push_str(&format!("Host: {}\r\n", parsed.host));
+
+        // Add user headers
+        for (key, value) in &self.headers {
+            request_line.push_str(&format!("{}: {}\r\n", key, value));
+        }
+
+        // Content-Length
+        if let Some(ref body) = self.body {
+            request_line.push_str(&format!("Content-Length: {}\r\n", body.len()));
+        }
+
+        // Connection header
+        if !self.headers.contains_key("Connection") {
+            request_line.push_str("Connection: close\r\n");
+        }
+
+        request_line.push_str("\r\n");
+
+        if is_https {
+            let mut tls = crate::net::tls::TlsConnector::new()
+                .connect(&parsed.host, stream).await?;
+            tls.write_all(request_line.as_bytes())?;
+            if let Some(ref body) = self.body {
+                tls.write_all(body)?;
+            }
+            read_http_response(&mut tls).await
+        } else {
+            stream.write_all(request_line.as_bytes())?;
+            if let Some(ref body) = self.body {
+                stream.write_all(body)?;
+            }
+            read_http_response(&mut stream).await
+        }
+    }
+}
+
+/// An HTTP response.
+pub struct HttpResponse {
+    status: HttpStatus,
+    headers: HashMap<String, String>,
+    body: Vec<u8>,
+}
+
+impl HttpResponse {
+    pub fn status(self) -> HttpStatus { self.status }
+    pub fn headers(self) -> &HashMap<String, String> { &self.headers }
+
+    /// Gets a header value.
+    pub fn header(self, key: &str) -> Option<&str> {
+        self.headers.get(key).map(|s| s.as_str())
+    }
+
+    /// Returns the body as bytes.
+    pub fn bytes(self) -> &[u8] { &self.body }
+
+    /// Returns the body as a UTF-8 string.
+    pub fn text(self) -> Result<String, NetError> {
+        String::from_utf8(self.body.clone())
+            .map_err(|_| NetError::HttpError(String::from("invalid UTF-8 response body")))
+    }
+
+    /// Parses the body as JSON.
+    pub fn json<T: Deserialize>(self) -> Result<T, NetError> {
+        let text = self.text()?;
+        crate::serial::json::from_str(&text)
+            .map_err(|e| NetError::HttpError(format!("json parse error: {}", e)))
+    }
+
+    /// Returns the Content-Length header value.
+    pub fn content_length(self) -> Option<u64> {
+        self.header("Content-Length")
+            .and_then(|s| s.parse::<u64>().ok())
+    }
+
+    /// Returns the Content-Type header value.
+    pub fn content_type(self) -> Option<&str> {
+        self.header("Content-Type")
+    }
+}
+
+/// A reusable HTTP client with shared configuration.
+pub struct HttpClient {
+    base_url: Option<String>,
+    default_headers: HashMap<String, String>,
+    timeout: Option<Duration>,
+    follow_redirects: bool,
+    max_redirects: u32,
+}
+
+impl HttpClient {
+    pub fn new() -> HttpClient {
+        HttpClient {
+            base_url: None,
+            default_headers: HashMap::new(),
+            timeout: Some(Duration::from_secs(30)),
+            follow_redirects: true,
+            max_redirects: 10,
+        }
+    }
+
+    /// Sets a base URL for all requests.
+    pub fn base_url(mut self, url: &str) -> HttpClient {
+        self.base_url = Some(String::from(url));
+        self
+    }
+
+    /// Sets a default header for all requests.
+    pub fn default_header(mut self, key: &str, value: &str) -> HttpClient {
+        self.default_headers.insert(String::from(key), String::from(value));
+        self
+    }
+
+    /// Sets the default timeout.
+    pub fn timeout(mut self, duration: Duration) -> HttpClient {
+        self.timeout = Some(duration);
+        self
+    }
+
+    /// Creates a GET request.
+    pub fn get(self, url: &str) -> HttpRequest {
+        self.request(HttpMethod::Get, url)
+    }
+
+    /// Creates a POST request.
+    pub fn post(self, url: &str) -> HttpRequest {
+        self.request(HttpMethod::Post, url)
+    }
+
+    /// Creates a PUT request.
+    pub fn put(self, url: &str) -> HttpRequest {
+        self.request(HttpMethod::Put, url)
+    }
+
+    /// Creates a DELETE request.
+    pub fn delete(self, url: &str) -> HttpRequest {
+        self.request(HttpMethod::Delete, url)
+    }
+
+    /// Creates a PATCH request.
+    pub fn patch(self, url: &str) -> HttpRequest {
+        self.request(HttpMethod::Patch, url)
+    }
+
+    /// Creates a request with the given method and URL.
+    pub fn request(self, method: HttpMethod, url: &str) -> HttpRequest {
+        let full_url = match &self.base_url {
+            Some(base) => format!("{}{}", base, url),
+            None => String::from(url),
+        };
+
+        let mut req = HttpRequest::new(method, &full_url);
+        req.headers = self.default_headers.clone();
+        req.timeout = self.timeout;
+        req.follow_redirects = self.follow_redirects;
+        req.max_redirects = self.max_redirects;
+        req
+    }
+}
+
+// ─── Internal helpers ───────────────────────────────────────
+
+struct ParsedUrl {
+    scheme: String,
+    host: String,
+    port: Option<u16>,
+    path: String,
+}
+
+fn parse_url(url: &str) -> NetResult<ParsedUrl> {
+    let (scheme, rest) = if url.starts_with("https://") {
+        ("https", &url[8..])
+    } else if url.starts_with("http://") {
+        ("http", &url[7..])
+    } else {
+        return Err(NetError::HttpError(String::from("unsupported scheme")));
+    };
+
+    let (host_port, path) = match rest.find('/') {
+        Some(i) => (&rest[..i], String::from(&rest[i..])),
+        None => (rest, String::from("/")),
+    };
+
+    let (host, port) = match host_port.find(':') {
+        Some(i) => {
+            let h = &host_port[..i];
+            let p = host_port[i + 1..].parse::<u16>()
+                .map_err(|_| NetError::HttpError(String::from("invalid port")))?;
+            (String::from(h), Some(p))
+        }
+        None => (String::from(host_port), None),
+    };
+
+    Ok(ParsedUrl { scheme: String::from(scheme), host, port, path })
+}
+
+async fn read_http_response<S: Read>(stream: &mut S) -> NetResult<HttpResponse> {
+    let mut buf = Vec::new();
+    let mut tmp = [0u8; 4096];
+
+    // Read until we find \r\n\r\n (end of headers)
+    loop {
+        let n = stream.read(&mut tmp).map_err(|e| NetError::Io(e))?;
+        if n == 0 { break; }
+        buf.extend_from_slice(&tmp[..n]);
+
+        if contains_header_end(&buf) {
+            break;
+        }
+    }
+
+    // Parse status line and headers
+    let header_end = find_header_end(&buf).unwrap_or(buf.len());
+    let header_bytes = &buf[..header_end];
+    let header_str = String::from_utf8_lossy(header_bytes);
+
+    let mut lines = header_str.split("\r\n");
+    let status_line = lines.next()
+        .ok_or(NetError::HttpError(String::from("missing status line")))?;
+
+    // Parse "HTTP/1.1 200 OK"
+    let parts: Vec<&str> = status_line.splitn(3, ' ').collect();
+    if parts.len() < 2 {
+        return Err(NetError::HttpError(String::from("invalid status line")));
+    }
+    let status_code = parts[1].parse::<u16>()
+        .map_err(|_| NetError::HttpError(String::from("invalid status code")))?;
+
+    let mut headers = HashMap::new();
+    for line in lines {
+        if let Some(colon) = line.find(':') {
+            let key = line[..colon].trim().to_lowercase();
+            let value = line[colon + 1..].trim();
+            headers.insert(String::from(&key), String::from(value));
+        }
+    }
+
+    // Read body
+    let body_start = header_end + 4; // skip \r\n\r\n
+    let mut body = if body_start < buf.len() {
+        buf[body_start..].to_vec()
+    } else {
+        Vec::new()
+    };
+
+    // Read remaining body based on Content-Length or until EOF
+    if let Some(cl_str) = headers.get("content-length") {
+        if let Ok(content_length) = cl_str.parse::<usize>() {
+            while body.len() < content_length {
+                let n = stream.read(&mut tmp).map_err(|e| NetError::Io(e))?;
+                if n == 0 { break; }
+                body.extend_from_slice(&tmp[..n]);
+            }
+        }
+    } else {
+        // Read until EOF
+        loop {
+            let n = stream.read(&mut tmp).map_err(|e| NetError::Io(e))?;
+            if n == 0 { break; }
+            body.extend_from_slice(&tmp[..n]);
+        }
+    }
+
+    Ok(HttpResponse {
+        status: HttpStatus::new(status_code),
+        headers,
+        body,
+    })
+}
+
+fn contains_header_end(buf: &[u8]) -> bool {
+    find_header_end(buf).is_some()
+}
+
+fn find_header_end(buf: &[u8]) -> Option<usize> {
+    for i in 0..buf.len().saturating_sub(3) {
+        if buf[i] == b'\r' && buf[i+1] == b'\n' && buf[i+2] == b'\r' && buf[i+3] == b'\n' {
+            return Some(i);
+        }
+    }
+    None
+}

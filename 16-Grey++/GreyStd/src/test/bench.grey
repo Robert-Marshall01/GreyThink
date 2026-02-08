@@ -1,0 +1,351 @@
+/// test::bench — Benchmarking framework with statistical analysis.
+
+use crate::core::string::String;
+use crate::core::vec::Vec;
+use crate::core::option::Option;
+use crate::time::duration::Duration;
+use crate::time::instant::Instant;
+
+/// Result of a single benchmark.
+pub struct BenchResult {
+    /// Name of the benchmark.
+    pub name: String,
+    /// Number of iterations executed.
+    pub iterations: u64,
+    /// Total duration of all iterations.
+    pub total_duration: Duration,
+    /// Mean time per iteration.
+    pub mean: Duration,
+    /// Median time per iteration.
+    pub median: Duration,
+    /// Standard deviation.
+    pub std_dev: Duration,
+    /// Minimum iteration time.
+    pub min: Duration,
+    /// Maximum iteration time.
+    pub max: Duration,
+    /// Throughput in operations per second.
+    pub ops_per_sec: f64,
+    /// 95th percentile.
+    pub p95: Duration,
+    /// 99th percentile.
+    pub p99: Duration,
+}
+
+impl BenchResult {
+    /// Compute stats from raw sample durations.
+    pub fn compute(name: &str, mut samples: Vec<Duration>) -> BenchResult {
+        samples.sort();
+        let n = samples.len() as u64;
+        let total: Duration = samples.iter().fold(Duration::ZERO, |acc, d| acc + *d);
+
+        // Mean
+        let mean_nanos = total.as_nanos() / n as u128;
+        let mean = Duration::from_nanos(mean_nanos as u64);
+
+        // Median
+        let median = if n % 2 == 0 {
+            let a = samples[(n / 2 - 1) as usize].as_nanos();
+            let b = samples[(n / 2) as usize].as_nanos();
+            Duration::from_nanos(((a + b) / 2) as u64)
+        } else {
+            samples[(n / 2) as usize]
+        };
+
+        // Std dev
+        let mean_ns = mean.as_nanos() as f64;
+        let variance: f64 = samples.iter()
+            .map(|d| {
+                let diff = d.as_nanos() as f64 - mean_ns;
+                diff * diff
+            })
+            .sum::<f64>() / n as f64;
+        let std_dev = Duration::from_nanos(variance.sqrt() as u64);
+
+        // Min / Max
+        let min = samples[0];
+        let max = samples[samples.len() - 1];
+
+        // Percentiles
+        let p95_idx = ((n as f64 * 0.95) as usize).min(samples.len() - 1);
+        let p99_idx = ((n as f64 * 0.99) as usize).min(samples.len() - 1);
+        let p95 = samples[p95_idx];
+        let p99 = samples[p99_idx];
+
+        // Ops/sec
+        let ops_per_sec = if mean.as_nanos() > 0 {
+            1_000_000_000.0 / mean.as_nanos() as f64
+        } else { f64::INFINITY };
+
+        BenchResult {
+            name: String::from(name),
+            iterations: n,
+            total_duration: total,
+            mean,
+            median,
+            std_dev,
+            min,
+            max,
+            ops_per_sec,
+            p95,
+            p99,
+        }
+    }
+
+    /// Format result as a human-readable line.
+    pub fn display(&self) -> String {
+        format!(
+            "{:<40} {:>12} ns/iter (+/- {}) [{} iterations, {:.0} ops/s]",
+            self.name,
+            self.mean.as_nanos(),
+            self.std_dev.as_nanos(),
+            self.iterations,
+            self.ops_per_sec,
+        )
+    }
+
+    /// Format detailed statistics.
+    pub fn display_detailed(&self) -> String {
+        format!(
+            "{}\n  mean:   {} ns\n  median: {} ns\n  stddev: {} ns\n  min:    {} ns\n  max:    {} ns\n  p95:    {} ns\n  p99:    {} ns\n  ops/s:  {:.2}",
+            self.name,
+            self.mean.as_nanos(),
+            self.median.as_nanos(),
+            self.std_dev.as_nanos(),
+            self.min.as_nanos(),
+            self.max.as_nanos(),
+            self.p95.as_nanos(),
+            self.p99.as_nanos(),
+            self.ops_per_sec,
+        )
+    }
+}
+
+/// Configuration for benchmarks.
+pub struct BenchConfig {
+    /// Number of warmup iterations.
+    pub warmup_iters: u64,
+    /// Minimum number of sample iterations.
+    pub min_iters: u64,
+    /// Maximum number of sample iterations.
+    pub max_iters: u64,
+    /// Target duration for sampling.
+    pub target_time: Duration,
+    /// Whether to print results as they complete.
+    pub verbose: bool,
+}
+
+impl BenchConfig {
+    pub fn default() -> BenchConfig {
+        BenchConfig {
+            warmup_iters: 100,
+            min_iters: 1000,
+            max_iters: 10_000_000,
+            target_time: Duration::from_secs(3),
+            verbose: true,
+        }
+    }
+
+    pub fn quick() -> BenchConfig {
+        BenchConfig {
+            warmup_iters: 10,
+            min_iters: 100,
+            max_iters: 100_000,
+            target_time: Duration::from_millis(500),
+            verbose: true,
+        }
+    }
+}
+
+/// A benchmark definition.
+pub struct Benchmark {
+    name: String,
+    func: Box<dyn FnMut(&mut Bencher)>,
+}
+
+impl Benchmark {
+    pub fn new<F: FnMut(&mut Bencher) + 'static>(name: &str, func: F) -> Benchmark {
+        Benchmark { name: String::from(name), func: Box::new(func) }
+    }
+}
+
+/// Passed to benchmark functions to control iteration.
+pub struct Bencher {
+    /// Number of iterations to run.
+    iters: u64,
+    /// Collected samples.
+    samples: Vec<Duration>,
+    /// Bytes processed per iteration (for throughput calculation).
+    bytes_per_iter: u64,
+}
+
+impl Bencher {
+    fn new() -> Bencher {
+        Bencher { iters: 0, samples: Vec::new(), bytes_per_iter: 0 }
+    }
+
+    /// Time the given closure for the configured number of iterations.
+    pub fn iter<T, F: FnMut() -> T>(&mut self, mut func: F) {
+        for _ in 0..self.iters {
+            let start = Instant::now();
+            let _result = black_box(func());
+            let elapsed = start.elapsed();
+            self.samples.push(elapsed);
+        }
+    }
+
+    /// Time iteration with setup that is not measured.
+    pub fn iter_with_setup<T, S, F, G>(&mut self, mut setup: G, mut func: F)
+    where
+        G: FnMut() -> S,
+        F: FnMut(S) -> T,
+    {
+        for _ in 0..self.iters {
+            let input = setup();
+            let start = Instant::now();
+            let _result = black_box(func(input));
+            let elapsed = start.elapsed();
+            self.samples.push(elapsed);
+        }
+    }
+
+    /// Specify bytes processed per iteration for throughput stats.
+    pub fn bytes(&mut self, n: u64) {
+        self.bytes_per_iter = n;
+    }
+}
+
+/// Prevent compiler from optimizing away benchmark values.
+#[inline(never)]
+pub fn black_box<T>(value: T) -> T {
+    // This is an intrinsic that prevents optimization.
+    // In the runtime, it acts as an identity function with an optimization barrier.
+    extern fn __grey_black_box<T>(val: T) -> T;
+    unsafe { __grey_black_box(value) }
+}
+
+/// The benchmark runner.
+pub struct BenchRunner {
+    config: BenchConfig,
+    benchmarks: Vec<Benchmark>,
+}
+
+impl BenchRunner {
+    pub fn new() -> BenchRunner {
+        BenchRunner { config: BenchConfig::default(), benchmarks: Vec::new() }
+    }
+
+    pub fn with_config(config: BenchConfig) -> BenchRunner {
+        BenchRunner { config, benchmarks: Vec::new() }
+    }
+
+    /// Add a benchmark.
+    pub fn add<F: FnMut(&mut Bencher) + 'static>(mut self, name: &str, func: F) -> BenchRunner {
+        self.benchmarks.push(Benchmark::new(name, func));
+        self
+    }
+
+    /// Add a benchmark definition.
+    pub fn add_bench(mut self, bench: Benchmark) -> BenchRunner {
+        self.benchmarks.push(bench);
+        self
+    }
+
+    /// Run all benchmarks.
+    pub fn run(mut self) -> Vec<BenchResult> {
+        let total = self.benchmarks.len();
+        eprintln!("\nrunning {} benchmark{}", total, if total == 1 { "" } else { "s" });
+
+        let mut results = Vec::with_capacity(total);
+
+        for mut bench in self.benchmarks {
+            let mut bencher = Bencher::new();
+
+            // Warmup phase
+            bencher.iters = self.config.warmup_iters;
+            (bench.func)(&mut bencher);
+            bencher.samples.clear();
+
+            // Calibration: estimate how many iterations fit in target time
+            bencher.iters = 10;
+            let cal_start = Instant::now();
+            (bench.func)(&mut bencher);
+            let cal_elapsed = cal_start.elapsed();
+            bencher.samples.clear();
+
+            let iters_per_sec = if cal_elapsed.as_nanos() > 0 {
+                (10.0 * 1_000_000_000.0 / cal_elapsed.as_nanos() as f64) as u64
+            } else {
+                self.config.max_iters
+            };
+
+            let target_iters = (iters_per_sec as f64 * self.config.target_time.as_secs_f64()) as u64;
+            let actual_iters = target_iters
+                .max(self.config.min_iters)
+                .min(self.config.max_iters);
+
+            // Measurement phase
+            bencher.iters = actual_iters;
+            (bench.func)(&mut bencher);
+
+            let result = BenchResult::compute(&bench.name, bencher.samples);
+
+            if self.config.verbose {
+                eprintln!("{}", result.display());
+            }
+
+            results.push(result);
+        }
+
+        eprintln!("\nbenchmark suite finished\n");
+        results
+    }
+}
+
+/// Compare two benchmark results and compute speedup.
+pub struct BenchComparison {
+    pub baseline: BenchResult,
+    pub candidate: BenchResult,
+    pub speedup: f64,
+    pub delta_ns: i64,
+    pub delta_percent: f64,
+}
+
+impl BenchComparison {
+    pub fn compare(baseline: BenchResult, candidate: BenchResult) -> BenchComparison {
+        let base_ns = baseline.mean.as_nanos() as f64;
+        let cand_ns = candidate.mean.as_nanos() as f64;
+        let speedup = base_ns / cand_ns;
+        let delta_ns = cand_ns as i64 - base_ns as i64;
+        let delta_percent = if base_ns > 0.0 { (delta_ns as f64 / base_ns) * 100.0 } else { 0.0 };
+
+        BenchComparison { baseline, candidate, speedup, delta_ns, delta_percent }
+    }
+
+    pub fn display(&self) -> String {
+        let direction = if self.delta_ns < 0 { "faster" } else { "slower" };
+        format!(
+            "{} vs {}: {:.2}x {} ({:+.1}%)",
+            self.baseline.name, self.candidate.name,
+            if self.speedup >= 1.0 { self.speedup } else { 1.0 / self.speedup },
+            direction,
+            self.delta_percent,
+        )
+    }
+}
+
+/// Convenience macro-like function for defining benchmarks inline.
+pub fn bench<T, F: FnMut() -> T + 'static>(name: &str, mut func: F) -> Benchmark {
+    Benchmark::new(name, move |b: &mut Bencher| {
+        b.iter(|| func());
+    })
+}
+
+/// Run benchmarks and exit.
+pub fn run_benchmarks(benchmarks: Vec<Benchmark>) -> Vec<BenchResult> {
+    let mut runner = BenchRunner::new();
+    for b in benchmarks {
+        runner = runner.add_bench(b);
+    }
+    runner.run()
+}

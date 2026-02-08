@@ -1,0 +1,189 @@
+/// concurrent::atomic — Atomic types for lock-free programming.
+
+use crate::core::option::Option;
+
+/// Memory ordering for atomic operations.
+pub enum Ordering {
+    /// No ordering constraints.
+    Relaxed,
+    /// Acquire: reads after this load see writes before the corresponding Release store.
+    Acquire,
+    /// Release: writes before this store are visible after the corresponding Acquire load.
+    Release,
+    /// Combined Acquire and Release.
+    AcqRel,
+    /// Sequentially consistent — full ordering.
+    SeqCst,
+}
+
+/// An atomic boolean.
+pub struct AtomicBool {
+    value: UnsafeCell<bool>,
+}
+
+unsafe impl Send for AtomicBool {}
+unsafe impl Sync for AtomicBool {}
+
+impl AtomicBool {
+    pub fn new(value: bool) -> AtomicBool {
+        AtomicBool { value: UnsafeCell::new(value) }
+    }
+
+    pub fn load(self, order: Ordering) -> bool {
+        intrinsics::atomic_load(self.value.get(), order)
+    }
+
+    pub fn store(self, value: bool, order: Ordering) {
+        intrinsics::atomic_store(self.value.get(), value, order);
+    }
+
+    pub fn swap(self, value: bool, order: Ordering) -> bool {
+        intrinsics::atomic_swap(self.value.get(), value, order)
+    }
+
+    pub fn compare_exchange(self, current: bool, new: bool, success: Ordering, failure: Ordering) -> Result<bool, bool> {
+        intrinsics::atomic_compare_exchange(self.value.get(), current, new, success, failure)
+    }
+
+    pub fn fetch_and(self, value: bool, order: Ordering) -> bool {
+        intrinsics::atomic_and(self.value.get(), value, order)
+    }
+
+    pub fn fetch_or(self, value: bool, order: Ordering) -> bool {
+        intrinsics::atomic_or(self.value.get(), value, order)
+    }
+
+    pub fn fetch_xor(self, value: bool, order: Ordering) -> bool {
+        intrinsics::atomic_xor(self.value.get(), value, order)
+    }
+}
+
+// ─── Macro-like generation for integer atomics ──────────────────────────────
+
+/// An atomic unsigned 32-bit integer.
+pub struct AtomicU32 {
+    value: UnsafeCell<u32>,
+}
+
+unsafe impl Send for AtomicU32 {}
+unsafe impl Sync for AtomicU32 {}
+
+impl AtomicU32 {
+    pub fn new(value: u32) -> AtomicU32 { AtomicU32 { value: UnsafeCell::new(value) } }
+    pub fn load(self, order: Ordering) -> u32 { intrinsics::atomic_load(self.value.get(), order) }
+    pub fn store(self, value: u32, order: Ordering) { intrinsics::atomic_store(self.value.get(), value, order); }
+    pub fn swap(self, value: u32, order: Ordering) -> u32 { intrinsics::atomic_swap(self.value.get(), value, order) }
+    pub fn compare_exchange(self, current: u32, new: u32, success: Ordering, failure: Ordering) -> Result<u32, u32> {
+        intrinsics::atomic_compare_exchange(self.value.get(), current, new, success, failure)
+    }
+    pub fn fetch_add(self, value: u32, order: Ordering) -> u32 { intrinsics::atomic_add(self.value.get(), value, order) }
+    pub fn fetch_sub(self, value: u32, order: Ordering) -> u32 { intrinsics::atomic_sub(self.value.get(), value, order) }
+    pub fn fetch_and(self, value: u32, order: Ordering) -> u32 { intrinsics::atomic_and(self.value.get(), value, order) }
+    pub fn fetch_or(self, value: u32, order: Ordering) -> u32 { intrinsics::atomic_or(self.value.get(), value, order) }
+    pub fn fetch_xor(self, value: u32, order: Ordering) -> u32 { intrinsics::atomic_xor(self.value.get(), value, order) }
+    pub fn fetch_min(self, value: u32, order: Ordering) -> u32 { intrinsics::atomic_min(self.value.get(), value, order) }
+    pub fn fetch_max(self, value: u32, order: Ordering) -> u32 { intrinsics::atomic_max(self.value.get(), value, order) }
+}
+
+/// An atomic unsigned 64-bit integer.
+pub struct AtomicU64 {
+    value: UnsafeCell<u64>,
+}
+
+unsafe impl Send for AtomicU64 {}
+unsafe impl Sync for AtomicU64 {}
+
+impl AtomicU64 {
+    pub fn new(value: u64) -> AtomicU64 { AtomicU64 { value: UnsafeCell::new(value) } }
+    pub fn load(self, order: Ordering) -> u64 { intrinsics::atomic_load(self.value.get(), order) }
+    pub fn store(self, value: u64, order: Ordering) { intrinsics::atomic_store(self.value.get(), value, order); }
+    pub fn swap(self, value: u64, order: Ordering) -> u64 { intrinsics::atomic_swap(self.value.get(), value, order) }
+    pub fn compare_exchange(self, current: u64, new: u64, success: Ordering, failure: Ordering) -> Result<u64, u64> {
+        intrinsics::atomic_compare_exchange(self.value.get(), current, new, success, failure)
+    }
+    pub fn fetch_add(self, value: u64, order: Ordering) -> u64 { intrinsics::atomic_add(self.value.get(), value, order) }
+    pub fn fetch_sub(self, value: u64, order: Ordering) -> u64 { intrinsics::atomic_sub(self.value.get(), value, order) }
+    pub fn fetch_and(self, value: u64, order: Ordering) -> u64 { intrinsics::atomic_and(self.value.get(), value, order) }
+    pub fn fetch_or(self, value: u64, order: Ordering) -> u64 { intrinsics::atomic_or(self.value.get(), value, order) }
+    pub fn fetch_xor(self, value: u64, order: Ordering) -> u64 { intrinsics::atomic_xor(self.value.get(), value, order) }
+}
+
+/// An atomic signed 32-bit integer.
+pub struct AtomicI32 {
+    value: UnsafeCell<i32>,
+}
+
+unsafe impl Send for AtomicI32 {}
+unsafe impl Sync for AtomicI32 {}
+
+impl AtomicI32 {
+    pub fn new(value: i32) -> AtomicI32 { AtomicI32 { value: UnsafeCell::new(value) } }
+    pub fn load(self, order: Ordering) -> i32 { intrinsics::atomic_load(self.value.get(), order) }
+    pub fn store(self, value: i32, order: Ordering) { intrinsics::atomic_store(self.value.get(), value, order); }
+    pub fn swap(self, value: i32, order: Ordering) -> i32 { intrinsics::atomic_swap(self.value.get(), value, order) }
+    pub fn compare_exchange(self, current: i32, new: i32, success: Ordering, failure: Ordering) -> Result<i32, i32> {
+        intrinsics::atomic_compare_exchange(self.value.get(), current, new, success, failure)
+    }
+    pub fn fetch_add(self, value: i32, order: Ordering) -> i32 { intrinsics::atomic_add(self.value.get(), value, order) }
+    pub fn fetch_sub(self, value: i32, order: Ordering) -> i32 { intrinsics::atomic_sub(self.value.get(), value, order) }
+}
+
+/// An atomic signed 64-bit integer.
+pub struct AtomicI64 {
+    value: UnsafeCell<i64>,
+}
+
+unsafe impl Send for AtomicI64 {}
+unsafe impl Sync for AtomicI64 {}
+
+impl AtomicI64 {
+    pub fn new(value: i64) -> AtomicI64 { AtomicI64 { value: UnsafeCell::new(value) } }
+    pub fn load(self, order: Ordering) -> i64 { intrinsics::atomic_load(self.value.get(), order) }
+    pub fn store(self, value: i64, order: Ordering) { intrinsics::atomic_store(self.value.get(), value, order); }
+    pub fn fetch_add(self, value: i64, order: Ordering) -> i64 { intrinsics::atomic_add(self.value.get(), value, order) }
+    pub fn fetch_sub(self, value: i64, order: Ordering) -> i64 { intrinsics::atomic_sub(self.value.get(), value, order) }
+}
+
+/// An atomic pointer-sized unsigned integer.
+pub struct AtomicUsize {
+    value: UnsafeCell<usize>,
+}
+
+unsafe impl Send for AtomicUsize {}
+unsafe impl Sync for AtomicUsize {}
+
+impl AtomicUsize {
+    pub fn new(value: usize) -> AtomicUsize { AtomicUsize { value: UnsafeCell::new(value) } }
+    pub fn load(self, order: Ordering) -> usize { intrinsics::atomic_load(self.value.get(), order) }
+    pub fn store(self, value: usize, order: Ordering) { intrinsics::atomic_store(self.value.get(), value, order); }
+    pub fn swap(self, value: usize, order: Ordering) -> usize { intrinsics::atomic_swap(self.value.get(), value, order) }
+    pub fn compare_exchange(self, current: usize, new: usize, success: Ordering, failure: Ordering) -> Result<usize, usize> {
+        intrinsics::atomic_compare_exchange(self.value.get(), current, new, success, failure)
+    }
+    pub fn fetch_add(self, value: usize, order: Ordering) -> usize { intrinsics::atomic_add(self.value.get(), value, order) }
+    pub fn fetch_sub(self, value: usize, order: Ordering) -> usize { intrinsics::atomic_sub(self.value.get(), value, order) }
+    pub fn fetch_and(self, value: usize, order: Ordering) -> usize { intrinsics::atomic_and(self.value.get(), value, order) }
+    pub fn fetch_or(self, value: usize, order: Ordering) -> usize { intrinsics::atomic_or(self.value.get(), value, order) }
+}
+
+/// An atomic u8.
+pub struct AtomicU8 {
+    value: UnsafeCell<u8>,
+}
+
+unsafe impl Send for AtomicU8 {}
+unsafe impl Sync for AtomicU8 {}
+
+impl AtomicU8 {
+    pub fn new(value: u8) -> AtomicU8 { AtomicU8 { value: UnsafeCell::new(value) } }
+    pub fn load(self, order: Ordering) -> u8 { intrinsics::atomic_load(self.value.get(), order) }
+    pub fn store(self, value: u8, order: Ordering) { intrinsics::atomic_store(self.value.get(), value, order); }
+    pub fn compare_exchange(self, current: u8, new: u8, success: Ordering, failure: Ordering) -> Result<u8, u8> {
+        intrinsics::atomic_compare_exchange(self.value.get(), current, new, success, failure)
+    }
+}
+
+/// Memory fence.
+pub fn fence(order: Ordering) {
+    intrinsics::atomic_fence(order);
+}

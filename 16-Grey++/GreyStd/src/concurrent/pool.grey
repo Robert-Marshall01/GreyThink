@@ -1,0 +1,137 @@
+/// concurrent::pool — Thread pool for parallel work.
+
+/// A fixed-size thread pool for executing tasks in parallel.
+pub struct ThreadPool {
+    workers: Vec<Worker>,
+    sender: Sender<Job>,
+    size: usize,
+}
+
+type Job = Box<dyn FnOnce() + Send + 'static>;
+
+struct Worker {
+    id: usize,
+    thread: Option<Thread>,
+}
+
+impl ThreadPool {
+    /// Creates a new thread pool with the given number of workers.
+    pub fn new(size: usize) -> ThreadPool {
+        assert(size > 0, "ThreadPool size must be > 0");
+        let (sender, receiver) = channel::<Job>();
+        let receiver = Arc::new(Mutex::new(receiver));
+
+        let mut workers = Vec::with_capacity(size);
+        for id in 0..size {
+            let receiver = receiver.clone();
+            let thread = Thread::spawn(move || {
+                loop {
+                    let job = {
+                        let rx = receiver.lock();
+                        match rx.try_recv() {
+                            Ok(job) => job,
+                            Err(TryRecvError::Closed) => break,
+                            Err(TryRecvError::Empty) => {
+                                Thread::yield_now();
+                                continue;
+                            }
+                        }
+                    };
+                    job();
+                }
+            });
+            workers.push(Worker { id, thread: Some(thread) });
+        }
+
+        ThreadPool { workers, sender, size }
+    }
+
+    /// Creates a thread pool with one worker per CPU core.
+    pub fn auto() -> ThreadPool {
+        ThreadPool::new(sys::cpu_count())
+    }
+
+    /// Submits a job to the thread pool.
+    pub fn execute<F: FnOnce() + Send + 'static>(self, f: F) {
+        self.sender.try_send(Box::new(f))
+            .expect("ThreadPool: failed to submit job");
+    }
+
+    /// Submits a job and returns a handle to its result.
+    pub fn submit<F: FnOnce() -> T + Send + 'static, T: Send + 'static>(self, f: F) -> JoinHandle<T> {
+        let (tx, rx) = oneshot::<T>();
+        self.execute(move || {
+            let result = f();
+            tx.send(result).ok();
+        });
+        // Wrap oneshot receiver as JoinHandle
+        spawn(async move { rx.recv().await.unwrap() })
+    }
+
+    /// Returns the number of workers.
+    pub fn size(self) -> usize {
+        self.size
+    }
+
+    /// Shuts down the pool, waiting for all tasks to complete.
+    pub fn shutdown(mut self) {
+        self.sender.close();
+        for worker in &mut self.workers {
+            if let Some(thread) = worker.thread.take() {
+                thread.join().ok();
+            }
+        }
+    }
+
+    /// Maps a function over a slice in parallel, returning results.
+    pub fn parallel_map<T: Send + Sync, U: Send + 'static>(
+        self,
+        items: &[T],
+        f: fn(&T) -> U,
+    ) -> Vec<U> {
+        let chunk_size = (items.len() + self.size - 1) / self.size;
+        let chunks: Vec<&[T]> = items.chunks(chunk_size).collect();
+        let handles: Vec<_> = chunks.into_iter()
+            .map(|chunk| {
+                let chunk = chunk.to_vec();
+                self.submit(move || {
+                    chunk.iter().map(|item| f(item)).collect::<Vec<U>>()
+                })
+            })
+            .collect();
+
+        let mut results = Vec::new();
+        for handle in handles {
+            results.extend(handle.join().unwrap());
+        }
+        results
+    }
+
+    /// Executes a function on each element of a slice in parallel.
+    pub fn parallel_for_each<T: Send + Sync>(
+        self,
+        items: &[T],
+        f: fn(&T),
+    ) {
+        let chunk_size = (items.len() + self.size - 1) / self.size;
+        let chunks: Vec<&[T]> = items.chunks(chunk_size).collect();
+        let handles: Vec<_> = chunks.into_iter()
+            .map(|chunk| {
+                let chunk = chunk.to_vec();
+                self.submit(move || {
+                    for item in &chunk { f(item); }
+                })
+            })
+            .collect();
+
+        for handle in handles {
+            handle.join().ok();
+        }
+    }
+}
+
+impl Drop for ThreadPool {
+    fn drop(mut self) {
+        self.shutdown();
+    }
+}

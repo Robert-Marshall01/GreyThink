@@ -1,0 +1,196 @@
+/// module::metadata — Package metadata and dependency declarations.
+
+use crate::core::string::String;
+use crate::core::vec::Vec;
+use crate::core::map::HashMap;
+use crate::core::option::Option;
+use crate::module::version::{Version, VersionReq};
+
+/// Metadata about a Grey++ module/package.
+pub struct ModuleMeta {
+    /// Package name (e.g. "greystd").
+    pub name: String,
+    /// Semantic version.
+    pub version: Version,
+    /// Human-readable description.
+    pub description: Option<String>,
+    /// List of authors.
+    pub authors: Vec<String>,
+    /// SPDX license identifier (e.g. "MIT OR Apache-2.0").
+    pub license: Option<String>,
+    /// Repository URL.
+    pub repository: Option<String>,
+    /// Homepage URL.
+    pub homepage: Option<String>,
+    /// Documentation URL.
+    pub documentation: Option<String>,
+    /// Keywords for registry search.
+    pub keywords: Vec<String>,
+    /// Categories for registry classification.
+    pub categories: Vec<String>,
+    /// Minimum Grey++ edition required (e.g. "2026").
+    pub edition: Option<String>,
+    /// Dependencies.
+    pub dependencies: Vec<Dependency>,
+    /// Dev-only dependencies.
+    pub dev_dependencies: Vec<Dependency>,
+    /// Feature flags.
+    pub features: HashMap<String, Vec<String>>,
+    /// Default features.
+    pub default_features: Vec<String>,
+}
+
+impl ModuleMeta {
+    /// Create minimal metadata.
+    pub fn new(name: &str, version: Version) -> ModuleMeta {
+        ModuleMeta {
+            name: String::from(name),
+            version,
+            description: None,
+            authors: Vec::new(),
+            license: None,
+            repository: None,
+            homepage: None,
+            documentation: None,
+            keywords: Vec::new(),
+            categories: Vec::new(),
+            edition: None,
+            dependencies: Vec::new(),
+            dev_dependencies: Vec::new(),
+            features: HashMap::new(),
+            default_features: Vec::new(),
+        }
+    }
+
+    /// Parse from a greystd.toml file.
+    pub fn from_toml(content: &str) -> Result<ModuleMeta, String> {
+        let toml = crate::serial::toml::TomlParser::parse(content)
+            .map_err(|e| format!("TOML parse error: {:?}", e))?;
+
+        let pkg = match toml.get("package") {
+            Some(crate::serial::toml::TomlValue::Table(t)) => t,
+            _ => return Err(String::from("missing [package] table")),
+        };
+
+        let name = match pkg.get("name") {
+            Some(crate::serial::toml::TomlValue::String(s)) => s.clone(),
+            _ => return Err(String::from("missing package.name")),
+        };
+
+        let version_str = match pkg.get("version") {
+            Some(crate::serial::toml::TomlValue::String(s)) => s.clone(),
+            _ => return Err(String::from("missing package.version")),
+        };
+        let version = Version::parse(&version_str)
+            .map_err(|e| format!("invalid version: {:?}", e))?;
+
+        let description = pkg.get("description").and_then(|v| {
+            if let crate::serial::toml::TomlValue::String(s) = v { Some(s.clone()) } else { None }
+        });
+
+        let license = pkg.get("license").and_then(|v| {
+            if let crate::serial::toml::TomlValue::String(s) = v { Some(s.clone()) } else { None }
+        });
+
+        let edition = pkg.get("edition").and_then(|v| {
+            if let crate::serial::toml::TomlValue::String(s) = v { Some(s.clone()) } else { None }
+        });
+
+        Ok(ModuleMeta {
+            name, version, description, license, edition,
+            authors: Vec::new(),
+            repository: None, homepage: None, documentation: None,
+            keywords: Vec::new(), categories: Vec::new(),
+            dependencies: Vec::new(), dev_dependencies: Vec::new(),
+            features: HashMap::new(), default_features: Vec::new(),
+        })
+    }
+
+    /// Serialize to TOML format.
+    pub fn to_toml(&self) -> String {
+        let mut out = String::new();
+        out.push_str("[package]\n");
+        out.push_str(&format!("name = \"{}\"\n", self.name));
+        out.push_str(&format!("version = \"{}\"\n", self.version.to_string()));
+        if let Some(desc) = &self.description {
+            out.push_str(&format!("description = \"{}\"\n", desc));
+        }
+        if let Some(lic) = &self.license {
+            out.push_str(&format!("license = \"{}\"\n", lic));
+        }
+        if let Some(ed) = &self.edition {
+            out.push_str(&format!("edition = \"{}\"\n", ed));
+        }
+        if !self.authors.is_empty() {
+            let authors: Vec<String> = self.authors.iter().map(|a| format!("\"{}\"", a)).collect();
+            out.push_str(&format!("authors = [{}]\n", authors.join(", ")));
+        }
+        out
+    }
+}
+
+/// A package dependency.
+pub struct Dependency {
+    /// Package name.
+    pub name: String,
+    /// Version requirement.
+    pub version_req: VersionReq,
+    /// Registry or git source.
+    pub source: DependencySource,
+    /// Optional — only included when feature-flagged.
+    pub optional: bool,
+    /// Features to enable.
+    pub features: Vec<String>,
+    /// Whether to use default features.
+    pub default_features: bool,
+}
+
+/// Where a dependency is sourced from.
+pub enum DependencySource {
+    /// From the default registry.
+    Registry,
+    /// From a git repository.
+    Git { url: String, branch: Option<String>, tag: Option<String>, rev: Option<String> },
+    /// From a local path.
+    Path(String),
+}
+
+impl Dependency {
+    /// Create a registry dependency with a version requirement string.
+    pub fn registry(name: &str, version: &str) -> Result<Dependency, String> {
+        let version_req = VersionReq::parse(version)
+            .map_err(|e| format!("invalid version requirement: {:?}", e))?;
+        Ok(Dependency {
+            name: String::from(name),
+            version_req,
+            source: DependencySource::Registry,
+            optional: false,
+            features: Vec::new(),
+            default_features: true,
+        })
+    }
+
+    /// Create a git dependency.
+    pub fn git(name: &str, url: &str) -> Dependency {
+        Dependency {
+            name: String::from(name),
+            version_req: VersionReq::any(),
+            source: DependencySource::Git { url: String::from(url), branch: None, tag: None, rev: None },
+            optional: false,
+            features: Vec::new(),
+            default_features: true,
+        }
+    }
+
+    /// Create a path dependency.
+    pub fn path(name: &str, path: &str) -> Dependency {
+        Dependency {
+            name: String::from(name),
+            version_req: VersionReq::any(),
+            source: DependencySource::Path(String::from(path)),
+            optional: false,
+            features: Vec::new(),
+            default_features: true,
+        }
+    }
+}

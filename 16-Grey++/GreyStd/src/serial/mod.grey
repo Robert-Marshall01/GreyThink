@@ -1,0 +1,229 @@
+/// serial — Serialization and deserialization: JSON, YAML, TOML, binary, MessagePack.
+
+pub mod json;
+pub mod yaml;
+pub mod toml;
+pub mod binary;
+pub mod msgpack;
+
+// Re-exports
+pub use json::{to_json, from_json, JsonValue};
+pub use binary::{base64_encode, base64_decode, hex_encode, hex_decode};
+pub use yaml::{YamlValue, YamlParser};
+pub use toml::{TomlValue, TomlParser};
+pub use msgpack::{MsgPackValue, MsgPackEncoder, MsgPackDecoder};
+
+/// Trait for types that can be serialized.
+pub trait Serialize {
+    fn serialize<S: Serializer>(self, serializer: &mut S) -> Result<(), SerializeError>;
+}
+
+/// Trait for types that can be deserialized.
+pub trait Deserialize: Sized {
+    fn deserialize<D: Deserializer>(deserializer: &mut D) -> Result<Self, DeserializeError>;
+}
+
+/// Abstract serializer interface.
+pub trait Serializer {
+    fn serialize_bool(mut self, v: bool) -> Result<(), SerializeError>;
+    fn serialize_i64(mut self, v: i64) -> Result<(), SerializeError>;
+    fn serialize_u64(mut self, v: u64) -> Result<(), SerializeError>;
+    fn serialize_f64(mut self, v: f64) -> Result<(), SerializeError>;
+    fn serialize_str(mut self, v: &str) -> Result<(), SerializeError>;
+    fn serialize_bytes(mut self, v: &[u8]) -> Result<(), SerializeError>;
+    fn serialize_none(mut self) -> Result<(), SerializeError>;
+    fn serialize_some<T: Serialize>(mut self, value: &T) -> Result<(), SerializeError>;
+    fn serialize_seq_begin(mut self, len: Option<usize>) -> Result<(), SerializeError>;
+    fn serialize_seq_element<T: Serialize>(mut self, value: &T) -> Result<(), SerializeError>;
+    fn serialize_seq_end(mut self) -> Result<(), SerializeError>;
+    fn serialize_map_begin(mut self, len: Option<usize>) -> Result<(), SerializeError>;
+    fn serialize_map_key<T: Serialize>(mut self, key: &T) -> Result<(), SerializeError>;
+    fn serialize_map_value<T: Serialize>(mut self, value: &T) -> Result<(), SerializeError>;
+    fn serialize_map_end(mut self) -> Result<(), SerializeError>;
+    fn serialize_struct_begin(mut self, name: &str, len: usize) -> Result<(), SerializeError>;
+    fn serialize_struct_field<T: Serialize>(mut self, key: &str, value: &T) -> Result<(), SerializeError>;
+    fn serialize_struct_end(mut self) -> Result<(), SerializeError>;
+}
+
+/// Abstract deserializer interface.
+pub trait Deserializer {
+    fn deserialize_bool(mut self) -> Result<bool, DeserializeError>;
+    fn deserialize_i64(mut self) -> Result<i64, DeserializeError>;
+    fn deserialize_u64(mut self) -> Result<u64, DeserializeError>;
+    fn deserialize_f64(mut self) -> Result<f64, DeserializeError>;
+    fn deserialize_str(mut self) -> Result<String, DeserializeError>;
+    fn deserialize_bytes(mut self) -> Result<Vec<u8>, DeserializeError>;
+    fn deserialize_option<T: Deserialize>(mut self) -> Result<Option<T>, DeserializeError>;
+    fn deserialize_seq<T: Deserialize>(mut self) -> Result<Vec<T>, DeserializeError>;
+    fn deserialize_map<K: Deserialize + Eq + Hash, V: Deserialize>(mut self) -> Result<HashMap<K, V>, DeserializeError>;
+}
+
+/// Serialization error type.
+pub enum SerializeError {
+    Message(String),
+    IoError(crate::io::IoError),
+    UnsupportedType(String),
+}
+
+impl Display for SerializeError {
+    fn fmt(self, f: &mut Formatter) -> Result<(), FmtError> {
+        match self {
+            SerializeError::Message(m) => write!(f, "{}", m),
+            SerializeError::IoError(e) => write!(f, "io: {}", e),
+            SerializeError::UnsupportedType(t) => write!(f, "unsupported type: {}", t),
+        }
+    }
+}
+
+/// Deserialization error type.
+pub enum DeserializeError {
+    Message(String),
+    IoError(crate::io::IoError),
+    InvalidType { expected: String, found: String },
+    MissingField(String),
+    UnknownField(String),
+    Eof,
+}
+
+impl Display for DeserializeError {
+    fn fmt(self, f: &mut Formatter) -> Result<(), FmtError> {
+        match self {
+            DeserializeError::Message(m) => write!(f, "{}", m),
+            DeserializeError::IoError(e) => write!(f, "io: {}", e),
+            DeserializeError::InvalidType { expected, found } => write!(f, "expected {}, found {}", expected, found),
+            DeserializeError::MissingField(field) => write!(f, "missing field: {}", field),
+            DeserializeError::UnknownField(field) => write!(f, "unknown field: {}", field),
+            DeserializeError::Eof => write!(f, "unexpected end of input"),
+        }
+    }
+}
+
+// ─── Primitive Serialize/Deserialize implementations ────────
+
+impl Serialize for bool {
+    fn serialize<S: Serializer>(self, s: &mut S) -> Result<(), SerializeError> { s.serialize_bool(*self) }
+}
+
+impl Serialize for i32 {
+    fn serialize<S: Serializer>(self, s: &mut S) -> Result<(), SerializeError> { s.serialize_i64(*self as i64) }
+}
+
+impl Serialize for i64 {
+    fn serialize<S: Serializer>(self, s: &mut S) -> Result<(), SerializeError> { s.serialize_i64(*self) }
+}
+
+impl Serialize for u32 {
+    fn serialize<S: Serializer>(self, s: &mut S) -> Result<(), SerializeError> { s.serialize_u64(*self as u64) }
+}
+
+impl Serialize for u64 {
+    fn serialize<S: Serializer>(self, s: &mut S) -> Result<(), SerializeError> { s.serialize_u64(*self) }
+}
+
+impl Serialize for f64 {
+    fn serialize<S: Serializer>(self, s: &mut S) -> Result<(), SerializeError> { s.serialize_f64(*self) }
+}
+
+impl Serialize for String {
+    fn serialize<S: Serializer>(self, s: &mut S) -> Result<(), SerializeError> { s.serialize_str(self) }
+}
+
+impl Serialize for &str {
+    fn serialize<S: Serializer>(self, s: &mut S) -> Result<(), SerializeError> { s.serialize_str(*self) }
+}
+
+impl<T: Serialize> Serialize for Vec<T> {
+    fn serialize<S: Serializer>(self, s: &mut S) -> Result<(), SerializeError> {
+        s.serialize_seq_begin(Some(self.len()))?;
+        for item in self.iter() {
+            s.serialize_seq_element(item)?;
+        }
+        s.serialize_seq_end()
+    }
+}
+
+impl Serialize for i8 {
+    fn serialize<S: Serializer>(self, s: &mut S) -> Result<(), SerializeError> { s.serialize_i64(*self as i64) }
+}
+
+impl Serialize for i16 {
+    fn serialize<S: Serializer>(self, s: &mut S) -> Result<(), SerializeError> { s.serialize_i64(*self as i64) }
+}
+
+impl Serialize for u8 {
+    fn serialize<S: Serializer>(self, s: &mut S) -> Result<(), SerializeError> { s.serialize_u64(*self as u64) }
+}
+
+impl Serialize for u16 {
+    fn serialize<S: Serializer>(self, s: &mut S) -> Result<(), SerializeError> { s.serialize_u64(*self as u64) }
+}
+
+impl Serialize for f32 {
+    fn serialize<S: Serializer>(self, s: &mut S) -> Result<(), SerializeError> { s.serialize_f64(*self as f64) }
+}
+
+impl<K: Serialize, V: Serialize> Serialize for HashMap<K, V> {
+    fn serialize<S: Serializer>(self, s: &mut S) -> Result<(), SerializeError> {
+        s.serialize_map_begin(Some(self.len()))?;
+        for (k, v) in self.iter() {
+            s.serialize_map_key(k)?;
+            s.serialize_map_value(v)?;
+        }
+        s.serialize_map_end()
+    }
+}
+
+impl<T: Serialize> Serialize for Option<T> {
+    fn serialize<S: Serializer>(self, s: &mut S) -> Result<(), SerializeError> {
+        match self {
+            Some(v) => s.serialize_some(v),
+            None => s.serialize_none(),
+        }
+    }
+}
+
+// ─── Primitive Deserialize implementations ──────────────────
+
+impl Deserialize for bool {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<bool, DeserializeError> { d.deserialize_bool() }
+}
+
+impl Deserialize for i32 {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<i32, DeserializeError> {
+        d.deserialize_i64().map(|v| v as i32)
+    }
+}
+
+impl Deserialize for i64 {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<i64, DeserializeError> { d.deserialize_i64() }
+}
+
+impl Deserialize for u32 {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<u32, DeserializeError> {
+        d.deserialize_u64().map(|v| v as u32)
+    }
+}
+
+impl Deserialize for u64 {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<u64, DeserializeError> { d.deserialize_u64() }
+}
+
+impl Deserialize for f64 {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<f64, DeserializeError> { d.deserialize_f64() }
+}
+
+impl Deserialize for String {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<String, DeserializeError> { d.deserialize_str() }
+}
+
+impl<T: Deserialize> Deserialize for Vec<T> {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Vec<T>, DeserializeError> { d.deserialize_seq() }
+}
+
+impl<T: Deserialize> Deserialize for Option<T> {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Option<T>, DeserializeError> { d.deserialize_option() }
+}
+
+impl<K: Deserialize + Eq + Hash, V: Deserialize> Deserialize for HashMap<K, V> {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<HashMap<K, V>, DeserializeError> { d.deserialize_map() }
+}

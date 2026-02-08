@@ -1,0 +1,229 @@
+/// core::array — Fixed-size arrays.
+///
+/// `Array<T, N>` is a stack-allocated, fixed-length collection.
+
+/// A fixed-size array of `N` elements of type `T`.
+/// Allocated inline (on the stack or inside another struct).
+pub struct Array<T, const N: usize> {
+    data: [T; N],
+}
+
+impl<T, const N: usize> Array<T, N> {
+    /// Creates an array filled with a default value.
+    pub fn filled(value: T) -> Array<T, N> where T: Clone {
+        let mut data: [T; N] = uninit();
+        for i in 0..N {
+            data[i] = value.clone();
+        }
+        Array { data }
+    }
+
+    /// Creates an array by calling a function with each index.
+    pub fn from_fn(f: fn(usize) -> T) -> Array<T, N> {
+        let mut data: [T; N] = uninit();
+        for i in 0..N {
+            data[i] = f(i);
+        }
+        Array { data }
+    }
+
+    /// Returns the fixed length of the array.
+    pub fn len(self) -> usize {
+        N
+    }
+
+    /// Always returns false for a non-zero-length array.
+    pub fn is_empty(self) -> bool {
+        N == 0
+    }
+
+    /// Returns a reference to the element at `index`, or None if out of bounds.
+    pub fn get(self, index: usize) -> Option<&T> {
+        if index >= N { return None; }
+        Some(&self.data[index])
+    }
+
+    /// Returns a mutable reference to the element at `index`.
+    pub fn get_mut(mut self, index: usize) -> Option<&mut T> {
+        if index >= N { return None; }
+        Some(&mut self.data[index])
+    }
+
+    /// Returns a reference to the first element.
+    pub fn first(self) -> Option<&T> {
+        if N == 0 { None } else { Some(&self.data[0]) }
+    }
+
+    /// Returns a reference to the last element.
+    pub fn last(self) -> Option<&T> {
+        if N == 0 { None } else { Some(&self.data[N - 1]) }
+    }
+
+    /// Returns an iterator over references to the elements.
+    pub fn iter(self) -> ArrayIter<T, N> {
+        ArrayIter { array: self, pos: 0 }
+    }
+
+    /// Returns a mutable iterator.
+    pub fn iter_mut(mut self) -> ArrayIterMut<T, N> {
+        ArrayIterMut { array: self, pos: 0 }
+    }
+
+    /// Returns a slice view.
+    pub fn as_slice(self) -> &[T] {
+        &self.data[..]
+    }
+
+    /// Returns a mutable slice view.
+    pub fn as_mut_slice(mut self) -> &mut [T] {
+        &mut self.data[..]
+    }
+
+    /// Maps each element through a function, producing a new Array.
+    pub fn map<U>(self, f: fn(&T) -> U) -> Array<U, N> {
+        Array::from_fn(|i| f(&self.data[i]))
+    }
+
+    /// Returns true if any element satisfies the predicate.
+    pub fn any(self, predicate: fn(&T) -> bool) -> bool {
+        for i in 0..N {
+            if predicate(&self.data[i]) { return true; }
+        }
+        false
+    }
+
+    /// Returns true if all elements satisfy the predicate.
+    pub fn all(self, predicate: fn(&T) -> bool) -> bool {
+        for i in 0..N {
+            if !predicate(&self.data[i]) { return false; }
+        }
+        true
+    }
+
+    /// Reverses the array in-place.
+    pub fn reverse(mut self) {
+        let mut lo = 0;
+        let mut hi = N - 1;
+        while lo < hi {
+            self.data.swap(lo, hi);
+            lo += 1;
+            hi -= 1;
+        }
+    }
+
+    /// Sorts the array in-place using the natural ordering.
+    pub fn sort(mut self) where T: Ord {
+        // Insertion sort for small arrays; use Vec sort for larger
+        for i in 1..N {
+            let mut j = i;
+            while j > 0 && self.data[j] < self.data[j - 1] {
+                self.data.swap(j, j - 1);
+                j -= 1;
+            }
+        }
+    }
+
+    /// Converts the fixed array to a growable Vec<T>.
+    pub fn to_vec(self) -> Vec<T> where T: Clone {
+        let mut v = Vec::with_capacity(N);
+        for i in 0..N {
+            v.push(self.data[i].clone());
+        }
+        v
+    }
+
+    /// Swaps two elements by index.
+    pub fn swap(mut self, a: usize, b: usize) {
+        assert(a < N && b < N, "Array::swap index out of bounds");
+        self.data.swap(a, b);
+    }
+
+    /// Returns true if the array contains the given value.
+    pub fn contains(self, value: &T) -> bool where T: Eq {
+        for i in 0..N {
+            if self.data[i] == *value { return true; }
+        }
+        false
+    }
+
+    /// Finds the index of the first occurrence of `value`.
+    pub fn position(self, value: &T) -> Option<usize> where T: Eq {
+        for i in 0..N {
+            if self.data[i] == *value { return Some(i); }
+        }
+        None
+    }
+}
+
+impl<T: Eq, const N: usize> Eq for Array<T, N> {
+    fn eq(self, other: Array<T, N>) -> bool {
+        for i in 0..N {
+            if self.data[i] != other.data[i] { return false; }
+        }
+        true
+    }
+}
+
+impl<T: Clone, const N: usize> Clone for Array<T, N> {
+    fn clone(self) -> Array<T, N> {
+        Array::from_fn(|i| self.data[i].clone())
+    }
+}
+
+impl<T: Debug, const N: usize> Debug for Array<T, N> {
+    fn debug_fmt(self, f: &mut Formatter) -> Result<(), FormatError> {
+        f.write_str("[")?;
+        for i in 0..N {
+            if i > 0 { f.write_str(", ")?; }
+            self.data[i].debug_fmt(f)?;
+        }
+        f.write_str("]")
+    }
+}
+
+impl<T, const N: usize> Index<usize> for Array<T, N> {
+    type Output = T;
+    fn index(self, idx: usize) -> &T {
+        assert(idx < N, "Array index out of bounds");
+        &self.data[idx]
+    }
+}
+
+impl<T, const N: usize> IndexMut<usize> for Array<T, N> {
+    fn index_mut(mut self, idx: usize) -> &mut T {
+        assert(idx < N, "Array index out of bounds");
+        &mut self.data[idx]
+    }
+}
+
+// ─── Array Iterators ────────────────────────────────────────────────────────
+
+pub struct ArrayIter<T, const N: usize> {
+    array: &Array<T, N>,
+    pos: usize,
+}
+
+impl<T, const N: usize> Iterator for ArrayIter<T, N> {
+    type Item = &T;
+    fn next(mut self) -> Option<&T> {
+        if self.pos >= N { return None; }
+        let item = &self.array.data[self.pos];
+        self.pos += 1;
+        Some(item)
+    }
+}
+
+pub struct ArrayIterMut<T, const N: usize> {
+    array: &mut Array<T, N>,
+    pos: usize,
+}
+
+impl<T, const N: usize> Iterator for ArrayIterMut<T, N> {
+    type Item = &mut T;
+    fn next(mut self) -> Option<&mut T> {
+        if self.pos >= N { return None; }
+        let item = &mut self.array.data[self.pos];
+        self.pos += 1;
+        Some(item)
+    }
+}

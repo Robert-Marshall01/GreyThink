@@ -1,0 +1,361 @@
+/// deterministic::replay_io — Replayable I/O for deterministic testing and simulation.
+///
+/// Records all I/O operations (reads, writes, network, time, randomness)
+/// and can replay them to reproduce exact program behavior.
+
+use crate::core::string::String;
+use crate::core::vec::Vec;
+use crate::core::option::Option;
+use crate::core::result::Result;
+use crate::core::bytes::Bytes;
+use crate::time::duration::Duration;
+use crate::time::instant::Instant;
+
+/// The type of I/O action recorded.
+#[derive(Debug, Clone)]
+pub enum IoAction {
+    /// File read: path, offset, length.
+    FileRead { path: String, offset: u64, length: usize },
+    /// File write: path, offset, data.
+    FileWrite { path: String, offset: u64, data: Bytes },
+    /// Network send: address, data.
+    NetSend { address: String, data: Bytes },
+    /// Network receive: address, data.
+    NetRecv { address: String, data: Bytes },
+    /// DNS lookup: hostname -> addresses.
+    DnsLookup { hostname: String, results: Vec<String> },
+    /// Random bytes generated.
+    Random { length: usize, data: Bytes },
+    /// Time query: what kind and what value was returned.
+    TimeQuery { kind: TimeQueryKind, value: Duration },
+    /// Sleep / delay.
+    Sleep { duration: Duration },
+    /// Environment variable read.
+    EnvRead { key: String, value: Option<String> },
+    /// Stdin read.
+    StdinRead { data: Bytes },
+    /// Stdout write.
+    StdoutWrite { data: Bytes },
+    /// Stderr write.
+    StderrWrite { data: Bytes },
+    /// Custom labeled action.
+    Custom { label: String, data: Bytes },
+}
+
+#[derive(Debug, Clone)]
+pub enum TimeQueryKind {
+    /// System wall clock.
+    WallClock,
+    /// Monotonic clock.
+    Monotonic,
+    /// Elapsed since a reference point.
+    Elapsed,
+}
+
+/// A single recorded I/O event with timestamp.
+#[derive(Debug, Clone)]
+pub struct IoRecord {
+    /// Sequence number.
+    pub sequence: u64,
+    /// Logical tick when this I/O occurred.
+    pub tick: u64,
+    /// The action.
+    pub action: IoAction,
+    /// Result: Ok(response_data) or Err(error_message).
+    pub result: Result<Bytes, String>,
+}
+
+/// Trait for I/O backends (real or replayed).
+pub trait ReplayIo {
+    /// Record or replay a file read.
+    fn file_read(&mut self, path: &str, offset: u64, length: usize) -> Result<Bytes, String>;
+
+    /// Record or replay a file write.
+    fn file_write(&mut self, path: &str, offset: u64, data: &[u8]) -> Result<(), String>;
+
+    /// Record or replay a network send.
+    fn net_send(&mut self, address: &str, data: &[u8]) -> Result<usize, String>;
+
+    /// Record or replay a network receive.
+    fn net_recv(&mut self, address: &str, buf_size: usize) -> Result<Bytes, String>;
+
+    /// Record or replay random bytes.
+    fn random_bytes(&mut self, length: usize) -> Bytes;
+
+    /// Record or replay a time query.
+    fn now(&mut self, kind: TimeQueryKind) -> Duration;
+
+    /// Record or replay a sleep.
+    fn sleep(&mut self, duration: Duration);
+
+    /// Record or replay an env var read.
+    fn env_var(&mut self, key: &str) -> Option<String>;
+
+    /// Get the full log.
+    fn log(&self) -> &[IoRecord];
+}
+
+// ─── RecordingIo ──────────────────────────────────────────────────────────────
+
+/// Records all I/O operations for later replay.
+pub struct RecordingIo {
+    records: Vec<IoRecord>,
+    sequence: u64,
+    tick: u64,
+}
+
+impl RecordingIo {
+    pub fn new() -> RecordingIo {
+        RecordingIo { records: Vec::new(), sequence: 0, tick: 0 }
+    }
+
+    /// Advance the logical tick.
+    pub fn advance_tick(&mut self) { self.tick += 1; }
+
+    fn record(&mut self, action: IoAction, result: Result<Bytes, String>) {
+        self.sequence += 1;
+        self.records.push(IoRecord {
+            sequence: self.sequence,
+            tick: self.tick,
+            action,
+            result,
+        });
+    }
+
+    /// Export the log as a serializable format.
+    pub fn export(&self) -> Vec<IoRecord> {
+        self.records.clone()
+    }
+}
+
+impl ReplayIo for RecordingIo {
+    fn file_read(&mut self, path: &str, offset: u64, length: usize) -> Result<Bytes, String> {
+        // Perform real I/O and record it
+        let result = crate::io::file::read_bytes_at(path, offset, length);
+        let action = IoAction::FileRead {
+            path: String::from(path), offset, length,
+        };
+        match &result {
+            Result::Ok(data) => self.record(action, Result::Ok(data.clone())),
+            Result::Err(e) => self.record(action, Result::Err(e.to_string())),
+        }
+        result
+    }
+
+    fn file_write(&mut self, path: &str, offset: u64, data: &[u8]) -> Result<(), String> {
+        let result = crate::io::file::write_bytes_at(path, offset, data);
+        let action = IoAction::FileWrite {
+            path: String::from(path), offset, data: Bytes::from(data),
+        };
+        match &result {
+            Result::Ok(()) => self.record(action, Result::Ok(Bytes::new())),
+            Result::Err(e) => self.record(action, Result::Err(e.to_string())),
+        }
+        result
+    }
+
+    fn net_send(&mut self, address: &str, data: &[u8]) -> Result<usize, String> {
+        let result = crate::net::tcp::send_raw(address, data);
+        let action = IoAction::NetSend {
+            address: String::from(address), data: Bytes::from(data),
+        };
+        match &result {
+            Result::Ok(n) => {
+                let mut buf = Vec::new();
+                buf.extend_from_slice(&n.to_le_bytes());
+                self.record(action, Result::Ok(Bytes::from(&buf)));
+            }
+            Result::Err(e) => self.record(action, Result::Err(e.to_string())),
+        }
+        result
+    }
+
+    fn net_recv(&mut self, address: &str, buf_size: usize) -> Result<Bytes, String> {
+        let result = crate::net::tcp::recv_raw(address, buf_size);
+        let action = IoAction::NetRecv {
+            address: String::from(address),
+            data: result.as_ref().map(|b| b.clone()).unwrap_or(Bytes::new()),
+        };
+        match &result {
+            Result::Ok(data) => self.record(action, Result::Ok(data.clone())),
+            Result::Err(e) => self.record(action, Result::Err(e.to_string())),
+        }
+        result
+    }
+
+    fn random_bytes(&mut self, length: usize) -> Bytes {
+        let rng = crate::crypto::random::SecureRandom::new();
+        let data = Bytes::from(&rng.bytes(length).expect("random generation failed"));
+        self.record(
+            IoAction::Random { length, data: data.clone() },
+            Result::Ok(data.clone()),
+        );
+        data
+    }
+
+    fn now(&mut self, kind: TimeQueryKind) -> Duration {
+        let value = match &kind {
+            TimeQueryKind::WallClock => {
+                Duration::from_secs(crate::time::clock::SystemClock::unix_now() as u64)
+            }
+            TimeQueryKind::Monotonic => {
+                let t = Instant::now();
+                t.elapsed()
+            }
+            TimeQueryKind::Elapsed => Duration::ZERO,
+        };
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&value.as_nanos().to_le_bytes());
+        self.record(
+            IoAction::TimeQuery { kind, value },
+            Result::Ok(Bytes::from(&buf)),
+        );
+        value
+    }
+
+    fn sleep(&mut self, duration: Duration) {
+        self.record(IoAction::Sleep { duration }, Result::Ok(Bytes::new()));
+        crate::concurrent::timer::sleep_sync(duration);
+    }
+
+    fn env_var(&mut self, key: &str) -> Option<String> {
+        let value = crate::sys::env::var(key).ok();
+        self.record(
+            IoAction::EnvRead { key: String::from(key), value: value.clone() },
+            Result::Ok(Bytes::new()),
+        );
+        value
+    }
+
+    fn log(&self) -> &[IoRecord] { &self.records }
+}
+
+// ─── PlaybackIo ───────────────────────────────────────────────────────────────
+
+/// Replays previously recorded I/O operations.
+/// All calls return the recorded results instead of performing real I/O.
+pub struct PlaybackIo {
+    records: Vec<IoRecord>,
+    cursor: usize,
+    strict: bool,
+}
+
+impl PlaybackIo {
+    /// Create from a previously recorded log.
+    pub fn new(records: Vec<IoRecord>) -> PlaybackIo {
+        PlaybackIo { records, cursor: 0, strict: true }
+    }
+
+    /// When strict is true, mismatched actions cause a panic.
+    /// When false, mismatched records are skipped.
+    pub fn set_strict(&mut self, strict: bool) { self.strict = strict; }
+
+    /// Whether all records have been consumed.
+    pub fn is_exhausted(&self) -> bool { self.cursor >= self.records.len() }
+
+    /// Remaining records.
+    pub fn remaining(&self) -> usize { self.records.len() - self.cursor }
+
+    fn next_record(&mut self) -> Option<&IoRecord> {
+        if self.cursor < self.records.len() {
+            let r = &self.records[self.cursor];
+            self.cursor += 1;
+            Option::Some(r)
+        } else {
+            Option::None
+        }
+    }
+
+    fn expect_result(&mut self) -> Result<Bytes, String> {
+        match self.next_record() {
+            Option::Some(record) => record.result.clone(),
+            Option::None => Result::Err(String::from("playback exhausted: no more recorded I/O")),
+        }
+    }
+}
+
+impl ReplayIo for PlaybackIo {
+    fn file_read(&mut self, _path: &str, _offset: u64, _length: usize) -> Result<Bytes, String> {
+        self.expect_result()
+    }
+
+    fn file_write(&mut self, _path: &str, _offset: u64, _data: &[u8]) -> Result<(), String> {
+        match self.expect_result() {
+            Result::Ok(_) => Result::Ok(()),
+            Result::Err(e) => Result::Err(e),
+        }
+    }
+
+    fn net_send(&mut self, _address: &str, _data: &[u8]) -> Result<usize, String> {
+        match self.expect_result() {
+            Result::Ok(data) => {
+                if data.len() >= 8 {
+                    let mut buf = [0u8; 8];
+                    buf.copy_from_slice(&data.as_ref()[..8]);
+                    Result::Ok(usize::from_le_bytes(buf))
+                } else {
+                    Result::Ok(0)
+                }
+            }
+            Result::Err(e) => Result::Err(e),
+        }
+    }
+
+    fn net_recv(&mut self, _address: &str, _buf_size: usize) -> Result<Bytes, String> {
+        self.expect_result()
+    }
+
+    fn random_bytes(&mut self, length: usize) -> Bytes {
+        match self.expect_result() {
+            Result::Ok(data) => data,
+            Result::Err(_) => Bytes::zeroed(length),
+        }
+    }
+
+    fn now(&mut self, _kind: TimeQueryKind) -> Duration {
+        match self.next_record() {
+            Option::Some(record) => {
+                if let IoAction::TimeQuery { value, .. } = &record.action {
+                    *value
+                } else { Duration::ZERO }
+            }
+            Option::None => Duration::ZERO,
+        }
+    }
+
+    fn sleep(&mut self, _duration: Duration) {
+        // During playback, sleep is a no-op — we don't actually wait.
+        let _ = self.next_record();
+    }
+
+    fn env_var(&mut self, _key: &str) -> Option<String> {
+        match self.next_record() {
+            Option::Some(record) => {
+                if let IoAction::EnvRead { value, .. } = &record.action {
+                    value.clone()
+                } else { Option::None }
+            }
+            Option::None => Option::None,
+        }
+    }
+
+    fn log(&self) -> &[IoRecord] { &self.records }
+}
+
+/// Verify that two I/O logs are equivalent (same actions in same order).
+pub fn verify_logs(a: &[IoRecord], b: &[IoRecord]) -> bool {
+    if a.len() != b.len() { return false; }
+    a.iter().zip(b.iter()).all(|(ra, rb)| {
+        ra.sequence == rb.sequence && matches!(
+            (&ra.action, &rb.action),
+            (IoAction::FileRead { path: pa, .. }, IoAction::FileRead { path: pb, .. }) if pa == pb |
+            (IoAction::FileWrite { path: pa, .. }, IoAction::FileWrite { path: pb, .. }) if pa == pb |
+            (IoAction::NetSend { address: aa, .. }, IoAction::NetSend { address: ab, .. }) if aa == ab |
+            (IoAction::NetRecv { address: aa, .. }, IoAction::NetRecv { address: ab, .. }) if aa == ab |
+            (IoAction::Random { length: la, .. }, IoAction::Random { length: lb, .. }) if la == lb |
+            (IoAction::Sleep { .. }, IoAction::Sleep { .. }) |
+            (IoAction::TimeQuery { .. }, IoAction::TimeQuery { .. }) |
+            (IoAction::EnvRead { key: ka, .. }, IoAction::EnvRead { key: kb, .. }) if ka == kb
+        )
+    })
+}

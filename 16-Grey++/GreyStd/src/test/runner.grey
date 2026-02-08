@@ -1,0 +1,278 @@
+/// test::runner — Test runner with parallel execution, filtering, and reporting.
+
+use crate::core::string::String;
+use crate::core::vec::Vec;
+use crate::core::option::Option;
+use crate::time::duration::Duration;
+use crate::time::instant::Instant;
+use crate::test::unit::{TestCase, TestResult, TestStatus, TestSuite};
+
+/// Filter for selecting which tests to run.
+pub struct TestFilter {
+    /// Name patterns to include (substring match).
+    pub include: Vec<String>,
+    /// Name patterns to exclude.
+    pub exclude: Vec<String>,
+    /// Tags to include.
+    pub tags: Vec<String>,
+    /// Whether to run ignored tests.
+    pub run_ignored: bool,
+}
+
+impl TestFilter {
+    pub fn all() -> TestFilter {
+        TestFilter { include: Vec::new(), exclude: Vec::new(), tags: Vec::new(), run_ignored: false }
+    }
+
+    pub fn name(pattern: &str) -> TestFilter {
+        TestFilter { include: vec![String::from(pattern)], exclude: Vec::new(), tags: Vec::new(), run_ignored: false }
+    }
+
+    pub fn matches(&self, test: &TestCase) -> bool {
+        // Check excludes first
+        for ex in &self.exclude {
+            if test.name.contains(ex.as_str()) { return false; }
+        }
+        // Check includes
+        if !self.include.is_empty() {
+            let included = self.include.iter().any(|p| test.name.contains(p.as_str()));
+            if !included { return false; }
+        }
+        // Check tags
+        if !self.tags.is_empty() {
+            let has_tag = self.tags.iter().any(|t| test.tags.contains(t));
+            if !has_tag { return false; }
+        }
+        // Check ignored
+        if test.ignored && !self.run_ignored { return false; }
+        true
+    }
+}
+
+/// Configuration for the test runner.
+pub struct TestRunnerConfig {
+    /// Number of parallel threads (0 = auto-detect).
+    pub parallelism: usize,
+    /// Default timeout per test.
+    pub timeout: Duration,
+    /// Whether to stop on first failure.
+    pub fail_fast: bool,
+    /// Whether to capture stdout/stderr.
+    pub capture_output: bool,
+    /// Whether to show timing for each test.
+    pub show_timing: bool,
+    /// Test filter.
+    pub filter: TestFilter,
+    /// Output format.
+    pub format: OutputFormat,
+}
+
+pub enum OutputFormat {
+    /// Human-readable pretty output.
+    Pretty,
+    /// TAP (Test Anything Protocol).
+    Tap,
+    /// JUnit XML.
+    JUnit,
+    /// JSON.
+    Json,
+    /// Minimal: only failures.
+    Quiet,
+}
+
+impl TestRunnerConfig {
+    pub fn default() -> TestRunnerConfig {
+        TestRunnerConfig {
+            parallelism: 0,
+            timeout: Duration::from_secs(30),
+            fail_fast: false,
+            capture_output: true,
+            show_timing: true,
+            filter: TestFilter::all(),
+            format: OutputFormat::Pretty,
+        }
+    }
+}
+
+/// Results from a test run.
+pub struct RunResult {
+    pub results: Vec<TestResult>,
+    pub total_duration: Duration,
+}
+
+impl RunResult {
+    pub fn passed(&self) -> usize { self.results.iter().filter(|r| r.status.is_pass()).count() }
+    pub fn failed(&self) -> usize { self.results.iter().filter(|r| r.status.is_fail()).count() }
+    pub fn skipped(&self) -> usize { self.results.iter().filter(|r| r.status.is_skip()).count() }
+    pub fn total(&self) -> usize { self.results.len() }
+    pub fn success(&self) -> bool { self.failed() == 0 }
+
+    /// Format a summary line.
+    pub fn summary(&self) -> String {
+        format!(
+            "test result: {}. {} passed; {} failed; {} skipped; finished in {:.3}s",
+            if self.success() { "ok" } else { "FAILED" },
+            self.passed(), self.failed(), self.skipped(),
+            self.total_duration.as_secs_f64()
+        )
+    }
+
+    /// Get all failures.
+    pub fn failures(&self) -> Vec<&TestResult> {
+        self.results.iter().filter(|r| r.status.is_fail()).collect()
+    }
+}
+
+/// The test runner.
+pub struct TestRunner {
+    config: TestRunnerConfig,
+    tests: Vec<TestCase>,
+    suites: Vec<TestSuite>,
+}
+
+impl TestRunner {
+    pub fn new() -> TestRunner {
+        TestRunner {
+            config: TestRunnerConfig::default(),
+            tests: Vec::new(),
+            suites: Vec::new(),
+        }
+    }
+
+    pub fn with_config(config: TestRunnerConfig) -> TestRunner {
+        TestRunner { config, tests: Vec::new(), suites: Vec::new() }
+    }
+
+    /// Add a single test case.
+    pub fn add<F: FnOnce() -> Result<(), String> + Send + 'static>(mut self, name: &str, func: F) -> TestRunner {
+        self.tests.push(TestCase::new(name, func));
+        self
+    }
+
+    /// Add a test case.
+    pub fn add_test(mut self, test: TestCase) -> TestRunner {
+        self.tests.push(test);
+        self
+    }
+
+    /// Add a test suite.
+    pub fn add_suite(mut self, suite: TestSuite) -> TestRunner {
+        self.suites.push(suite);
+        self
+    }
+
+    /// Run all tests.
+    pub fn run(mut self) -> RunResult {
+        let start = Instant::now();
+
+        // Flatten suites into individual tests
+        for suite in self.suites {
+            for test in suite.tests {
+                self.tests.push(test);
+            }
+        }
+
+        // Apply filter
+        let tests: Vec<TestCase> = self.tests.into_iter()
+            .filter(|t| self.config.filter.matches(t))
+            .collect();
+
+        let total = tests.len();
+
+        // Print header
+        match &self.config.format {
+            OutputFormat::Pretty => {
+                eprintln!("\nrunning {} test{}", total, if total == 1 { "" } else { "s" });
+            }
+            OutputFormat::Tap => {
+                println!("TAP version 14");
+                println!("1..{}", total);
+            }
+            _ => {}
+        }
+
+        // Run tests
+        let mut results = Vec::with_capacity(total);
+        for (i, test) in tests.into_iter().enumerate() {
+            let name = test.name.clone();
+            let result = test.run();
+
+            // Print progress
+            match &self.config.format {
+                OutputFormat::Pretty => {
+                    let status_str = match &result.status {
+                        TestStatus::Passed => "ok",
+                        TestStatus::Failed(_) => "FAILED",
+                        TestStatus::Skipped(_) => "skipped",
+                        TestStatus::Panicked(_) => "PANICKED",
+                        TestStatus::TimedOut => "TIMED OUT",
+                    };
+                    let timing = if self.config.show_timing {
+                        format!(" ({:.3}s)", result.duration.as_secs_f64())
+                    } else { String::new() };
+                    eprintln!("test {} ... {}{}", name, status_str, timing);
+                }
+                OutputFormat::Tap => {
+                    let ok = if result.status.is_pass() { "ok" } else { "not ok" };
+                    println!("{} {} - {}", ok, i + 1, name);
+                }
+                OutputFormat::Quiet => {
+                    if result.status.is_fail() {
+                        eprintln!("FAIL: {}", name);
+                    }
+                }
+                _ => {}
+            }
+
+            let failed = result.status.is_fail();
+            results.push(result);
+
+            if failed && self.config.fail_fast {
+                break;
+            }
+        }
+
+        let total_duration = start.elapsed();
+        let run_result = RunResult { results, total_duration };
+
+        // Print summary
+        match &self.config.format {
+            OutputFormat::Pretty => {
+                // Print failure details
+                let failures = run_result.failures();
+                if !failures.is_empty() {
+                    eprintln!("\nfailures:");
+                    for f in &failures {
+                        let msg = match &f.status {
+                            TestStatus::Failed(m) => m.as_str(),
+                            TestStatus::Panicked(m) => m.as_str(),
+                            TestStatus::TimedOut => "timed out",
+                            _ => "",
+                        };
+                        eprintln!("  {}: {}", f.name, msg);
+                    }
+                    eprintln!();
+                }
+                eprintln!("{}", run_result.summary());
+            }
+            _ => {}
+        }
+
+        run_result
+    }
+
+    /// Run and exit with appropriate code.
+    pub fn run_and_exit(self) -> ! {
+        let result = self.run();
+        crate::sys::process::exit(if result.success() { 0 } else { 1 })
+    }
+}
+
+/// Convenience: create test runner, add tests, and run.
+pub fn run_tests(tests: Vec<TestCase>) -> RunResult {
+    let mut runner = TestRunner::new();
+    for t in tests {
+        runner = runner.add_test(t);
+    }
+    runner.run()
+}

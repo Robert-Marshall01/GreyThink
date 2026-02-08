@@ -1,0 +1,18 @@
+/// deterministic — Deterministic execution primitives for Grey++.
+///
+/// Provides ordered collections, deterministic scheduling, reproducible
+/// memory allocation, and replayable I/O for testing, simulation,
+/// and consensus-critical environments.
+///
+/// # Feature gate
+/// This module requires the `deterministic` feature flag.
+
+pub mod collections;
+pub mod scheduler;
+pub mod allocator;
+pub mod replay_io;
+
+pub use collections::{OrderedMap, OrderedSet, StableVec};
+pub use scheduler::{DetScheduler, DetTask, ScheduleOrder};
+pub use allocator::{DetAllocator, BumpAllocator, AllocationRecord};
+pub use replay_io::{ReplayIo, IoRecord, IoAction, RecordingIo, PlaybackIo};

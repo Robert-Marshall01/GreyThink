@@ -1,0 +1,340 @@
+/// io::file — File I/O operations.
+
+use crate::core::option::Option;
+use crate::core::result::Result;
+use crate::core::string::String;
+use crate::core::vec::Vec;
+use crate::io::{IoResult, IoError, IoErrorKind};
+use crate::io::stream::{Read, Write, Seek, SeekFrom};
+
+/// A handle to an open file on the filesystem.
+///
+/// ```grey
+/// let file = File::open("hello.txt")?;
+/// let content = file.read_to_string()?;
+///
+/// let mut out = File::create("output.txt")?;
+/// out.write_all(b"Hello, Grey++!")?;
+/// ```
+pub struct File {
+    // Platform-specific file descriptor
+    fd: RawFd,
+    path: Option<String>,
+}
+
+impl File {
+    /// Opens a file in read-only mode.
+    pub fn open(path: &str) -> IoResult<File> {
+        OpenOptions::new().read(true).open(path)
+    }
+
+    /// Creates a file for writing. Truncates if exists, creates if not.
+    pub fn create(path: &str) -> IoResult<File> {
+        OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(path)
+    }
+
+    /// Creates a new file for writing. Fails if the file already exists.
+    pub fn create_new(path: &str) -> IoResult<File> {
+        OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+    }
+
+    /// Opens a file with custom options.
+    pub fn options() -> OpenOptions {
+        OpenOptions::new()
+    }
+
+    /// Reads the entire file contents as bytes.
+    pub fn read_bytes(path: &str) -> IoResult<Vec<u8>> {
+        let mut file = File::open(path)?;
+        let mut buf = Vec::new();
+        file.read_to_end(&mut buf)?;
+        Ok(buf)
+    }
+
+    /// Reads the entire file contents as a UTF-8 string.
+    pub fn read_string(path: &str) -> IoResult<String> {
+        let mut file = File::open(path)?;
+        let mut s = String::new();
+        file.read_to_string(&mut s)?;
+        Ok(s)
+    }
+
+    /// Writes content to a file, creating or overwriting it.
+    pub fn write(path: &str, contents: &[u8]) -> IoResult<()> {
+        let mut file = File::create(path)?;
+        file.write_all(contents)?;
+        Ok(())
+    }
+
+    /// Writes a string to a file, creating or overwriting it.
+    pub fn write_string(path: &str, contents: &str) -> IoResult<()> {
+        File::write(path, contents.as_bytes())
+    }
+
+    /// Appends content to a file, creating it if it doesn't exist.
+    pub fn append(path: &str, contents: &[u8]) -> IoResult<()> {
+        let mut file = OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(path)?;
+        file.write_all(contents)?;
+        Ok(())
+    }
+
+    /// Returns metadata about the file.
+    pub fn metadata(self) -> IoResult<Metadata> {
+        // Platform-specific stat call
+        intrinsics::file_metadata(self.fd)
+    }
+
+    /// Attempts to sync all buffered data to disk.
+    pub fn sync_all(self) -> IoResult<()> {
+        intrinsics::fsync(self.fd)
+    }
+
+    /// Syncs only data (not metadata) to disk.
+    pub fn sync_data(self) -> IoResult<()> {
+        intrinsics::fdatasync(self.fd)
+    }
+
+    /// Sets the length of the file, truncating or extending as needed.
+    pub fn set_len(self, size: u64) -> IoResult<()> {
+        intrinsics::ftruncate(self.fd, size)
+    }
+
+    /// Returns the file type.
+    pub fn file_type(self) -> IoResult<FileType> {
+        self.metadata().map(|m| m.file_type())
+    }
+
+    /// Returns the length of the file in bytes.
+    pub fn len(self) -> IoResult<u64> {
+        self.metadata().map(|m| m.len())
+    }
+
+    /// Tries to clone the file handle (dup).
+    pub fn try_clone(self) -> IoResult<File> {
+        let new_fd = intrinsics::dup(self.fd)?;
+        Ok(File { fd: new_fd, path: self.path.clone() })
+    }
+}
+
+impl Read for File {
+    fn read(mut self, buf: &mut [u8]) -> IoResult<usize> {
+        intrinsics::read(self.fd, buf)
+    }
+}
+
+impl Write for File {
+    fn write(mut self, buf: &[u8]) -> IoResult<usize> {
+        intrinsics::write(self.fd, buf)
+    }
+
+    fn flush(mut self) -> IoResult<()> {
+        intrinsics::fsync(self.fd)
+    }
+}
+
+impl Seek for File {
+    fn seek(mut self, pos: SeekFrom) -> IoResult<u64> {
+        let (whence, offset) = match pos {
+            SeekFrom::Start(n)   => (0, n as i64),
+            SeekFrom::End(n)     => (2, n),
+            SeekFrom::Current(n) => (1, n),
+        };
+        intrinsics::lseek(self.fd, offset, whence)
+    }
+}
+
+impl Drop for File {
+    fn drop(mut self) {
+        let _ = intrinsics::close(self.fd);
+    }
+}
+
+/// Builder for opening files with specific options.
+pub struct OpenOptions {
+    read: bool,
+    write: bool,
+    append: bool,
+    truncate: bool,
+    create: bool,
+    create_new: bool,
+    mode: u32,
+}
+
+impl OpenOptions {
+    pub fn new() -> OpenOptions {
+        OpenOptions {
+            read: false,
+            write: false,
+            append: false,
+            truncate: false,
+            create: false,
+            create_new: false,
+            mode: 0o666,
+        }
+    }
+
+    pub fn read(mut self, read: bool) -> &mut OpenOptions {
+        self.read = read;
+        self
+    }
+
+    pub fn write(mut self, write: bool) -> &mut OpenOptions {
+        self.write = write;
+        self
+    }
+
+    pub fn append(mut self, append: bool) -> &mut OpenOptions {
+        self.append = append;
+        self
+    }
+
+    pub fn truncate(mut self, truncate: bool) -> &mut OpenOptions {
+        self.truncate = truncate;
+        self
+    }
+
+    pub fn create(mut self, create: bool) -> &mut OpenOptions {
+        self.create = create;
+        self
+    }
+
+    pub fn create_new(mut self, create_new: bool) -> &mut OpenOptions {
+        self.create_new = create_new;
+        self
+    }
+
+    pub fn mode(mut self, mode: u32) -> &mut OpenOptions {
+        self.mode = mode;
+        self
+    }
+
+    pub fn open(self, path: &str) -> IoResult<File> {
+        let mut flags: i32 = 0;
+
+        if self.read && self.write {
+            flags = flags | O_RDWR;
+        } else if self.read {
+            flags = flags | O_RDONLY;
+        } else if self.write || self.append {
+            flags = flags | O_WRONLY;
+        }
+
+        if self.append   { flags = flags | O_APPEND; }
+        if self.truncate { flags = flags | O_TRUNC; }
+        if self.create   { flags = flags | O_CREAT; }
+        if self.create_new { flags = flags | O_CREAT | O_EXCL; }
+
+        let fd = intrinsics::open(path, flags, self.mode)?;
+        Ok(File { fd, path: Some(String::from(path)) })
+    }
+}
+
+/// Metadata about a file.
+pub struct Metadata {
+    file_type: FileType,
+    len: u64,
+    permissions: Permissions,
+    modified: Option<u64>,
+    accessed: Option<u64>,
+    created: Option<u64>,
+}
+
+impl Metadata {
+    pub fn file_type(self) -> FileType { self.file_type }
+    pub fn is_file(self) -> bool { self.file_type == FileType::File }
+    pub fn is_dir(self) -> bool { self.file_type == FileType::Directory }
+    pub fn is_symlink(self) -> bool { self.file_type == FileType::Symlink }
+    pub fn len(self) -> u64 { self.len }
+    pub fn permissions(self) -> Permissions { self.permissions }
+    /// Modified time as unix timestamp (seconds since epoch), if available.
+    pub fn modified(self) -> Option<u64> { self.modified }
+    /// Accessed time as unix timestamp (seconds since epoch), if available.
+    pub fn accessed(self) -> Option<u64> { self.accessed }
+    /// Created time as unix timestamp (seconds since epoch), if available.
+    pub fn created(self) -> Option<u64> { self.created }
+}
+
+/// Types of filesystem entries.
+#[derive(Eq, PartialEq)]
+pub enum FileType {
+    File,
+    Directory,
+    Symlink,
+    Other,
+}
+
+/// File permissions.
+pub struct Permissions {
+    mode: u32,
+}
+
+impl Permissions {
+    pub fn readonly(self) -> bool {
+        self.mode & 0o222 == 0
+    }
+
+    pub fn set_readonly(mut self, readonly: bool) {
+        if readonly {
+            self.mode = self.mode & !0o222;
+        } else {
+            self.mode = self.mode | 0o222;
+        }
+    }
+
+    pub fn mode(self) -> u32 {
+        self.mode
+    }
+}
+
+/// Convenience functions for common file operations.
+pub fn exists(path: &str) -> bool {
+    intrinsics::access(path, 0).is_ok()
+}
+
+pub fn remove_file(path: &str) -> IoResult<()> {
+    intrinsics::unlink(path)
+}
+
+pub fn rename(from: &str, to: &str) -> IoResult<()> {
+    intrinsics::rename(from, to)
+}
+
+pub fn copy(from: &str, to: &str) -> IoResult<u64> {
+    let contents = File::read_bytes(from)?;
+    File::write(to, &contents)?;
+    Ok(contents.len() as u64)
+}
+
+pub fn symlink(original: &str, link: &str) -> IoResult<()> {
+    intrinsics::symlink(original, link)
+}
+
+pub fn hard_link(original: &str, link: &str) -> IoResult<()> {
+    intrinsics::link(original, link)
+}
+
+pub fn read_link(path: &str) -> IoResult<String> {
+    intrinsics::readlink(path)
+}
+
+/// Platform-specific raw file descriptor.
+type RawFd = i32;
+
+// POSIX open flags
+const O_RDONLY: i32 = 0;
+const O_WRONLY: i32 = 1;
+const O_RDWR: i32   = 2;
+const O_CREAT: i32  = 0o100;
+const O_EXCL: i32   = 0o200;
+const O_TRUNC: i32  = 0o1000;
+const O_APPEND: i32 = 0o2000;

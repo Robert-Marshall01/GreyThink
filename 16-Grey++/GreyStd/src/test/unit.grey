@@ -1,0 +1,166 @@
+/// test::unit — Test case definitions and test discovery.
+
+use crate::core::string::String;
+use crate::core::vec::Vec;
+use crate::core::option::Option;
+use crate::time::duration::Duration;
+
+/// Status of a test execution.
+pub enum TestStatus {
+    /// Test passed.
+    Passed,
+    /// Test failed with a message.
+    Failed(String),
+    /// Test was skipped.
+    Skipped(String),
+    /// Test panicked.
+    Panicked(String),
+    /// Test timed out.
+    TimedOut,
+}
+
+impl TestStatus {
+    pub fn is_pass(&self) -> bool { matches!(self, TestStatus::Passed) }
+    pub fn is_fail(&self) -> bool { matches!(self, TestStatus::Failed(_) | TestStatus::Panicked(_) | TestStatus::TimedOut) }
+    pub fn is_skip(&self) -> bool { matches!(self, TestStatus::Skipped(_)) }
+
+    pub fn name(&self) -> &str {
+        match self {
+            TestStatus::Passed => "PASS",
+            TestStatus::Failed(_) => "FAIL",
+            TestStatus::Skipped(_) => "SKIP",
+            TestStatus::Panicked(_) => "PANIC",
+            TestStatus::TimedOut => "TIMEOUT",
+        }
+    }
+}
+
+/// Result of running a single test.
+pub struct TestResult {
+    pub name: String,
+    pub status: TestStatus,
+    pub duration: Duration,
+    pub output: String,
+}
+
+/// A single test case.
+pub struct TestCase {
+    /// Fully qualified test name (e.g. "core::vec::test_push").
+    pub name: String,
+    /// Test function.
+    pub func: Box<dyn FnOnce() -> Result<(), String> + Send>,
+    /// Whether this test is async.
+    pub is_async: bool,
+    /// Test timeout (None = use runner default).
+    pub timeout: Option<Duration>,
+    /// Tags for filtering (e.g. "#[slow]", "#[integration]").
+    pub tags: Vec<String>,
+    /// Whether to ignore this test.
+    pub ignored: bool,
+    /// Expected to panic with this message.
+    pub should_panic: Option<String>,
+}
+
+impl TestCase {
+    /// Create a new test case.
+    pub fn new<F: FnOnce() -> Result<(), String> + Send + 'static>(name: &str, func: F) -> TestCase {
+        TestCase {
+            name: String::from(name),
+            func: Box::new(func),
+            is_async: false,
+            timeout: None,
+            tags: Vec::new(),
+            ignored: false,
+            should_panic: None,
+        }
+    }
+
+    /// Mark as ignored.
+    pub fn ignore(mut self) -> TestCase { self.ignored = true; self }
+
+    /// Set a timeout.
+    pub fn timeout(mut self, d: Duration) -> TestCase { self.timeout = Some(d); self }
+
+    /// Add a tag.
+    pub fn tag(mut self, tag: &str) -> TestCase { self.tags.push(String::from(tag)); self }
+
+    /// Expect this test to panic.
+    pub fn should_panic(mut self, msg: &str) -> TestCase { self.should_panic = Some(String::from(msg)); self }
+
+    /// Run the test case.
+    pub fn run(self) -> TestResult {
+        let start = crate::time::instant::Instant::now();
+
+        if self.ignored {
+            return TestResult {
+                name: self.name,
+                status: TestStatus::Skipped(String::from("ignored")),
+                duration: Duration::ZERO,
+                output: String::new(),
+            };
+        }
+
+        // catch_unwind is a Grey++ intrinsic that catches panics.
+        let result = match catch_unwind(|| (self.func)()) {
+            Ok(Ok(())) => {
+                if self.should_panic.is_some() {
+                    TestStatus::Failed(String::from("expected panic but test completed normally"))
+                } else {
+                    TestStatus::Passed
+                }
+            }
+            Ok(Err(msg)) => TestStatus::Failed(msg),
+            Err(panic_info) => {
+                let panic_msg = format!("{:?}", panic_info);
+                if let Some(expected) = &self.should_panic {
+                    if panic_msg.contains(expected) {
+                        TestStatus::Passed
+                    } else {
+                        TestStatus::Failed(format!("expected panic '{}', got '{}'", expected, panic_msg))
+                    }
+                } else {
+                    TestStatus::Panicked(panic_msg)
+                }
+            }
+        };
+
+        let duration = start.elapsed();
+        TestResult { name: self.name, status: result, duration, output: String::new() }
+    }
+}
+
+/// A test suite groups related test cases.
+pub struct TestSuite {
+    pub name: String,
+    pub tests: Vec<TestCase>,
+    pub setup: Option<Box<dyn FnMut() + Send>>,
+    pub teardown: Option<Box<dyn FnMut() + Send>>,
+}
+
+impl TestSuite {
+    pub fn new(name: &str) -> TestSuite {
+        TestSuite { name: String::from(name), tests: Vec::new(), setup: None, teardown: None }
+    }
+
+    pub fn add<F: FnOnce() -> Result<(), String> + Send + 'static>(mut self, name: &str, func: F) -> TestSuite {
+        self.tests.push(TestCase::new(name, func));
+        self
+    }
+
+    pub fn add_test(mut self, test: TestCase) -> TestSuite {
+        self.tests.push(test);
+        self
+    }
+
+    pub fn before_each<F: FnMut() + Send + 'static>(mut self, f: F) -> TestSuite {
+        self.setup = Some(Box::new(f));
+        self
+    }
+
+    pub fn after_each<F: FnMut() + Send + 'static>(mut self, f: F) -> TestSuite {
+        self.teardown = Some(Box::new(f));
+        self
+    }
+
+    pub fn test_count(&self) -> usize { self.tests.len() }
+}

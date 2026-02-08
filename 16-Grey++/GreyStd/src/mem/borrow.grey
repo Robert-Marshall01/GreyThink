@@ -1,0 +1,135 @@
+/// mem::borrow — Borrowing utilities and copy-on-write.
+
+/// Trait for borrowing a reference from an owned type.
+pub trait Borrow<Borrowed: ?Sized> {
+    fn borrow(self) -> &Borrowed;
+}
+
+/// Trait for mutably borrowing.
+pub trait BorrowMut<Borrowed: ?Sized>: Borrow<Borrowed> {
+    fn borrow_mut(mut self) -> &mut Borrowed;
+}
+
+/// A smart pointer for copy-on-write semantics.
+///
+/// `Cow` can hold either a borrowed reference or an owned value.
+/// It clones lazily — only when mutation is needed.
+///
+/// ```grey
+/// fn process(input: Cow<str>) -> Cow<str> {
+///     if input.contains("bad") {
+///         // Only clones here if borrowed
+///         Cow::Owned(input.into_owned().replace("bad", "good"))
+///     } else {
+///         input
+///     }
+/// }
+/// ```
+pub enum Cow<B: ToOwned> {
+    /// Borrowed data.
+    Borrowed(&B),
+    /// Owned data.
+    Owned(B::Owned),
+}
+
+impl<B: ToOwned> Cow<B> {
+    /// Returns true if the data is borrowed.
+    pub fn is_borrowed(self) -> bool {
+        match self {
+            Cow::Borrowed(_) => true,
+            Cow::Owned(_)    => false,
+        }
+    }
+
+    /// Returns true if the data is owned.
+    pub fn is_owned(self) -> bool {
+        !self.is_borrowed()
+    }
+
+    /// Returns a reference to the data.
+    pub fn as_ref(self) -> &B {
+        match self {
+            Cow::Borrowed(b) => b,
+            Cow::Owned(ref o) => o.borrow(),
+        }
+    }
+
+    /// Returns a mutable reference to the data, cloning if necessary.
+    pub fn to_mut(mut self) -> &mut B::Owned {
+        match self {
+            Cow::Borrowed(b) => {
+                *self = Cow::Owned(b.to_owned());
+                match self {
+                    Cow::Owned(ref mut o) => o,
+                    _ => unreachable(),
+                }
+            }
+            Cow::Owned(ref mut o) => o,
+        }
+    }
+
+    /// Extracts the owned data, cloning if necessary.
+    pub fn into_owned(self) -> B::Owned {
+        match self {
+            Cow::Borrowed(b) => b.to_owned(),
+            Cow::Owned(o)    => o,
+        }
+    }
+}
+
+impl<B: ToOwned + Eq> Eq for Cow<B> {
+    fn eq(self, other: Cow<B>) -> bool {
+        self.as_ref() == other.as_ref()
+    }
+}
+
+impl<B: ToOwned + Debug> Debug for Cow<B> where B::Owned: Debug {
+    fn debug_fmt(self, f: &mut Formatter) -> Result<(), FormatError> {
+        match self {
+            Cow::Borrowed(b) => {
+                f.write_str("Cow::Borrowed(")?;
+                b.debug_fmt(f)?;
+                f.write_str(")")
+            }
+            Cow::Owned(o) => {
+                f.write_str("Cow::Owned(")?;
+                o.debug_fmt(f)?;
+                f.write_str(")")
+            }
+        }
+    }
+}
+
+impl<B: ToOwned> Clone for Cow<B> where B::Owned: Clone {
+    fn clone(self) -> Cow<B> {
+        match self {
+            Cow::Borrowed(b) => Cow::Borrowed(b),
+            Cow::Owned(ref o) => Cow::Owned(o.clone()),
+        }
+    }
+}
+
+impl<B: ToOwned> Deref for Cow<B> {
+    type Target = B;
+    fn deref(self) -> &B { self.as_ref() }
+}
+
+/// Trait for types that have an owned counterpart.
+pub trait ToOwned {
+    type Owned: Borrow<Self>;
+
+    /// Creates owned data from borrowed data.
+    fn to_owned(self) -> Self::Owned;
+}
+
+// String/str ToOwned
+impl ToOwned for str {
+    type Owned = String;
+    fn to_owned(self) -> String { String::from_slice(self) }
+}
+
+// Slice ToOwned
+impl<T: Clone> ToOwned for [T] {
+    type Owned = Vec<T>;
+    fn to_owned(self) -> Vec<T> { Vec::from_slice(self) }
+}

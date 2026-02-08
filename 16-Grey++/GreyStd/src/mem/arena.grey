@@ -1,0 +1,250 @@
+/// mem::arena — Arena allocators for bump-allocation patterns.
+///
+/// Arenas allocate objects in contiguous chunks and free them all at once.
+/// This is extremely fast for short-lived allocations and avoids fragmentation.
+
+/// A simple bump allocator arena.
+///
+/// Allocations are O(1) pointer bumps. All memory is freed when the Arena
+/// is dropped, or explicitly via `reset()`.
+///
+/// ```grey
+/// let arena = Arena::new();
+/// let x = arena.alloc(42);
+/// let y = arena.alloc(String::from("hello"));
+/// // x and y are valid until arena is dropped
+/// ```
+pub struct Arena {
+    chunks: Vec<Chunk>,
+    current: usize,          // index of active chunk
+    chunk_size: usize,       // default chunk size in bytes
+}
+
+struct Chunk {
+    data: *mut u8,
+    capacity: usize,
+    used: usize,
+}
+
+impl Arena {
+    /// Creates a new arena with the default chunk size (64 KB).
+    pub fn new() -> Arena {
+        Arena::with_chunk_size(64 * 1024)
+    }
+
+    /// Creates a new arena with a custom chunk size.
+    pub fn with_chunk_size(chunk_size: usize) -> Arena {
+        let mut arena = Arena {
+            chunks: Vec::new(),
+            current: 0,
+            chunk_size,
+        };
+        arena.add_chunk(chunk_size);
+        arena
+    }
+
+    /// Allocates a value in the arena.
+    /// The value lives as long as the arena.
+    pub fn alloc<T>(self, value: T) -> &mut T {
+        let layout = Layout::of::<T>();
+        let ptr = self.alloc_raw(layout) as *mut T;
+        unsafe {
+            ptr.write(value);
+            &mut *ptr
+        }
+    }
+
+    /// Allocates a slice of values in the arena.
+    pub fn alloc_slice<T: Clone>(self, values: &[T]) -> &mut [T] {
+        let layout = Layout::array::<T>(values.len());
+        let ptr = self.alloc_raw(layout) as *mut T;
+        for i in 0..values.len() {
+            unsafe { ptr.offset(i).write(values[i].clone()); }
+        }
+        unsafe { slice::from_raw_parts_mut(ptr, values.len()) }
+    }
+
+    /// Allocates a string slice in the arena.
+    pub fn alloc_str(self, s: &str) -> &str {
+        let bytes = self.alloc_slice(s.as_bytes());
+        unsafe { str::from_utf8_unchecked(bytes) }
+    }
+
+    /// Resets the arena, marking all allocations as freed.
+    /// Does NOT call destructors on allocated objects.
+    pub fn reset(mut self) {
+        for chunk in &mut self.chunks {
+            chunk.used = 0;
+        }
+        self.current = 0;
+    }
+
+    /// Returns the total number of bytes allocated.
+    pub fn bytes_used(self) -> usize {
+        let mut total = 0;
+        for chunk in &self.chunks {
+            total += chunk.used;
+        }
+        total
+    }
+
+    /// Returns the total capacity across all chunks.
+    pub fn bytes_capacity(self) -> usize {
+        let mut total = 0;
+        for chunk in &self.chunks {
+            total += chunk.capacity;
+        }
+        total
+    }
+
+    // ── Private ─────────────────────────────────────────────────────
+
+    fn alloc_raw(mut self, layout: Layout) -> *mut u8 {
+        let size = layout.size;
+        let align = layout.align;
+
+        // Try current chunk
+        if let Some(ptr) = self.try_alloc_in_chunk(self.current, size, align) {
+            return ptr;
+        }
+
+        // Need a new chunk
+        let needed = max(self.chunk_size, size + align);
+        self.add_chunk(needed);
+        self.current = self.chunks.len() - 1;
+
+        self.try_alloc_in_chunk(self.current, size, align)
+            .expect("fresh chunk should have enough space")
+    }
+
+    fn try_alloc_in_chunk(mut self, chunk_idx: usize, size: usize, align: usize) -> Option<*mut u8> {
+        let chunk = &mut self.chunks[chunk_idx];
+        let ptr = chunk.data as usize + chunk.used;
+        let aligned = (ptr + align - 1) & !(align - 1);
+        let offset = aligned - (chunk.data as usize);
+        let new_used = offset + size;
+
+        if new_used > chunk.capacity {
+            return None;
+        }
+
+        chunk.used = new_used;
+        Some(aligned as *mut u8)
+    }
+
+    fn add_chunk(mut self, size: usize) {
+        let data = alloc::allocate_bytes(size, 16); // 16-byte aligned
+        self.chunks.push(Chunk {
+            data,
+            capacity: size,
+            used: 0,
+        });
+    }
+}
+
+impl Drop for Arena {
+    fn drop(mut self) {
+        for chunk in &self.chunks {
+            alloc::deallocate_bytes(chunk.data, chunk.capacity);
+        }
+    }
+}
+
+// ─── TypedArena ─────────────────────────────────────────────────────────────
+
+/// A typed arena that only allocates values of type `T`.
+/// This enables calling destructors on drop.
+pub struct TypedArena<T> {
+    chunks: Vec<TypedChunk<T>>,
+    current: usize,
+    chunk_capacity: usize,
+}
+
+struct TypedChunk<T> {
+    data: *mut T,
+    capacity: usize,
+    len: usize,
+}
+
+impl<T> TypedArena<T> {
+    /// Creates a new typed arena with default capacity (256 elements per chunk).
+    pub fn new() -> TypedArena<T> {
+        TypedArena::with_capacity(256)
+    }
+
+    /// Creates a typed arena with the given per-chunk capacity.
+    pub fn with_capacity(cap: usize) -> TypedArena<T> {
+        let mut arena = TypedArena {
+            chunks: Vec::new(),
+            current: 0,
+            chunk_capacity: cap,
+        };
+        arena.add_chunk(cap);
+        arena
+    }
+
+    /// Allocates a value in the arena.
+    pub fn alloc(mut self, value: T) -> &mut T {
+        let chunk = &mut self.chunks[self.current];
+        if chunk.len >= chunk.capacity {
+            self.add_chunk(self.chunk_capacity);
+            self.current = self.chunks.len() - 1;
+        }
+        let chunk = &mut self.chunks[self.current];
+        let ptr = unsafe { chunk.data.offset(chunk.len) };
+        unsafe { ptr.write(value); }
+        chunk.len += 1;
+        unsafe { &mut *ptr }
+    }
+
+    /// Returns the total number of objects allocated.
+    pub fn len(self) -> usize {
+        let mut total = 0;
+        for chunk in &self.chunks {
+            total += chunk.len;
+        }
+        total
+    }
+
+    fn add_chunk(mut self, capacity: usize) {
+        let data = alloc::allocate::<T>(capacity);
+        self.chunks.push(TypedChunk { data, capacity, len: 0 });
+    }
+}
+
+impl<T> Drop for TypedArena<T> {
+    fn drop(mut self) {
+        for chunk in &mut self.chunks {
+            for i in 0..chunk.len {
+                unsafe { chunk.data.offset(i).drop_in_place(); }
+            }
+            alloc::deallocate(chunk.data, chunk.capacity);
+        }
+    }
+}
+
+// ─── Layout ─────────────────────────────────────────────────────────────────
+
+/// Describes the memory layout of a type.
+pub struct Layout {
+    pub size: usize,
+    pub align: usize,
+}
+
+impl Layout {
+    /// Returns the layout for type T.
+    pub fn of<T>() -> Layout {
+        Layout {
+            size: mem::size_of::<T>(),
+            align: mem::align_of::<T>(),
+        }
+    }
+
+    /// Returns the layout for an array of T with `count` elements.
+    pub fn array<T>(count: usize) -> Layout {
+        Layout {
+            size: mem::size_of::<T>() * count,
+            align: mem::align_of::<T>(),
+        }
+    }
+}

@@ -1,0 +1,159 @@
+/// io — Input/output primitives for files, streams, and buffered I/O.
+
+pub mod file;
+pub mod dir;
+pub mod stream;
+pub mod buffered;
+pub mod pipe;
+pub mod mmap;
+
+// Re-exports
+pub use file::{File, OpenOptions, FileType, Permissions};
+pub use dir::{read_dir, create_dir, create_dir_all, remove_dir, remove_dir_all, DirEntry, ReadDir};
+pub use stream::{Read, Write, Seek, SeekFrom, BufRead, copy, sink, empty, repeat};
+pub use buffered::{BufReader, BufWriter, LineReader};
+pub use pipe::{pipe, PipeReader, PipeWriter};
+pub use mmap::{Mmap, MmapMut, MmapOptions};
+
+/// The error type for I/O operations.
+pub struct IoError {
+    kind: IoErrorKind,
+    message: String,
+}
+
+impl IoError {
+    pub fn new(kind: IoErrorKind, message: String) -> IoError {
+        IoError { kind, message }
+    }
+
+    pub fn kind(self) -> IoErrorKind {
+        self.kind
+    }
+
+    pub fn message(self) -> &str {
+        &self.message
+    }
+
+    pub fn last_os_error() -> IoError {
+        IoError { kind: IoErrorKind::Other, message: String::from("os error") }
+    }
+}
+
+impl Display for IoError {
+    fn fmt(self, f: &mut Formatter) -> Result<(), FmtError> {
+        write!(f, "{}: {}", self.kind, self.message)
+    }
+}
+
+/// Categories of I/O errors.
+pub enum IoErrorKind {
+    NotFound,
+    PermissionDenied,
+    ConnectionRefused,
+    ConnectionReset,
+    ConnectionAborted,
+    NotConnected,
+    AddrInUse,
+    AddrNotAvailable,
+    BrokenPipe,
+    AlreadyExists,
+    WouldBlock,
+    InvalidInput,
+    InvalidData,
+    TimedOut,
+    WriteZero,
+    Interrupted,
+    UnexpectedEof,
+    OutOfMemory,
+    Unsupported,
+    Other,
+}
+
+impl Display for IoErrorKind {
+    fn fmt(self, f: &mut Formatter) -> Result<(), FmtError> {
+        let s = match self {
+            IoErrorKind::NotFound          => "not found",
+            IoErrorKind::PermissionDenied  => "permission denied",
+            IoErrorKind::ConnectionRefused => "connection refused",
+            IoErrorKind::ConnectionReset   => "connection reset",
+            IoErrorKind::ConnectionAborted => "connection aborted",
+            IoErrorKind::NotConnected      => "not connected",
+            IoErrorKind::AddrInUse         => "address in use",
+            IoErrorKind::AddrNotAvailable  => "address not available",
+            IoErrorKind::BrokenPipe        => "broken pipe",
+            IoErrorKind::AlreadyExists     => "already exists",
+            IoErrorKind::WouldBlock        => "would block",
+            IoErrorKind::InvalidInput      => "invalid input",
+            IoErrorKind::InvalidData       => "invalid data",
+            IoErrorKind::TimedOut          => "timed out",
+            IoErrorKind::WriteZero         => "write zero",
+            IoErrorKind::Interrupted       => "interrupted",
+            IoErrorKind::UnexpectedEof     => "unexpected eof",
+            IoErrorKind::OutOfMemory       => "out of memory",
+            IoErrorKind::Unsupported       => "unsupported",
+            IoErrorKind::Other             => "other",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+/// Shorthand result type for I/O operations.
+pub type IoResult<T> = Result<T, IoError>;
+
+/// Reads all bytes from a reader into a Vec.
+pub fn read_all<R: Read>(reader: &mut R) -> IoResult<Vec<u8>> {
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 8192];
+    loop {
+        match reader.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => buf.extend_from_slice(&chunk[..n]),
+            Err(e) if e.kind() == IoErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(buf)
+}
+
+/// Reads all content from a reader as a UTF-8 string.
+pub fn read_to_string<R: Read>(reader: &mut R) -> IoResult<String> {
+    let bytes = read_all(reader)?;
+    String::from_utf8(bytes).map_err(|_| IoError::new(IoErrorKind::InvalidData, String::from("invalid UTF-8")))
+}
+
+// ─── Standard output / error functions ──────────────────────────────────────
+
+/// Prints a string to stdout without a trailing newline.
+pub fn print(s: &str) {
+    extern fn __grey_write_stdout(ptr: *const u8, len: usize);
+    unsafe { __grey_write_stdout(s.as_ptr(), s.len()); }
+}
+
+/// Prints a string to stdout with a trailing newline.
+pub fn println(s: &str) {
+    print(s);
+    print("\n");
+}
+
+/// Prints a string to stderr without a trailing newline.
+pub fn eprint(s: &str) {
+    extern fn __grey_write_stderr(ptr: *const u8, len: usize);
+    unsafe { __grey_write_stderr(s.as_ptr(), s.len()); }
+}
+
+/// Prints a string to stderr with a trailing newline.
+pub fn eprintln(s: &str) {
+    eprint(s);
+    eprint("\n");
+}
+
+/// Reads a line from stdin.
+pub fn read_line() -> IoResult<String> {
+    extern fn __grey_read_stdin_line(buf: *mut u8, max_len: usize) -> i64;
+    let mut buf = [0u8; 4096];
+    let n = unsafe { __grey_read_stdin_line(buf.as_mut_ptr(), buf.len()) };
+    if n < 0 {
+        return Err(IoError::new(IoErrorKind::Other, String::from("failed to read stdin")));
+    }
+    Ok(String::from_utf8_lossy(&buf[..n as usize]))
+}

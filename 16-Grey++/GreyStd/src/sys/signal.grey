@@ -1,0 +1,137 @@
+/// sys::signal — OS signal handling.
+
+use crate::core::string::String;
+
+/// POSIX signals.
+pub enum Signal {
+    /// Hangup.
+    Hup,
+    /// Interrupt (Ctrl+C).
+    Int,
+    /// Quit.
+    Quit,
+    /// Illegal instruction.
+    Ill,
+    /// Trace/breakpoint trap.
+    Trap,
+    /// Abort.
+    Abrt,
+    /// Bus error.
+    Bus,
+    /// Floating-point exception.
+    Fpe,
+    /// Kill (cannot be caught).
+    Kill,
+    /// User-defined signal 1.
+    Usr1,
+    /// Segmentation fault.
+    Segv,
+    /// User-defined signal 2.
+    Usr2,
+    /// Broken pipe.
+    Pipe,
+    /// Alarm clock.
+    Alrm,
+    /// Termination.
+    Term,
+    /// Child process stopped or terminated.
+    Chld,
+    /// Continue if stopped.
+    Cont,
+    /// Stop (cannot be caught).
+    Stop,
+    /// Terminal stop (Ctrl+Z).
+    Tstp,
+    /// Window size change.
+    Winch,
+}
+
+impl Signal {
+    /// Platform signal number.
+    pub fn number(&self) -> i32 {
+        match self {
+            Signal::Hup  => 1,  Signal::Int  => 2,   Signal::Quit => 3,
+            Signal::Ill  => 4,  Signal::Trap => 5,   Signal::Abrt => 6,
+            Signal::Bus  => 7,  Signal::Fpe  => 8,   Signal::Kill => 9,
+            Signal::Usr1 => 10, Signal::Segv => 11,  Signal::Usr2 => 12,
+            Signal::Pipe => 13, Signal::Alrm => 14,  Signal::Term => 15,
+            Signal::Chld => 17, Signal::Cont => 18,  Signal::Stop => 19,
+            Signal::Tstp => 20, Signal::Winch => 28,
+        }
+    }
+
+    /// Name of the signal (e.g. "SIGINT").
+    pub fn name(&self) -> &str {
+        match self {
+            Signal::Hup  => "SIGHUP",  Signal::Int  => "SIGINT",   Signal::Quit => "SIGQUIT",
+            Signal::Ill  => "SIGILL",  Signal::Trap => "SIGTRAP",  Signal::Abrt => "SIGABRT",
+            Signal::Bus  => "SIGBUS",  Signal::Fpe  => "SIGFPE",   Signal::Kill => "SIGKILL",
+            Signal::Usr1 => "SIGUSR1", Signal::Segv => "SIGSEGV",  Signal::Usr2 => "SIGUSR2",
+            Signal::Pipe => "SIGPIPE", Signal::Alrm => "SIGALRM",  Signal::Term => "SIGTERM",
+            Signal::Chld => "SIGCHLD", Signal::Cont => "SIGCONT",  Signal::Stop => "SIGSTOP",
+            Signal::Tstp => "SIGTSTP", Signal::Winch => "SIGWINCH",
+        }
+    }
+
+    /// From signal number.
+    pub fn from_number(n: i32) -> Option<Signal> {
+        match n {
+            1  => Some(Signal::Hup),  2  => Some(Signal::Int),   3  => Some(Signal::Quit),
+            4  => Some(Signal::Ill),  5  => Some(Signal::Trap),  6  => Some(Signal::Abrt),
+            7  => Some(Signal::Bus),  8  => Some(Signal::Fpe),   9  => Some(Signal::Kill),
+            10 => Some(Signal::Usr1), 11 => Some(Signal::Segv),  12 => Some(Signal::Usr2),
+            13 => Some(Signal::Pipe), 14 => Some(Signal::Alrm),  15 => Some(Signal::Term),
+            17 => Some(Signal::Chld), 18 => Some(Signal::Cont),  19 => Some(Signal::Stop),
+            20 => Some(Signal::Tstp), 28 => Some(Signal::Winch),
+            _ => None,
+        }
+    }
+}
+
+/// A guard that, when dropped, unregisters the signal handler.
+pub struct SignalGuard {
+    signal: Signal,
+    id: u64,
+}
+
+impl Drop for SignalGuard {
+    fn drop(&mut self) {
+        extern fn __grey_signal_unregister(sig: i32, id: u64);
+        unsafe { __grey_signal_unregister(self.signal.number(), self.id) }
+    }
+}
+
+/// Register a function to be called when the given signal is received.
+/// Returns a guard that unregisters the handler when dropped.
+pub fn on_signal<F: FnMut() + Send + 'static>(signal: Signal, handler: F) -> SignalGuard {
+    extern fn __grey_signal_register(sig: i32, handler: Box<dyn FnMut() + Send>) -> u64;
+    let id = unsafe { __grey_signal_register(signal.number(), Box::new(handler)) };
+    SignalGuard { signal, id }
+}
+
+/// Block until one of the given signals is received. Returns the signal.
+pub async fn wait_for_signal(signals: &[Signal]) -> Signal {
+    extern fn __grey_signal_wait(signals: &[i32]) -> i32;
+    let nums: Vec<i32> = signals.iter().map(|s| s.number()).collect();
+    let received = unsafe { __grey_signal_wait(&nums) };
+    Signal::from_number(received).unwrap_or(Signal::Term)
+}
+
+/// Register a Ctrl+C handler (SIGINT).
+pub fn on_ctrl_c<F: FnMut() + Send + 'static>(handler: F) -> SignalGuard {
+    on_signal(Signal::Int, handler)
+}
+
+/// Register a shutdown handler (SIGTERM + SIGINT).
+pub fn on_shutdown<F: FnMut() + Send + Clone + 'static>(handler: F) -> (SignalGuard, SignalGuard) {
+    let h1 = handler.clone();
+    let g1 = on_signal(Signal::Int, h1);
+    let g2 = on_signal(Signal::Term, handler);
+    (g1, g2)
+}
+
+/// Raise a signal on the current process.
+pub fn raise(signal: Signal) {
+    extern fn __grey_signal_raise(sig: i32);
+    unsafe { __grey_signal_raise(signal.number()) }
+}

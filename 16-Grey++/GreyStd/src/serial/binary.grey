@@ -1,0 +1,332 @@
+/// serial::binary — Binary encoding utilities: base64, hex, varint.
+
+use crate::core::string::String;
+use crate::core::vec::Vec;
+use crate::core::result::Result;
+use crate::serial::{SerializeError, DeserializeError};
+
+// ─── Base64 ─────────────────────────────────────────────────
+
+const B64_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const B64_PAD: u8 = b'=';
+
+/// Encodes bytes to a base64 string.
+pub fn base64_encode(data: &[u8]) -> String {
+    let mut result = String::new();
+    let chunks = data.chunks(3);
+
+    for chunk in chunks {
+        let b0 = chunk[0] as u32;
+        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+
+        result.push(B64_CHARS[((triple >> 18) & 0x3F) as usize] as char);
+        result.push(B64_CHARS[((triple >> 12) & 0x3F) as usize] as char);
+
+        if chunk.len() > 1 {
+            result.push(B64_CHARS[((triple >> 6) & 0x3F) as usize] as char);
+        } else {
+            result.push('=');
+        }
+
+        if chunk.len() > 2 {
+            result.push(B64_CHARS[(triple & 0x3F) as usize] as char);
+        } else {
+            result.push('=');
+        }
+    }
+
+    result
+}
+
+/// Decodes a base64 string to bytes.
+pub fn base64_decode(input: &str) -> Result<Vec<u8>, DeserializeError> {
+    let mut result = Vec::new();
+    let bytes: Vec<u8> = input.bytes().filter(|b| *b != b'\n' && *b != b'\r' && *b != b' ').collect();
+
+    if bytes.len() % 4 != 0 {
+        return Err(DeserializeError::Message(String::from("invalid base64 length")));
+    }
+
+    for chunk in bytes.chunks(4) {
+        let v0 = b64_decode_char(chunk[0])?;
+        let v1 = b64_decode_char(chunk[1])?;
+
+        result.push(((v0 << 2) | (v1 >> 4)) as u8);
+
+        if chunk[2] != B64_PAD {
+            let v2 = b64_decode_char(chunk[2])?;
+            result.push((((v1 & 0xF) << 4) | (v2 >> 2)) as u8);
+
+            if chunk[3] != B64_PAD {
+                let v3 = b64_decode_char(chunk[3])?;
+                result.push((((v2 & 0x3) << 6) | v3) as u8);
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+fn b64_decode_char(c: u8) -> Result<u32, DeserializeError> {
+    match c {
+        b'A'..=b'Z' => Ok((c - b'A') as u32),
+        b'a'..=b'z' => Ok((c - b'a' + 26) as u32),
+        b'0'..=b'9' => Ok((c - b'0' + 52) as u32),
+        b'+' => Ok(62),
+        b'/' => Ok(63),
+        _ => Err(DeserializeError::Message(format!("invalid base64 char: {}", c as char))),
+    }
+}
+
+// ─── Hex ────────────────────────────────────────────────────
+
+const HEX_CHARS: &[u8] = b"0123456789abcdef";
+
+/// Encodes bytes to a hexadecimal string.
+pub fn hex_encode(data: &[u8]) -> String {
+    let mut result = String::with_capacity(data.len() * 2);
+    for &byte in data {
+        result.push(HEX_CHARS[(byte >> 4) as usize] as char);
+        result.push(HEX_CHARS[(byte & 0x0F) as usize] as char);
+    }
+    result
+}
+
+/// Decodes a hexadecimal string to bytes.
+pub fn hex_decode(input: &str) -> Result<Vec<u8>, DeserializeError> {
+    let bytes = input.as_bytes();
+    if bytes.len() % 2 != 0 {
+        return Err(DeserializeError::Message(String::from("hex string must have even length")));
+    }
+
+    let mut result = Vec::with_capacity(bytes.len() / 2);
+    for chunk in bytes.chunks(2) {
+        let hi = hex_val(chunk[0])?;
+        let lo = hex_val(chunk[1])?;
+        result.push((hi << 4) | lo);
+    }
+    Ok(result)
+}
+
+fn hex_val(c: u8) -> Result<u8, DeserializeError> {
+    match c {
+        b'0'..=b'9' => Ok(c - b'0'),
+        b'a'..=b'f' => Ok(c - b'a' + 10),
+        b'A'..=b'F' => Ok(c - b'A' + 10),
+        _ => Err(DeserializeError::Message(format!("invalid hex char: {}", c as char))),
+    }
+}
+
+// ─── Varint (LEB128) ────────────────────────────────────────
+
+/// Encodes a u64 as a variable-length integer (unsigned LEB128).
+pub fn encode_varint(mut value: u64) -> Vec<u8> {
+    let mut result = Vec::new();
+    loop {
+        let mut byte = (value & 0x7F) as u8;
+        value = value >> 7;
+        if value != 0 {
+            byte = byte | 0x80;
+        }
+        result.push(byte);
+        if value == 0 {
+            break;
+        }
+    }
+    result
+}
+
+/// Decodes a variable-length integer from bytes, returning (value, bytes_consumed).
+pub fn decode_varint(data: &[u8]) -> Result<(u64, usize), DeserializeError> {
+    let mut result: u64 = 0;
+    let mut shift: u32 = 0;
+
+    for (i, &byte) in data.iter().enumerate() {
+        if shift >= 64 {
+            return Err(DeserializeError::Message(String::from("varint too long")));
+        }
+        result = result | (((byte & 0x7F) as u64) << shift);
+        if byte & 0x80 == 0 {
+            return Ok((result, i + 1));
+        }
+        shift = shift + 7;
+    }
+
+    Err(DeserializeError::Eof)
+}
+
+/// Encodes a signed i64 as a variable-length integer (signed LEB128 via zigzag).
+pub fn encode_signed_varint(value: i64) -> Vec<u8> {
+    // Zigzag encoding: maps signed to unsigned
+    let encoded = ((value << 1) ^ (value >> 63)) as u64;
+    encode_varint(encoded)
+}
+
+/// Decodes a signed variable-length integer.
+pub fn decode_signed_varint(data: &[u8]) -> Result<(i64, usize), DeserializeError> {
+    let (encoded, consumed) = decode_varint(data)?;
+    // Zigzag decoding
+    let value = ((encoded >> 1) as i64) ^ (-((encoded & 1) as i64));
+    Ok((value, consumed))
+}
+
+// ─── Binary Writer / Reader ─────────────────────────────────
+
+/// A binary writer for encoding structured data.
+pub struct BinaryWriter {
+    buf: Vec<u8>,
+}
+
+impl BinaryWriter {
+    pub fn new() -> BinaryWriter {
+        BinaryWriter { buf: Vec::new() }
+    }
+
+    pub fn with_capacity(cap: usize) -> BinaryWriter {
+        BinaryWriter { buf: Vec::with_capacity(cap) }
+    }
+
+    pub fn write_u8(mut self, v: u8) { self.buf.push(v); }
+    pub fn write_u16_le(mut self, v: u16) { self.buf.extend_from_slice(&v.to_le_bytes()); }
+    pub fn write_u16_be(mut self, v: u16) { self.buf.extend_from_slice(&v.to_be_bytes()); }
+    pub fn write_u32_le(mut self, v: u32) { self.buf.extend_from_slice(&v.to_le_bytes()); }
+    pub fn write_u32_be(mut self, v: u32) { self.buf.extend_from_slice(&v.to_be_bytes()); }
+    pub fn write_u64_le(mut self, v: u64) { self.buf.extend_from_slice(&v.to_le_bytes()); }
+    pub fn write_u64_be(mut self, v: u64) { self.buf.extend_from_slice(&v.to_be_bytes()); }
+    pub fn write_i32_le(mut self, v: i32) { self.buf.extend_from_slice(&v.to_le_bytes()); }
+    pub fn write_i64_le(mut self, v: i64) { self.buf.extend_from_slice(&v.to_le_bytes()); }
+    pub fn write_f32_le(mut self, v: f32) { self.buf.extend_from_slice(&v.to_le_bytes()); }
+    pub fn write_f64_le(mut self, v: f64) { self.buf.extend_from_slice(&v.to_le_bytes()); }
+
+    pub fn write_varint(mut self, v: u64) {
+        let encoded = encode_varint(v);
+        self.buf.extend_from_slice(&encoded);
+    }
+
+    pub fn write_bytes(mut self, data: &[u8]) {
+        self.write_varint(data.len() as u64);
+        self.buf.extend_from_slice(data);
+    }
+
+    pub fn write_string(mut self, s: &str) {
+        self.write_bytes(s.as_bytes());
+    }
+
+    pub fn write_bool(mut self, v: bool) {
+        self.buf.push(if v { 1 } else { 0 });
+    }
+
+    pub fn into_bytes(self) -> Vec<u8> { self.buf }
+    pub fn as_bytes(self) -> &[u8] { &self.buf }
+    pub fn len(self) -> usize { self.buf.len() }
+}
+
+/// A binary reader for decoding structured data.
+pub struct BinaryReader<'a> {
+    data: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> BinaryReader<'a> {
+    pub fn new(data: &'a [u8]) -> BinaryReader<'a> {
+        BinaryReader { data, pos: 0 }
+    }
+
+    pub fn remaining(self) -> usize { self.data.len() - self.pos }
+    pub fn position(self) -> usize { self.pos }
+
+    fn ensure(self, n: usize) -> Result<(), DeserializeError> {
+        if self.remaining() < n {
+            Err(DeserializeError::Eof)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn read_u8(mut self) -> Result<u8, DeserializeError> {
+        self.ensure(1)?;
+        let v = self.data[self.pos];
+        self.pos = self.pos + 1;
+        Ok(v)
+    }
+
+    pub fn read_u16_le(mut self) -> Result<u16, DeserializeError> {
+        self.ensure(2)?;
+        let v = u16::from_le_bytes([self.data[self.pos], self.data[self.pos + 1]]);
+        self.pos = self.pos + 2;
+        Ok(v)
+    }
+
+    pub fn read_u32_le(mut self) -> Result<u32, DeserializeError> {
+        self.ensure(4)?;
+        let bytes = [self.data[self.pos], self.data[self.pos+1], self.data[self.pos+2], self.data[self.pos+3]];
+        self.pos = self.pos + 4;
+        Ok(u32::from_le_bytes(bytes))
+    }
+
+    pub fn read_u64_le(mut self) -> Result<u64, DeserializeError> {
+        self.ensure(8)?;
+        let mut bytes = [0u8; 8];
+        bytes.copy_from_slice(&self.data[self.pos..self.pos + 8]);
+        self.pos = self.pos + 8;
+        Ok(u64::from_le_bytes(bytes))
+    }
+
+    pub fn read_i32_le(mut self) -> Result<i32, DeserializeError> {
+        self.ensure(4)?;
+        let bytes = [self.data[self.pos], self.data[self.pos+1], self.data[self.pos+2], self.data[self.pos+3]];
+        self.pos = self.pos + 4;
+        Ok(i32::from_le_bytes(bytes))
+    }
+
+    pub fn read_i64_le(mut self) -> Result<i64, DeserializeError> {
+        self.ensure(8)?;
+        let mut bytes = [0u8; 8];
+        bytes.copy_from_slice(&self.data[self.pos..self.pos + 8]);
+        self.pos = self.pos + 8;
+        Ok(i64::from_le_bytes(bytes))
+    }
+
+    pub fn read_f64_le(mut self) -> Result<f64, DeserializeError> {
+        self.ensure(8)?;
+        let mut bytes = [0u8; 8];
+        bytes.copy_from_slice(&self.data[self.pos..self.pos + 8]);
+        self.pos = self.pos + 8;
+        Ok(f64::from_le_bytes(bytes))
+    }
+
+    pub fn read_varint(mut self) -> Result<u64, DeserializeError> {
+        let (value, consumed) = decode_varint(&self.data[self.pos..])?;
+        self.pos = self.pos + consumed;
+        Ok(value)
+    }
+
+    pub fn read_bytes(mut self) -> Result<Vec<u8>, DeserializeError> {
+        let len = self.read_varint()? as usize;
+        self.ensure(len)?;
+        let data = self.data[self.pos..self.pos + len].to_vec();
+        self.pos = self.pos + len;
+        Ok(data)
+    }
+
+    pub fn read_string(mut self) -> Result<String, DeserializeError> {
+        let bytes = self.read_bytes()?;
+        String::from_utf8(bytes)
+            .map_err(|_| DeserializeError::Message(String::from("invalid UTF-8")))
+    }
+
+    pub fn read_bool(mut self) -> Result<bool, DeserializeError> {
+        let b = self.read_u8()?;
+        Ok(b != 0)
+    }
+
+    pub fn read_exact(mut self, n: usize) -> Result<&'a [u8], DeserializeError> {
+        self.ensure(n)?;
+        let slice = &self.data[self.pos..self.pos + n];
+        self.pos = self.pos + n;
+        Ok(slice)
+    }
+}

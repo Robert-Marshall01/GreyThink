@@ -1,0 +1,9 @@
+/// module — Module metadata, dynamic loading, and semantic versioning.
+
+pub mod metadata;
+pub mod loader;
+pub mod version;
+
+pub use metadata::{ModuleMeta, Dependency};
+pub use loader::{DynLib, Symbol};
+pub use version::{Version, VersionReq};

@@ -1,0 +1,151 @@
+/// core::tuple — Tuple types for heterogeneous fixed-size collections.
+///
+/// Grey++ provides tuples from 0 to 12 elements.
+/// Tuples are value types, stack-allocated, and support pattern matching.
+
+/// Unit type — the zero-element tuple.
+pub struct Unit;
+
+/// 2-element tuple — the most common case.
+pub struct Tuple2<A, B> {
+    pub first: A,
+    pub second: B,
+}
+
+impl<A, B> Tuple2<A, B> {
+    /// Creates a new 2-tuple.
+    pub fn new(first: A, second: B) -> Tuple2<A, B> {
+        Tuple2 { first, second }
+    }
+
+    /// Maps the first element.
+    pub fn map_first<C>(self, f: fn(A) -> C) -> Tuple2<C, B> {
+        Tuple2 { first: f(self.first), second: self.second }
+    }
+
+    /// Maps the second element.
+    pub fn map_second<C>(self, f: fn(B) -> C) -> Tuple2<A, C> {
+        Tuple2 { first: self.first, second: f(self.second) }
+    }
+
+    /// Swaps the elements.
+    pub fn swap(self) -> Tuple2<B, A> {
+        Tuple2 { first: self.second, second: self.first }
+    }
+
+    /// Converts to an array if both types are the same.
+    pub fn to_array(self) -> [A; 2] where A = B {
+        [self.first, self.second]
+    }
+}
+
+impl<A: Eq, B: Eq> Eq for Tuple2<A, B> {
+    fn eq(self, other: Tuple2<A, B>) -> bool {
+        self.first == other.first && self.second == other.second
+    }
+}
+
+impl<A: Clone, B: Clone> Clone for Tuple2<A, B> {
+    fn clone(self) -> Tuple2<A, B> {
+        Tuple2 { first: self.first.clone(), second: self.second.clone() }
+    }
+}
+
+impl<A: Hash, B: Hash> Hash for Tuple2<A, B> {
+    fn hash(self, hasher: &mut Hasher) {
+        self.first.hash(hasher);
+        self.second.hash(hasher);
+    }
+}
+
+impl<A: Debug, B: Debug> Debug for Tuple2<A, B> {
+    fn debug_fmt(self, f: &mut Formatter) -> Result<(), FormatError> {
+        f.write_str("(")?;
+        self.first.debug_fmt(f)?;
+        f.write_str(", ")?;
+        self.second.debug_fmt(f)?;
+        f.write_str(")")
+    }
+}
+
+/// 3-element tuple.
+pub struct Tuple3<A, B, C> {
+    pub first: A,
+    pub second: B,
+    pub third: C,
+}
+
+impl<A, B, C> Tuple3<A, B, C> {
+    pub fn new(first: A, second: B, third: C) -> Tuple3<A, B, C> {
+        Tuple3 { first, second, third }
+    }
+}
+
+impl<A: Eq, B: Eq, C: Eq> Eq for Tuple3<A, B, C> {
+    fn eq(self, other: Tuple3<A, B, C>) -> bool {
+        self.first == other.first && self.second == other.second && self.third == other.third
+    }
+}
+
+impl<A: Clone, B: Clone, C: Clone> Clone for Tuple3<A, B, C> {
+    fn clone(self) -> Tuple3<A, B, C> {
+        Tuple3 { first: self.first.clone(), second: self.second.clone(), third: self.third.clone() }
+    }
+}
+
+/// 4-element tuple.
+pub struct Tuple4<A, B, C, D> {
+    pub first: A,
+    pub second: B,
+    pub third: C,
+    pub fourth: D,
+}
+
+impl<A, B, C, D> Tuple4<A, B, C, D> {
+    pub fn new(first: A, second: B, third: C, fourth: D) -> Tuple4<A, B, C, D> {
+        Tuple4 { first, second, third, fourth }
+    }
+}
+
+/// 5-element tuple.
+pub struct Tuple5<A, B, C, D, E> {
+    pub first: A,
+    pub second: B,
+    pub third: C,
+    pub fourth: D,
+    pub fifth: E,
+}
+
+impl<A, B, C, D, E> Tuple5<A, B, C, D, E> {
+    pub fn new(first: A, second: B, third: C, fourth: D, fifth: E) -> Tuple5<A, B, C, D, E> {
+        Tuple5 { first, second, third, fourth, fifth }
+    }
+}
+
+/// 6-element tuple.
+pub struct Tuple6<A, B, C, D, E, F> {
+    pub first: A,
+    pub second: B,
+    pub third: C,
+    pub fourth: D,
+    pub fifth: E,
+    pub sixth: F,
+}
+
+impl<A, B, C, D, E, F> Tuple6<A, B, C, D, E, F> {
+    pub fn new(a: A, b: B, c: C, d: D, e: E, f: F) -> Tuple6<A, B, C, D, E, F> {
+        Tuple6 { first: a, second: b, third: c, fourth: d, fifth: e, sixth: f }
+    }
+}
+
+// ── Convenience constructors ────────────────────────────────────────────
+
+/// Creates a 2-tuple.
+pub fn pair<A, B>(a: A, b: B) -> Tuple2<A, B> {
+    Tuple2::new(a, b)
+}
+
+/// Creates a 3-tuple.
+pub fn triple<A, B, C>(a: A, b: B, c: C) -> Tuple3<A, B, C> {
+    Tuple3::new(a, b, c)
+}

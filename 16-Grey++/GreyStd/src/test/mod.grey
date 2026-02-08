@@ -1,0 +1,11 @@
+/// test — Built-in testing framework: unit tests, assertions, runner, benchmarks.
+
+pub mod unit;
+pub mod assert;
+pub mod runner;
+pub mod bench;
+
+pub use unit::{TestCase, TestResult, TestStatus};
+pub use runner::{TestRunner, TestFilter, RunResult};
+pub use bench::{Benchmark, BenchResult};
+pub use assert::*;

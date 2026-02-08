@@ -1,0 +1,111 @@
+/// test::assert — Test assertion macros and helpers (test-specific).
+
+use crate::core::string::String;
+
+/// Assert that a closure panics.
+pub fn assert_panics<F: FnOnce()>(f: F) -> String {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
+        Ok(_) => panic!("expected panic, but none occurred"),
+        Err(e) => format!("{:?}", e),
+    }
+}
+
+/// Assert that a closure panics with a message containing the given substring.
+pub fn assert_panics_with<F: FnOnce()>(f: F, expected: &str) {
+    let msg = assert_panics(f);
+    if !msg.contains(expected) {
+        panic!("expected panic containing '{}', got '{}'", expected, msg);
+    }
+}
+
+/// Assert a Duration is less than a maximum.
+pub fn assert_duration_under(actual: crate::time::duration::Duration, max: crate::time::duration::Duration) {
+    if actual > max {
+        panic!("duration {:?} exceeds maximum {:?}", actual, max);
+    }
+}
+
+/// Compare two string values showing a diff on failure.
+pub fn assert_str_eq(left: &str, right: &str) {
+    if left != right {
+        let mut diff = String::new();
+        let left_lines: Vec<&str> = left.lines().collect();
+        let right_lines: Vec<&str> = right.lines().collect();
+        let max = left_lines.len().max(right_lines.len());
+
+        for i in 0..max {
+            let l = left_lines.get(i).unwrap_or(&"<missing>");
+            let r = right_lines.get(i).unwrap_or(&"<missing>");
+            if l != r {
+                diff.push_str(&format!("  line {}: - {}\n", i + 1, l));
+                diff.push_str(&format!("          + {}\n", r));
+            }
+        }
+        panic!("strings differ:\n{}", diff);
+    }
+}
+
+/// Snapshot testing: compare against a stored snapshot file.
+pub fn assert_snapshot(name: &str, actual: &str) {
+    let snap_dir = "tests/snapshots";
+    let snap_path = format!("{}/{}.snap", snap_dir, name);
+
+    match crate::io::file::File::read_to_string(&snap_path) {
+        Ok(expected) => {
+            if actual != expected.trim() {
+                let update = crate::sys::env::var("UPDATE_SNAPSHOTS")
+                    .map(|v| v == "1" || v == "true")
+                    .unwrap_or(false);
+
+                if update {
+                    let _ = crate::io::file::File::write(&snap_path, actual.as_bytes());
+                    return;
+                }
+
+                panic!(
+                    "snapshot mismatch for '{}'.\nExpected:\n{}\nActual:\n{}\n\nSet UPDATE_SNAPSHOTS=1 to update.",
+                    name, expected.trim(), actual
+                );
+            }
+        }
+        Err(_) => {
+            // First run — create snapshot
+            let _ = crate::io::dir::create_dir_all(snap_dir);
+            let _ = crate::io::file::File::write(&snap_path, actual.as_bytes());
+        }
+    }
+}
+
+/// Property-based assertion: run a predicate many times with random inputs.
+pub fn assert_property<T: Debug, F: Fn(&T) -> bool, G: Fn() -> T>(
+    generator: G,
+    property: F,
+    iterations: usize,
+    description: &str,
+) {
+    let rng = crate::crypto::random::SecureRandom::new();
+    for i in 0..iterations {
+        let input = generator();
+        if !property(&input) {
+            panic!(
+                "property '{}' failed on iteration {} with input: {:?}",
+                description, i, input
+            );
+        }
+    }
+}
+
+/// Table-driven test helper.
+pub fn run_table_tests<T: Debug, F: Fn(&T) -> Result<(), String>>(
+    name: &str,
+    cases: Vec<(&str, T)>,
+    test_fn: F,
+) -> Vec<(String, Result<(), String>)> {
+    let mut results = Vec::new();
+    for (case_name, input) in cases {
+        let full_name = format!("{}/{}", name, case_name);
+        let result = test_fn(&input);
+        results.push((full_name, result));
+    }
+    results
+}

@@ -1,0 +1,197 @@
+/// error::trace — Stack traces and backtraces for error diagnostics.
+
+use crate::core::string::String;
+use crate::core::vec::Vec;
+use crate::core::option::Option;
+
+/// A captured stack backtrace.
+pub struct Backtrace {
+    frames: Vec<BacktraceFrame>,
+    status: BacktraceStatus,
+}
+
+/// Status of backtrace capture.
+pub enum BacktraceStatus {
+    /// Backtrace was captured successfully.
+    Captured,
+    /// Backtrace capture is disabled (GREY_BACKTRACE=0).
+    Disabled,
+    /// Backtrace capture is not supported on this platform.
+    Unsupported,
+}
+
+/// A single frame in a backtrace.
+pub struct BacktraceFrame {
+    /// Instruction pointer / program counter.
+    pub ip: u64,
+    /// Symbol name (demangled if possible).
+    pub symbol_name: Option<String>,
+    /// Source file path.
+    pub file: Option<String>,
+    /// Line number.
+    pub line: Option<u32>,
+    /// Column number.
+    pub column: Option<u32>,
+    /// Module/library name.
+    pub module: Option<String>,
+}
+
+impl BacktraceFrame {
+    /// Format this frame as a human-readable string.
+    pub fn to_string(&self) -> String {
+        let name = self.symbol_name.as_deref().unwrap_or("<unknown>");
+        let location = match (&self.file, self.line) {
+            (Some(f), Some(l)) => format!(" at {}:{}", f, l),
+            (Some(f), None) => format!(" at {}", f),
+            _ => String::new(),
+        };
+        format!("  {:#018x} - {}{}", self.ip, name, location)
+    }
+}
+
+impl Backtrace {
+    /// Capture a backtrace at the current location.
+    pub fn capture() -> Backtrace {
+        // Check environment variable
+        let enabled = crate::sys::env::var("GREY_BACKTRACE")
+            .map(|v| v != "0")
+            .unwrap_or(true);
+
+        if !enabled {
+            return Backtrace { frames: Vec::new(), status: BacktraceStatus::Disabled };
+        }
+
+        extern fn __grey_capture_backtrace() -> Option<Vec<BacktraceFrame>>;
+        match unsafe { __grey_capture_backtrace() } {
+            Some(frames) => Backtrace { frames, status: BacktraceStatus::Captured },
+            None => Backtrace { frames: Vec::new(), status: BacktraceStatus::Unsupported },
+        }
+    }
+
+    /// Force-capture a backtrace regardless of environment settings.
+    pub fn force_capture() -> Backtrace {
+        extern fn __grey_capture_backtrace() -> Option<Vec<BacktraceFrame>>;
+        match unsafe { __grey_capture_backtrace() } {
+            Some(frames) => Backtrace { frames, status: BacktraceStatus::Captured },
+            None => Backtrace { frames: Vec::new(), status: BacktraceStatus::Unsupported },
+        }
+    }
+
+    /// Access the frames.
+    pub fn frames(&self) -> &[BacktraceFrame] {
+        &self.frames
+    }
+
+    /// Backtrace status.
+    pub fn status(&self) -> &BacktraceStatus {
+        &self.status
+    }
+
+    /// Number of frames.
+    pub fn len(&self) -> usize {
+        self.frames.len()
+    }
+
+    /// Format the full backtrace.
+    pub fn to_string(&self) -> String {
+        match self.status {
+            BacktraceStatus::Disabled => String::from("<backtrace disabled>"),
+            BacktraceStatus::Unsupported => String::from("<backtrace unsupported>"),
+            BacktraceStatus::Captured => {
+                let mut s = String::from("stack backtrace:\n");
+                for (i, frame) in self.frames.iter().enumerate() {
+                    s.push_str(&format!("  {:>3}: {}\n", i, frame.to_string()));
+                }
+                s
+            }
+        }
+    }
+}
+
+impl Display for Backtrace {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f, "{}", self.to_string())
+    }
+}
+
+/// A span-based error location for source code diagnostics.
+pub struct SourceLocation {
+    pub file: String,
+    pub line: u32,
+    pub column: u32,
+}
+
+impl SourceLocation {
+    pub fn new(file: &str, line: u32, column: u32) -> SourceLocation {
+        SourceLocation { file: String::from(file), line, column }
+    }
+
+    pub fn to_string(&self) -> String {
+        format!("{}:{}:{}", self.file, self.line, self.column)
+    }
+}
+
+/// A source span for diagnostic messages.
+pub struct SourceSpan {
+    pub file: String,
+    pub start_line: u32,
+    pub start_col: u32,
+    pub end_line: u32,
+    pub end_col: u32,
+}
+
+/// A diagnostic message (error, warning, note, help).
+pub struct Diagnostic {
+    pub level: DiagnosticLevel,
+    pub message: String,
+    pub span: Option<SourceSpan>,
+    pub notes: Vec<String>,
+    pub help: Option<String>,
+}
+
+pub enum DiagnosticLevel {
+    Error,
+    Warning,
+    Note,
+    Help,
+}
+
+impl Diagnostic {
+    pub fn error(message: impl Into<String>) -> Diagnostic {
+        Diagnostic { level: DiagnosticLevel::Error, message: message.into(), span: None, notes: Vec::new(), help: None }
+    }
+
+    pub fn warning(message: impl Into<String>) -> Diagnostic {
+        Diagnostic { level: DiagnosticLevel::Warning, message: message.into(), span: None, notes: Vec::new(), help: None }
+    }
+
+    pub fn with_span(mut self, span: SourceSpan) -> Diagnostic { self.span = Some(span); self }
+    pub fn with_note(mut self, note: impl Into<String>) -> Diagnostic { self.notes.push(note.into()); self }
+    pub fn with_help(mut self, help: impl Into<String>) -> Diagnostic { self.help = Some(help.into()); self }
+
+    /// Format as a rustc-style diagnostic message.
+    pub fn render(&self) -> String {
+        let level = match self.level {
+            DiagnosticLevel::Error => "error",
+            DiagnosticLevel::Warning => "warning",
+            DiagnosticLevel::Note => "note",
+            DiagnosticLevel::Help => "help",
+        };
+
+        let mut out = format!("{}: {}", level, self.message);
+
+        if let Some(span) = &self.span {
+            out.push_str(&format!("\n  --> {}:{}:{}", span.file, span.start_line, span.start_col));
+        }
+
+        for note in &self.notes {
+            out.push_str(&format!("\n  = note: {}", note));
+        }
+
+        if let Some(help) = &self.help {
+            out.push_str(&format!("\n  = help: {}", help));
+        }
+
+        out
+    }
+}

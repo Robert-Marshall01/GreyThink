@@ -1,0 +1,174 @@
+/// sys::info — System information: CPU, memory, OS, architecture.
+
+use crate::core::string::String;
+use crate::core::vec::Vec;
+
+/// CPU information.
+pub struct CpuInfo {
+    /// CPU model name (e.g. "Apple M2 Pro").
+    pub model: String,
+    /// Number of physical cores.
+    pub physical_cores: u32,
+    /// Number of logical cores (with hyperthreading).
+    pub logical_cores: u32,
+    /// CPU frequency in MHz.
+    pub frequency_mhz: u64,
+    /// CPU architecture (e.g. "x86_64", "aarch64").
+    pub architecture: String,
+    /// CPU features (e.g. ["sse4.2", "avx2", "aes"]).
+    pub features: Vec<String>,
+}
+
+/// Memory information.
+pub struct MemInfo {
+    /// Total physical memory in bytes.
+    pub total: u64,
+    /// Available (free + reclaimable) memory in bytes.
+    pub available: u64,
+    /// Used memory in bytes.
+    pub used: u64,
+    /// Total swap in bytes.
+    pub swap_total: u64,
+    /// Used swap in bytes.
+    pub swap_used: u64,
+}
+
+impl MemInfo {
+    /// Usage ratio (0.0 to 1.0).
+    pub fn usage_ratio(&self) -> f64 {
+        if self.total == 0 { 0.0 } else { self.used as f64 / self.total as f64 }
+    }
+
+    /// Available memory as a human-readable string.
+    pub fn available_human(&self) -> String {
+        format_bytes(self.available)
+    }
+
+    /// Total memory as a human-readable string.
+    pub fn total_human(&self) -> String {
+        format_bytes(self.total)
+    }
+}
+
+/// Aggregated system information.
+pub struct SysInfo {
+    pub os_name: String,
+    pub os_version: String,
+    pub hostname: String,
+    pub cpu: CpuInfo,
+    pub memory: MemInfo,
+    pub uptime_secs: u64,
+}
+
+impl SysInfo {
+    /// Gather all system information.
+    pub fn collect() -> SysInfo {
+        SysInfo {
+            os_name: os_name(),
+            os_version: os_version(),
+            hostname: hostname(),
+            cpu: cpu_info(),
+            memory: mem_info(),
+            uptime_secs: uptime_secs(),
+        }
+    }
+}
+
+// ─── Individual queries ─────────────────────────────────────
+
+/// Operating system name (e.g. "Linux", "macOS", "Windows").
+pub fn os_name() -> String {
+    extern fn __grey_sys_os_name() -> String;
+    unsafe { __grey_sys_os_name() }
+}
+
+/// Operating system version string.
+pub fn os_version() -> String {
+    extern fn __grey_sys_os_version() -> String;
+    unsafe { __grey_sys_os_version() }
+}
+
+/// CPU architecture (e.g. "x86_64", "aarch64").
+pub fn arch() -> String {
+    extern fn __grey_sys_arch() -> String;
+    unsafe { __grey_sys_arch() }
+}
+
+/// System hostname.
+pub fn hostname() -> String {
+    extern fn __grey_sys_hostname() -> String;
+    unsafe { __grey_sys_hostname() }
+}
+
+/// Number of logical CPU cores.
+pub fn cpu_count() -> u32 {
+    extern fn __grey_sys_cpu_count() -> u32;
+    unsafe { __grey_sys_cpu_count() }
+}
+
+/// Detailed CPU information.
+pub fn cpu_info() -> CpuInfo {
+    extern fn __grey_sys_cpu_info() -> CpuInfo;
+    unsafe { __grey_sys_cpu_info() }
+}
+
+/// Current memory information.
+pub fn mem_info() -> MemInfo {
+    extern fn __grey_sys_mem_info() -> MemInfo;
+    unsafe { __grey_sys_mem_info() }
+}
+
+/// System uptime in seconds.
+pub fn uptime_secs() -> u64 {
+    extern fn __grey_sys_uptime() -> u64;
+    unsafe { __grey_sys_uptime() }
+}
+
+/// Current process memory usage in bytes (RSS).
+pub fn process_memory() -> u64 {
+    extern fn __grey_sys_process_memory() -> u64;
+    unsafe { __grey_sys_process_memory() }
+}
+
+/// Current process CPU usage as a percentage.
+pub fn process_cpu_usage() -> f64 {
+    extern fn __grey_sys_process_cpu() -> f64;
+    unsafe { __grey_sys_process_cpu() }
+}
+
+/// Page size in bytes.
+pub fn page_size() -> usize {
+    extern fn __grey_sys_page_size() -> usize;
+    unsafe { __grey_sys_page_size() }
+}
+
+/// Whether we're running in a container (Docker, etc.).
+pub fn is_container() -> bool {
+    // Check common container indicators
+    crate::io::file::exists("/.dockerenv") ||
+    crate::sys::env::var("container").is_some() ||
+    crate::io::file::exists("/run/.containerenv")
+}
+
+/// Target triple (e.g. "x86_64-unknown-linux-gnu").
+pub fn target_triple() -> String {
+    extern fn __grey_sys_target_triple() -> String;
+    unsafe { __grey_sys_target_triple() }
+}
+
+// ─── Helpers ────────────────────────────────────────────────
+
+fn format_bytes(bytes: u64) -> String {
+    const UNITS: &[&str] = &["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+    let mut value = bytes as f64;
+    let mut unit_idx = 0;
+    while value >= 1024.0 && unit_idx < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit_idx += 1;
+    }
+    if unit_idx == 0 {
+        format!("{} {}", bytes, UNITS[0])
+    } else {
+        format!("{:.2} {}", value, UNITS[unit_idx])
+    }
+}

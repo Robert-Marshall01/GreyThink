@@ -1,0 +1,49 @@
+# ── Build artifacts ───────────────────────────────────────────
+build/
+out/
+target/
+dist/
+*.o
+*.so
+*.dylib
+*.dll
+*.exe
+
+# ── Grey++ compiler output ───────────────────────────────────
+*.grey.ir
+*.grey.asm
+*.grey.obj
+.greycache/
+
+# ── IDE / Editor ─────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Dependencies ─────────────────────────────────────────────
+deps/
+vendor/
+node_modules/
+
+# ── Logs & temp ──────────────────────────────────────────────
+*.log
+*.tmp
+*.bak
+.env
+.env.local
+
+# ── Test / coverage ──────────────────────────────────────────
+coverage/
+*.gcda
+*.gcno
+*.profraw
+*.profdata
+
+# ── OS files ─────────────────────────────────────────────────
+.DS_Store
+ehthumbs.db

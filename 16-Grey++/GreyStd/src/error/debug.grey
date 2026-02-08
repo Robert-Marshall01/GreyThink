@@ -1,0 +1,121 @@
+/// error::debug — Debug utilities: dbg!, todo!, unreachable, pretty-printing.
+
+use crate::core::string::String;
+
+/// Print a value's debug representation and return it.
+/// Usage: `let x = dbg!(compute_value());`
+#[macro_export]
+macro_rules! dbg {
+    ($val:expr) => {{
+        let val = $val;
+        eprintln!("[{}:{}] {} = {:?}", file!(), line!(), stringify!($val), &val);
+        val
+    }};
+    ($($val:expr),+ $(,)?) => {
+        ($($crate::dbg!($val)),+)
+    };
+}
+
+/// Mark code as not yet implemented. Panics with a message.
+#[macro_export]
+macro_rules! todo {
+    () => {
+        panic!("not yet implemented: {}:{}", file!(), line!())
+    };
+    ($($arg:tt)*) => {
+        panic!("not yet implemented: {} ({}:{})", format!($($arg)*), file!(), line!())
+    };
+}
+
+/// Mark code that should never be reached. Panics with a message.
+#[macro_export]
+macro_rules! unimplemented {
+    () => {
+        panic!("not implemented: {}:{}", file!(), line!())
+    };
+    ($($arg:tt)*) => {
+        panic!("not implemented: {} ({}:{})", format!($($arg)*), file!(), line!())
+    };
+}
+
+/// Hint to the compiler that this code is unreachable.
+/// Unlike `unreachable!()` / `unimplemented!()`, this is UB if reached.
+pub unsafe fn unreachable_unchecked() -> ! {
+    core::hint::unreachable_unchecked()
+}
+
+/// Pretty-print a value with indentation.
+pub fn pretty_print<T: Debug>(value: &T) -> String {
+    format!("{:#?}", value)
+}
+
+/// Print to stderr with a newline.
+pub fn eprint(s: &str) {
+    extern fn __grey_stderr_write(s: &str);
+    unsafe { __grey_stderr_write(s) }
+}
+
+/// Print to stderr with a newline.
+pub fn eprintln(s: &str) {
+    extern fn __grey_stderr_writeln(s: &str);
+    unsafe { __grey_stderr_writeln(s) }
+}
+
+/// Hexdump a byte slice for debugging.
+pub fn hexdump(data: &[u8]) -> String {
+    let mut out = String::new();
+    let mut offset = 0usize;
+
+    while offset < data.len() {
+        // Offset
+        out.push_str(&format!("{:08x}  ", offset));
+
+        // Hex bytes
+        for i in 0..16 {
+            if offset + i < data.len() {
+                out.push_str(&format!("{:02x} ", data[offset + i]));
+            } else {
+                out.push_str("   ");
+            }
+            if i == 7 { out.push(' '); }
+        }
+
+        out.push_str(" |");
+        // ASCII representation
+        for i in 0..16 {
+            if offset + i < data.len() {
+                let b = data[offset + i];
+                if b >= 0x20 && b < 0x7F {
+                    out.push(b as char);
+                } else {
+                    out.push('.');
+                }
+            }
+        }
+        out.push_str("|\n");
+        offset += 16;
+    }
+
+    out
+}
+
+/// Time a block of code and print the elapsed duration.
+#[macro_export]
+macro_rules! time_it {
+    ($label:expr, $block:expr) => {{
+        let _start = $crate::time::instant::Instant::now();
+        let _result = $block;
+        let _elapsed = _start.elapsed();
+        eprintln!("[TIMER] {}: {}", $label, _elapsed);
+        _result
+    }};
+}
+
+/// Conditional compilation helper for debug-only code.
+#[macro_export]
+macro_rules! debug_only {
+    ($($body:tt)*) => {
+        #[cfg(debug_assertions)]
+        { $($body)* }
+    };
+}

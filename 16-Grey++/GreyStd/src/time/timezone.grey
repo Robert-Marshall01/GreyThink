@@ -1,0 +1,419 @@
+/// time::timezone — Timezone, UTC offsets, and full DateTime type.
+
+use crate::core::string::String;
+use crate::core::vec::Vec;
+use crate::core::option::Option;
+use crate::time::duration::Duration;
+use crate::time::{TimeError, TimeResult};
+
+// ─── UtcOffset ──────────────────────────────────────────────
+
+/// A fixed offset from UTC in seconds.
+pub struct UtcOffset {
+    total_seconds: i32,
+}
+
+impl UtcOffset {
+    pub const UTC: UtcOffset = UtcOffset { total_seconds: 0 };
+
+    /// Create from hours, minutes, seconds. All must share the same sign.
+    pub fn from_hms(hours: i8, minutes: i8, seconds: i8) -> TimeResult<UtcOffset> {
+        let total = hours as i32 * 3600 + minutes as i32 * 60 + seconds as i32;
+        if total.abs() > 93600 { // ±26:00:00
+            return Err(TimeError::Overflow);
+        }
+        Ok(UtcOffset { total_seconds: total })
+    }
+
+    /// Create from total seconds.
+    pub fn from_total_seconds(seconds: i32) -> UtcOffset {
+        UtcOffset { total_seconds: seconds }
+    }
+
+    /// Get the local system timezone offset.
+    pub fn local() -> UtcOffset {
+        extern fn __grey_local_utc_offset_secs() -> i32;
+        UtcOffset { total_seconds: unsafe { __grey_local_utc_offset_secs() } }
+    }
+
+    pub fn total_seconds(&self) -> i32 { self.total_seconds }
+    pub fn hours(&self) -> i8 { (self.total_seconds / 3600) as i8 }
+    pub fn minutes(&self) -> i8 { ((self.total_seconds % 3600) / 60) as i8 }
+    pub fn seconds(&self) -> i8 { (self.total_seconds % 60) as i8 }
+    pub fn is_utc(&self) -> bool { self.total_seconds == 0 }
+
+    /// Format as ±HH:MM.
+    pub fn to_string(&self) -> String {
+        let sign = if self.total_seconds >= 0 { '+' } else { '-' };
+        let abs = self.total_seconds.abs();
+        let h = abs / 3600;
+        let m = (abs % 3600) / 60;
+        format!("{}{:02}:{:02}", sign, h, m)
+    }
+}
+
+impl Clone for UtcOffset { fn clone(&self) -> Self { UtcOffset { total_seconds: self.total_seconds } } }
+impl Copy for UtcOffset {}
+
+// ─── TimeZone ───────────────────────────────────────────────
+
+/// Represents a named timezone with DST transition rules.
+pub struct TimeZone {
+    name: String,
+    /// Ordered list of transitions (unix timestamp, offset after).
+    transitions: Vec<(i64, UtcOffset)>,
+    /// Default offset when no transition applies.
+    default_offset: UtcOffset,
+}
+
+impl TimeZone {
+    pub const UTC: TimeZone = TimeZone {
+        name: String::from("UTC"),
+        transitions: Vec::new(),
+        default_offset: UtcOffset::UTC,
+    };
+
+    /// Load a timezone by IANA name (e.g. "America/New_York").
+    pub fn from_name(name: &str) -> TimeResult<TimeZone> {
+        extern fn __grey_load_tz(name: &str) -> Option<(Vec<(i64, i32)>, i32)>;
+        let result = unsafe { __grey_load_tz(name) };
+        match result {
+            Some((trans, default_secs)) => {
+                let transitions = trans.iter()
+                    .map(|(ts, off)| (*ts, UtcOffset::from_total_seconds(*off)))
+                    .collect();
+                Ok(TimeZone {
+                    name: String::from(name),
+                    transitions,
+                    default_offset: UtcOffset::from_total_seconds(default_secs),
+                })
+            }
+            None => Err(TimeError::UnknownTimezone(String::from(name))),
+        }
+    }
+
+    /// Find the UTC offset at a given unix timestamp.
+    pub fn offset_at(&self, unix_ts: i64) -> UtcOffset {
+        let mut offset = self.default_offset;
+        for (ts, off) in &self.transitions {
+            if unix_ts >= *ts {
+                offset = *off;
+            } else {
+                break;
+            }
+        }
+        offset
+    }
+
+    pub fn name(&self) -> &str { &self.name }
+}
+
+// ─── Date ───────────────────────────────────────────────────
+
+/// A calendar date (year, month 1–12, day 1–31).
+pub struct Date {
+    year: i32,
+    month: u8,
+    day: u8,
+}
+
+impl Date {
+    pub fn new(year: i32, month: u8, day: u8) -> TimeResult<Date> {
+        if month < 1 || month > 12 {
+            return Err(TimeError::InvalidComponent { name: String::from("month"), value: month as i64 });
+        }
+        let max_day = days_in_month(year, month);
+        if day < 1 || day > max_day {
+            return Err(TimeError::InvalidComponent { name: String::from("day"), value: day as i64 });
+        }
+        Ok(Date { year, month, day })
+    }
+
+    pub fn year(&self) -> i32 { self.year }
+    pub fn month(&self) -> u8 { self.month }
+    pub fn day(&self) -> u8 { self.day }
+
+    /// Day of year (1-based).
+    pub fn day_of_year(&self) -> u16 {
+        let mut doy: u16 = 0;
+        for m in 1..self.month {
+            doy += days_in_month(self.year, m) as u16;
+        }
+        doy + self.day as u16
+    }
+
+    /// Day of week: Monday=1 ... Sunday=7 (ISO 8601).
+    pub fn weekday(&self) -> u8 {
+        let jdn = self.to_julian_day();
+        ((jdn % 7 + 7) % 7) as u8 // 0=Monday
+    }
+
+    /// ISO week number (1–53).
+    pub fn iso_week(&self) -> u8 {
+        let doy = self.day_of_year() as i32;
+        let dow = self.weekday() as i32; // 1=Mon
+        let w = (10 + doy - dow) / 7;
+        if w < 1 { 53 } else if w > 52 {
+            let dec31 = Date::new(self.year, 12, 31).unwrap();
+            if dec31.weekday() >= 4 { w as u8 } else { 1 }
+        } else { w as u8 }
+    }
+
+    /// Is leap year?
+    pub fn is_leap_year(&self) -> bool {
+        is_leap_year(self.year)
+    }
+
+    /// Julian Day Number.
+    fn to_julian_day(&self) -> i64 {
+        let a = (14 - self.month as i64) / 12;
+        let y = self.year as i64 + 4800 - a;
+        let m = self.month as i64 + 12 * a - 3;
+        self.day as i64 + (153 * m + 2) / 5 + 365 * y + y / 4 - y / 100 + y / 400 - 32045
+    }
+
+    /// Convert to days since UNIX epoch (1970-01-01).
+    pub fn to_unix_days(&self) -> i64 {
+        self.to_julian_day() - 2440588
+    }
+
+    /// Create from days since UNIX epoch.
+    pub fn from_unix_days(days: i64) -> Date {
+        let jdn = days + 2440588;
+        let f = jdn + 1401 + ((((4 * jdn + 274277) / 146097) * 3) / 4) - 38;
+        let e = 4 * f + 3;
+        let g = (e % 1461) / 4;
+        let h = 5 * g + 2;
+        let day = (h % 153) / 5 + 1;
+        let month = ((h / 153 + 2) % 12) + 1;
+        let year = e / 1461 - 4716 + (14 - month) / 12;
+        Date { year: year as i32, month: month as u8, day: day as u8 }
+    }
+
+    /// Format as ISO 8601 (YYYY-MM-DD).
+    pub fn to_string(&self) -> String {
+        format!("{:04}-{:02}-{:02}", self.year, self.month, self.day)
+    }
+
+    /// Parse from "YYYY-MM-DD".
+    pub fn parse(s: &str) -> TimeResult<Date> {
+        let parts: Vec<&str> = s.split('-').collect();
+        if parts.len() != 3 { return Err(TimeError::ParseError(String::from("expected YYYY-MM-DD"))); }
+        let year = parts[0].parse::<i32>().map_err(|_| TimeError::ParseError(String::from("invalid year")))?;
+        let month = parts[1].parse::<u8>().map_err(|_| TimeError::ParseError(String::from("invalid month")))?;
+        let day = parts[2].parse::<u8>().map_err(|_| TimeError::ParseError(String::from("invalid day")))?;
+        Date::new(year, month, day)
+    }
+}
+
+impl Clone for Date { fn clone(&self) -> Self { Date { year: self.year, month: self.month, day: self.day } } }
+impl Copy for Date {}
+
+// ─── Time ───────────────────────────────────────────────────
+
+/// A time of day (hour 0–23, minute 0–59, second 0–59, nanosecond).
+pub struct Time {
+    hour: u8,
+    minute: u8,
+    second: u8,
+    nanosecond: u32,
+}
+
+impl Time {
+    pub fn new(hour: u8, minute: u8, second: u8, nanosecond: u32) -> TimeResult<Time> {
+        if hour > 23 { return Err(TimeError::InvalidComponent { name: String::from("hour"), value: hour as i64 }); }
+        if minute > 59 { return Err(TimeError::InvalidComponent { name: String::from("minute"), value: minute as i64 }); }
+        if second > 59 { return Err(TimeError::InvalidComponent { name: String::from("second"), value: second as i64 }); }
+        if nanosecond >= 1_000_000_000 { return Err(TimeError::InvalidComponent { name: String::from("nanosecond"), value: nanosecond as i64 }); }
+        Ok(Time { hour, minute, second, nanosecond })
+    }
+
+    pub fn midnight() -> Time { Time { hour: 0, minute: 0, second: 0, nanosecond: 0 } }
+
+    pub fn hour(&self) -> u8 { self.hour }
+    pub fn minute(&self) -> u8 { self.minute }
+    pub fn second(&self) -> u8 { self.second }
+    pub fn nanosecond(&self) -> u32 { self.nanosecond }
+
+    /// Total seconds since midnight.
+    pub fn to_seconds(&self) -> u32 {
+        self.hour as u32 * 3600 + self.minute as u32 * 60 + self.second as u32
+    }
+
+    pub fn to_string(&self) -> String {
+        if self.nanosecond > 0 {
+            format!("{:02}:{:02}:{:02}.{:09}", self.hour, self.minute, self.second, self.nanosecond)
+        } else {
+            format!("{:02}:{:02}:{:02}", self.hour, self.minute, self.second)
+        }
+    }
+
+    pub fn parse(s: &str) -> TimeResult<Time> {
+        let parts: Vec<&str> = s.split(':').collect();
+        if parts.len() < 2 { return Err(TimeError::ParseError(String::from("expected HH:MM[:SS]"))); }
+        let hour = parts[0].parse::<u8>().map_err(|_| TimeError::ParseError(String::from("invalid hour")))?;
+        let minute = parts[1].parse::<u8>().map_err(|_| TimeError::ParseError(String::from("invalid minute")))?;
+        let (second, ns) = if parts.len() >= 3 {
+            let sec_parts: Vec<&str> = parts[2].split('.').collect();
+            let sec = sec_parts[0].parse::<u8>().map_err(|_| TimeError::ParseError(String::from("invalid second")))?;
+            let ns = if sec_parts.len() > 1 {
+                let frac = sec_parts[1];
+                let padded = format!("{:0<9}", frac);
+                padded[..9].parse::<u32>().unwrap_or(0)
+            } else { 0 };
+            (sec, ns)
+        } else { (0, 0) };
+        Time::new(hour, minute, second, ns)
+    }
+}
+
+impl Clone for Time { fn clone(&self) -> Self { Time { hour: self.hour, minute: self.minute, second: self.second, nanosecond: self.nanosecond } } }
+impl Copy for Time {}
+
+// ─── DateTime ───────────────────────────────────────────────
+
+/// A combined date and time with timezone offset.
+pub struct DateTime {
+    date: Date,
+    time: Time,
+    offset: UtcOffset,
+}
+
+impl DateTime {
+    pub fn new(date: Date, time: Time, offset: UtcOffset) -> DateTime {
+        DateTime { date, time, offset }
+    }
+
+    /// Create from UNIX timestamp and offset.
+    pub fn from_unix_timestamp(ts: i64, offset: UtcOffset) -> DateTime {
+        let adjusted = ts + offset.total_seconds() as i64;
+        let days = adjusted.div_euclid(86400);
+        let day_secs = adjusted.rem_euclid(86400) as u32;
+        let date = Date::from_unix_days(days);
+        let hour = (day_secs / 3600) as u8;
+        let minute = ((day_secs % 3600) / 60) as u8;
+        let second = (day_secs % 60) as u8;
+        let time = Time { hour, minute, second, nanosecond: 0 };
+        DateTime { date, time, offset }
+    }
+
+    /// Convert to UNIX timestamp.
+    pub fn to_unix_timestamp(&self) -> i64 {
+        let days = self.date.to_unix_days();
+        let secs = self.time.to_seconds() as i64;
+        days * 86400 + secs - self.offset.total_seconds() as i64
+    }
+
+    pub fn date(&self) -> Date { self.date }
+    pub fn time(&self) -> Time { self.time }
+    pub fn offset(&self) -> UtcOffset { self.offset }
+    pub fn year(&self) -> i32 { self.date.year }
+    pub fn month(&self) -> u8 { self.date.month }
+    pub fn day(&self) -> u8 { self.date.day }
+    pub fn hour(&self) -> u8 { self.time.hour }
+    pub fn minute(&self) -> u8 { self.time.minute }
+    pub fn second(&self) -> u8 { self.time.second }
+
+    /// Convert to a different timezone offset.
+    pub fn to_offset(&self, new_offset: UtcOffset) -> DateTime {
+        let ts = self.to_unix_timestamp();
+        DateTime::from_unix_timestamp(ts, new_offset)
+    }
+
+    /// Convert to UTC.
+    pub fn to_utc(&self) -> DateTime {
+        self.to_offset(UtcOffset::UTC)
+    }
+
+    /// Add a duration.
+    pub fn add_duration(&self, d: Duration) -> DateTime {
+        let ts = self.to_unix_timestamp() + d.as_secs() as i64;
+        DateTime::from_unix_timestamp(ts, self.offset)
+    }
+
+    /// Subtract a duration.
+    pub fn sub_duration(&self, d: Duration) -> DateTime {
+        let ts = self.to_unix_timestamp() - d.as_secs() as i64;
+        DateTime::from_unix_timestamp(ts, self.offset)
+    }
+
+    /// Duration between two datetimes.
+    pub fn duration_since(&self, other: &DateTime) -> Duration {
+        let diff = self.to_unix_timestamp() - other.to_unix_timestamp();
+        Duration::from_secs(diff.unsigned_abs())
+    }
+
+    /// Format as ISO 8601 (e.g. "2025-07-10T14:30:00+05:30").
+    pub fn to_rfc3339(&self) -> String {
+        format!("{}T{}{}", self.date.to_string(), self.time.to_string(), self.offset.to_string())
+    }
+
+    /// Parse from RFC 3339 / ISO 8601 string.
+    pub fn parse_rfc3339(s: &str) -> TimeResult<DateTime> {
+        let t_pos = s.find('T').or_else(|| s.find(' '))
+            .ok_or(TimeError::ParseError(String::from("missing T separator")))?;
+        let date_str = &s[..t_pos];
+        let rest = &s[t_pos + 1..];
+
+        // Find offset: +, -, or Z
+        let (time_str, offset) = if rest.ends_with('Z') {
+            (&rest[..rest.len() - 1], UtcOffset::UTC)
+        } else if let Some(pos) = rest.rfind('+') {
+            let off_str = &rest[pos..];
+            let off = parse_offset(off_str)?;
+            (&rest[..pos], off)
+        } else if let Some(pos) = rest.rfind('-') {
+            if pos > 0 {
+                let off_str = &rest[pos..];
+                let off = parse_offset(off_str)?;
+                (&rest[..pos], off)
+            } else {
+                (rest, UtcOffset::UTC)
+            }
+        } else {
+            (rest, UtcOffset::UTC)
+        };
+
+        let date = Date::parse(date_str)?;
+        let time = Time::parse(time_str)?;
+        Ok(DateTime::new(date, time, offset))
+    }
+
+    pub fn to_string(&self) -> String {
+        self.to_rfc3339()
+    }
+}
+
+impl Clone for DateTime { fn clone(&self) -> Self { DateTime { date: self.date, time: self.time, offset: self.offset } } }
+impl Copy for DateTime {}
+
+// ─── Helpers ────────────────────────────────────────────────
+
+fn is_leap_year(year: i32) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+}
+
+fn days_in_month(year: i32, month: u8) -> u8 {
+    match month {
+        1 => 31, 2 => if is_leap_year(year) { 29 } else { 28 },
+        3 => 31, 4 => 30, 5 => 31, 6 => 30,
+        7 => 31, 8 => 31, 9 => 30, 10 => 31, 11 => 30, 12 => 31,
+        _ => 0,
+    }
+}
+
+fn parse_offset(s: &str) -> TimeResult<UtcOffset> {
+    // "+05:30" or "-05:30" or "+0530"
+    if s.len() < 3 { return Err(TimeError::ParseError(String::from("invalid offset"))); }
+    let sign: i32 = if s.starts_with('+') { 1 } else { -1 };
+    let digits = &s[1..];
+    let (h, m) = if digits.contains(':') {
+        let parts: Vec<&str> = digits.split(':').collect();
+        (parts[0].parse::<i32>().unwrap_or(0), parts.get(1).and_then(|p| p.parse::<i32>().ok()).unwrap_or(0))
+    } else if digits.len() == 4 {
+        (digits[..2].parse::<i32>().unwrap_or(0), digits[2..4].parse::<i32>().unwrap_or(0))
+    } else {
+        (digits.parse::<i32>().unwrap_or(0), 0)
+    };
+    Ok(UtcOffset::from_total_seconds(sign * (h * 3600 + m * 60)))
+}

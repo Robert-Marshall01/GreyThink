@@ -1,0 +1,250 @@
+/// time::duration — Represents a span of time with nanosecond precision.
+
+use crate::core::string::String;
+use crate::core::option::Option;
+
+/// A span of time, stored as seconds + nanoseconds (sub-second).
+/// Always non-negative.
+pub struct Duration {
+    secs: u64,
+    nanos: u32, // 0..999_999_999
+}
+
+impl Duration {
+    /// Zero duration.
+    pub const ZERO: Duration = Duration { secs: 0, nanos: 0 };
+
+    /// Maximum representable duration.
+    pub const MAX: Duration = Duration { secs: u64::MAX, nanos: 999_999_999 };
+
+    /// One nanosecond.
+    pub const NANOSECOND: Duration = Duration { secs: 0, nanos: 1 };
+
+    /// One microsecond.
+    pub const MICROSECOND: Duration = Duration { secs: 0, nanos: 1_000 };
+
+    /// One millisecond.
+    pub const MILLISECOND: Duration = Duration { secs: 0, nanos: 1_000_000 };
+
+    /// One second.
+    pub const SECOND: Duration = Duration { secs: 1, nanos: 0 };
+
+    /// One minute.
+    pub const MINUTE: Duration = Duration { secs: 60, nanos: 0 };
+
+    /// One hour.
+    pub const HOUR: Duration = Duration { secs: 3_600, nanos: 0 };
+
+    /// One day (24 hours).
+    pub const DAY: Duration = Duration { secs: 86_400, nanos: 0 };
+
+    // ─── Constructors ───────────────────────────────────
+
+    /// Creates a duration from seconds and nanoseconds.
+    /// Normalizes nanos >= 1_000_000_000 into additional seconds.
+    pub fn new(secs: u64, nanos: u32) -> Duration {
+        let extra = (nanos / 1_000_000_000) as u64;
+        Duration {
+            secs: secs.saturating_add(extra),
+            nanos: nanos % 1_000_000_000,
+        }
+    }
+
+    pub fn from_secs(secs: u64) -> Duration { Duration { secs, nanos: 0 } }
+    pub fn from_millis(millis: u64) -> Duration { Duration::new(millis / 1_000, ((millis % 1_000) * 1_000_000) as u32) }
+    pub fn from_micros(micros: u64) -> Duration { Duration::new(micros / 1_000_000, ((micros % 1_000_000) * 1_000) as u32) }
+    pub fn from_nanos(nanos: u64) -> Duration { Duration::new(nanos / 1_000_000_000, (nanos % 1_000_000_000) as u32) }
+
+    /// Creates from a floating-point number of seconds.
+    pub fn from_secs_f64(secs: f64) -> Duration {
+        assert!(secs >= 0.0, "Duration::from_secs_f64: negative value");
+        let whole_secs = secs as u64;
+        let frac_nanos = ((secs - whole_secs as f64) * 1_000_000_000.0) as u32;
+        Duration::new(whole_secs, frac_nanos)
+    }
+
+    // ─── Accessors ──────────────────────────────────────
+
+    pub fn as_secs(&self) -> u64 { self.secs }
+    pub fn subsec_nanos(&self) -> u32 { self.nanos }
+    pub fn subsec_micros(&self) -> u32 { self.nanos / 1_000 }
+    pub fn subsec_millis(&self) -> u32 { self.nanos / 1_000_000 }
+
+    pub fn as_millis(&self) -> u128 {
+        self.secs as u128 * 1_000 + self.nanos as u128 / 1_000_000
+    }
+
+    pub fn as_micros(&self) -> u128 {
+        self.secs as u128 * 1_000_000 + self.nanos as u128 / 1_000
+    }
+
+    pub fn as_nanos(&self) -> u128 {
+        self.secs as u128 * 1_000_000_000 + self.nanos as u128
+    }
+
+    pub fn as_secs_f64(&self) -> f64 {
+        self.secs as f64 + self.nanos as f64 / 1_000_000_000.0
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.secs == 0 && self.nanos == 0
+    }
+
+    // ─── Arithmetic ─────────────────────────────────────
+
+    pub fn checked_add(self, rhs: Duration) -> Option<Duration> {
+        let mut secs = self.secs.checked_add(rhs.secs)?;
+        let nanos = self.nanos + rhs.nanos;
+        if nanos >= 1_000_000_000 {
+            secs = secs.checked_add(1)?;
+        }
+        Some(Duration { secs, nanos: nanos % 1_000_000_000 })
+    }
+
+    pub fn saturating_add(self, rhs: Duration) -> Duration {
+        self.checked_add(rhs).unwrap_or(Duration::MAX)
+    }
+
+    pub fn checked_sub(self, rhs: Duration) -> Option<Duration> {
+        let secs = self.secs.checked_sub(rhs.secs)?;
+        if self.nanos >= rhs.nanos {
+            Some(Duration { secs, nanos: self.nanos - rhs.nanos })
+        } else {
+            let secs = secs.checked_sub(1)?;
+            Some(Duration { secs, nanos: 1_000_000_000 + self.nanos - rhs.nanos })
+        }
+    }
+
+    pub fn saturating_sub(self, rhs: Duration) -> Duration {
+        self.checked_sub(rhs).unwrap_or(Duration::ZERO)
+    }
+
+    pub fn checked_mul(self, rhs: u32) -> Option<Duration> {
+        let total_nanos = self.nanos as u64 * rhs as u64;
+        let extra_secs = total_nanos / 1_000_000_000;
+        let nanos = (total_nanos % 1_000_000_000) as u32;
+        let secs = self.secs.checked_mul(rhs as u64)?.checked_add(extra_secs)?;
+        Some(Duration { secs, nanos })
+    }
+
+    pub fn checked_div(self, rhs: u32) -> Option<Duration> {
+        if rhs == 0 { return None; }
+        let secs = self.secs / rhs as u64;
+        let remainder_secs = self.secs % rhs as u64;
+        let total_nanos = remainder_secs * 1_000_000_000 + self.nanos as u64;
+        let nanos = (total_nanos / rhs as u64) as u32;
+        Some(Duration { secs, nanos })
+    }
+
+    /// Return the absolute difference between two durations.
+    pub fn abs_diff(self, other: Duration) -> Duration {
+        if self >= other {
+            self.checked_sub(other).unwrap_or(Duration::ZERO)
+        } else {
+            other.checked_sub(self).unwrap_or(Duration::ZERO)
+        }
+    }
+
+    /// Multiply by a floating-point factor.
+    pub fn mul_f64(self, factor: f64) -> Duration {
+        Duration::from_secs_f64(self.as_secs_f64() * factor)
+    }
+
+    /// Divide by a floating-point factor.
+    pub fn div_f64(self, factor: f64) -> Duration {
+        Duration::from_secs_f64(self.as_secs_f64() / factor)
+    }
+}
+
+// ─── Operator impls ──────────────────────────────────────────
+
+impl Add for Duration {
+    type Output = Duration;
+    fn add(self, rhs: Duration) -> Duration {
+        self.checked_add(rhs).expect("duration overflow")
+    }
+}
+
+impl Sub for Duration {
+    type Output = Duration;
+    fn sub(self, rhs: Duration) -> Duration {
+        self.checked_sub(rhs).expect("duration underflow")
+    }
+}
+
+impl Mul<u32> for Duration {
+    type Output = Duration;
+    fn mul(self, rhs: u32) -> Duration {
+        self.checked_mul(rhs).expect("duration overflow on mul")
+    }
+}
+
+impl Div<u32> for Duration {
+    type Output = Duration;
+    fn div(self, rhs: u32) -> Duration {
+        self.checked_div(rhs).expect("divide by zero")
+    }
+}
+
+impl PartialEq for Duration {
+    fn eq(&self, other: &Duration) -> bool {
+        self.secs == other.secs && self.nanos == other.nanos
+    }
+}
+
+impl Eq for Duration {}
+
+impl PartialOrd for Duration {
+    fn partial_cmp(&self, other: &Duration) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Duration {
+    fn cmp(&self, other: &Duration) -> Ordering {
+        self.secs.cmp(&other.secs).then(self.nanos.cmp(&other.nanos))
+    }
+}
+
+impl Clone for Duration {
+    fn clone(&self) -> Duration { Duration { secs: self.secs, nanos: self.nanos } }
+}
+
+impl Copy for Duration {}
+
+impl Default for Duration {
+    fn default() -> Duration { Duration::ZERO }
+}
+
+impl Display for Duration {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        if self.secs >= 3600 {
+            let hours = self.secs / 3600;
+            let mins = (self.secs % 3600) / 60;
+            let secs = self.secs % 60;
+            write!(f, "{}h{}m{}s", hours, mins, secs)
+        } else if self.secs >= 60 {
+            let mins = self.secs / 60;
+            let secs = self.secs % 60;
+            write!(f, "{}m{}s", mins, secs)
+        } else if self.secs > 0 {
+            if self.nanos > 0 {
+                write!(f, "{}.{:03}s", self.secs, self.nanos / 1_000_000)
+            } else {
+                write!(f, "{}s", self.secs)
+            }
+        } else if self.nanos >= 1_000_000 {
+            write!(f, "{}ms", self.nanos / 1_000_000)
+        } else if self.nanos >= 1_000 {
+            write!(f, "{}µs", self.nanos / 1_000)
+        } else {
+            write!(f, "{}ns", self.nanos)
+        }
+    }
+}
+
+impl Debug for Duration {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f, "Duration {{ secs: {}, nanos: {} }}", self.secs, self.nanos)
+    }
+}

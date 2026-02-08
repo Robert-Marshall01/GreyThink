@@ -1,0 +1,237 @@
+/// concurrent::task — Async tasks and structured concurrency.
+///
+/// Tasks are lightweight units of async work scheduled on the event loop.
+/// They are similar to goroutines or Kotlin coroutines.
+
+/// A handle to a spawned task, allowing you to await its result.
+pub struct JoinHandle<T> {
+    id: TaskId,
+    result: Arc<Mutex<Option<Result<T, TaskError>>>>,
+    waker: Arc<AtomicWaker>,
+}
+
+impl<T> JoinHandle<T> {
+    /// Awaits the task's completion and returns its result.
+    pub async fn join(self) -> Result<T, TaskError> {
+        loop {
+            {
+                let guard = self.result.lock();
+                if let Some(result) = guard.take() {
+                    return result;
+                }
+            }
+            // Yield and wait to be woken
+            self.waker.register(current_task_waker());
+            yield_now().await;
+        }
+    }
+
+    /// Returns true if the task has completed.
+    pub fn is_finished(self) -> bool {
+        self.result.lock().is_some()
+    }
+
+    /// Cancels the task.
+    pub fn cancel(self) {
+        runtime::cancel_task(self.id);
+    }
+
+    /// Detaches the handle, allowing the task to run independently.
+    pub fn detach(self) {
+        mem::forget(self);
+    }
+}
+
+impl<T> Future for JoinHandle<T> {
+    type Output = Result<T, TaskError>;
+
+    fn poll(self, cx: &mut Context) -> Poll<Self::Output> {
+        let guard = self.result.lock();
+        match guard.take() {
+            Some(result) => Poll::Ready(result),
+            None => {
+                self.waker.register(cx.waker().clone());
+                Poll::Pending
+            }
+        }
+    }
+}
+
+/// Unique identifier for a task.
+pub struct TaskId {
+    id: u64,
+}
+
+/// Errors that can occur during task execution.
+pub enum TaskError {
+    /// The task panicked.
+    Panicked(String),
+    /// The task was cancelled.
+    Cancelled,
+    /// The task timed out.
+    TimedOut,
+    /// A joining error.
+    JoinError(String),
+}
+
+impl Display for TaskError {
+    fn fmt(self, f: &mut Formatter) -> Result<(), FormatError> {
+        match self {
+            TaskError::Panicked(msg)   => write!(f, "task panicked: {}", msg),
+            TaskError::Cancelled       => write!(f, "task cancelled"),
+            TaskError::TimedOut        => write!(f, "task timed out"),
+            TaskError::JoinError(msg)  => write!(f, "join error: {}", msg),
+        }
+    }
+}
+
+/// A task descriptor for introspection.
+pub struct Task {
+    pub id: TaskId,
+    pub name: Option<String>,
+    pub state: TaskState,
+}
+
+pub enum TaskState {
+    /// Task is ready to run.
+    Ready,
+    /// Task is suspended waiting for something.
+    Suspended,
+    /// Task is currently running.
+    Running,
+    /// Task has completed.
+    Completed,
+    /// Task was cancelled.
+    Cancelled,
+}
+
+// ─── Task Spawning ──────────────────────────────────────────────────────────
+
+/// Spawns a new async task on the runtime.
+///
+/// ```grey
+/// let handle = spawn(async {
+///     let data = fetch_data().await;
+///     process(data)
+/// });
+/// let result = handle.join().await?;
+/// ```
+pub fn spawn<F: Future<Output = T> + Send + 'static, T: Send + 'static>(future: F) -> JoinHandle<T> {
+    let result = Arc::new(Mutex::new(None));
+    let waker = Arc::new(AtomicWaker::new());
+
+    let result_clone = result.clone();
+    let waker_clone = waker.clone();
+
+    let id = runtime::spawn_task(async move {
+        let output = future.await;
+        *result_clone.lock() = Some(Ok(output));
+        waker_clone.wake();
+    });
+
+    JoinHandle { id, result, waker }
+}
+
+/// Spawns a blocking task on a dedicated thread pool.
+/// Use this for CPU-heavy or synchronous I/O operations.
+pub fn spawn_blocking<F: FnOnce() -> T + Send + 'static, T: Send + 'static>(f: F) -> JoinHandle<T> {
+    let result = Arc::new(Mutex::new(None));
+    let waker = Arc::new(AtomicWaker::new());
+
+    let result_clone = result.clone();
+    let waker_clone = waker.clone();
+
+    let id = runtime::spawn_blocking(move || {
+        let output = f();
+        *result_clone.lock() = Some(Ok(output));
+        waker_clone.wake();
+    });
+
+    JoinHandle { id, result, waker }
+}
+
+/// Spawns a named task for debugging.
+pub fn spawn_named<F: Future<Output = T> + Send + 'static, T: Send + 'static>(
+    name: &str,
+    future: F,
+) -> JoinHandle<T> {
+    let handle = spawn(future);
+    runtime::set_task_name(handle.id, name);
+    handle
+}
+
+/// Yields the current task, allowing other tasks to run.
+pub async fn yield_now() {
+    struct YieldNow { yielded: bool }
+    impl Future for YieldNow {
+        type Output = ();
+        fn poll(mut self, cx: &mut Context) -> Poll<()> {
+            if self.yielded {
+                Poll::Ready(())
+            } else {
+                self.yielded = true;
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
+        }
+    }
+    YieldNow { yielded: false }.await
+}
+
+/// Returns the ID of the current task.
+pub fn current_task_id() -> TaskId {
+    runtime::current_task_id()
+}
+
+// ─── Structured Concurrency ─────────────────────────────────────────────────
+
+/// A scope for structured concurrency. All tasks spawned within the scope
+/// are guaranteed to complete before the scope exits.
+///
+/// ```grey
+/// scope(async |s| {
+///     s.spawn(async { compute_a().await });
+///     s.spawn(async { compute_b().await });
+///     // Both tasks complete before scope returns
+/// }).await;
+/// ```
+pub struct Scope<'a> {
+    handles: Vec<JoinHandle<()>>,
+    _phantom: PhantomData<&'a ()>,
+}
+
+impl<'a> Scope<'a> {
+    /// Spawns a task within the scope.
+    pub fn spawn<F: Future<Output = ()> + Send + 'a>(mut self, future: F) {
+        self.handles.push(spawn(future));
+    }
+}
+
+/// Creates a structured concurrency scope.
+pub async fn scope<F: FnOnce(&mut Scope<'_>)>(f: F) -> Result<(), TaskError> {
+    let mut scope = Scope { handles: Vec::new(), _phantom: PhantomData };
+    f(&mut scope);
+    for handle in scope.handles {
+        handle.join().await?;
+    }
+    Ok(())
+}
+
+/// Runs multiple futures concurrently and returns when all complete.
+pub async fn join_all<T, F: Future<Output = T>>(futures: Vec<F>) -> Vec<T> {
+    let handles: Vec<JoinHandle<T>> = futures.into_iter()
+        .map(|f| spawn(f))
+        .collect();
+
+    let mut results = Vec::with_capacity(handles.len());
+    for handle in handles {
+        results.push(handle.join().await.unwrap());
+    }
+    results
+}
+
+/// Runs multiple futures concurrently and returns the first one to complete.
+pub async fn select<T, F: Future<Output = T>>(futures: Vec<F>) -> T {
+    // Implementation uses runtime's select mechanism
+    runtime::select(futures).await
+}

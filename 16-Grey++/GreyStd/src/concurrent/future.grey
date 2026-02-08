@@ -1,0 +1,300 @@
+/// concurrent::future — Future trait and polling mechanism.
+///
+/// Futures represent values that will be available in the future.
+/// They are the foundation of Grey++'s async/await system.
+
+/// The result of polling a Future.
+pub enum Poll<T> {
+    /// The future has completed with this value.
+    Ready(T),
+    /// The future is not yet ready; the waker will be notified.
+    Pending,
+}
+
+impl<T> Poll<T> {
+    /// Returns true if the poll is Ready.
+    pub fn is_ready(self) -> bool {
+        match self { Poll::Ready(_) => true, _ => false }
+    }
+
+    /// Returns true if the poll is Pending.
+    pub fn is_pending(self) -> bool {
+        !self.is_ready()
+    }
+
+    /// Maps the Ready value.
+    pub fn map<U, F: FnOnce(T) -> U>(self, f: F) -> Poll<U> {
+        match self {
+            Poll::Ready(v) => Poll::Ready(f(v)),
+            Poll::Pending  => Poll::Pending,
+        }
+    }
+}
+
+/// The core Future trait. All async computations implement this.
+pub trait Future {
+    type Output;
+
+    /// Attempts to resolve the future. If it returns `Pending`, the runtime
+    /// will call `poll` again when the waker is triggered.
+    fn poll(self, cx: &mut Context) -> Poll<Self::Output>;
+}
+
+/// Context provided to `poll()`, containing the waker.
+pub struct Context {
+    waker: Waker,
+}
+
+impl Context {
+    /// Creates a new context with the given waker.
+    pub fn new(waker: Waker) -> Context {
+        Context { waker }
+    }
+
+    /// Returns a reference to the waker.
+    pub fn waker(self) -> &Waker {
+        &self.waker
+    }
+}
+
+/// A handle to wake up a task when it should be polled again.
+pub struct Waker {
+    inner: Arc<dyn Wake>,
+}
+
+impl Waker {
+    /// Creates a new Waker from a Wake implementor.
+    pub fn new(wake: Arc<dyn Wake>) -> Waker {
+        Waker { inner: wake }
+    }
+
+    /// Wakes the associated task.
+    pub fn wake(self) {
+        self.inner.wake();
+    }
+
+    /// Wakes the task without consuming the waker.
+    pub fn wake_by_ref(self) {
+        self.inner.wake_by_ref();
+    }
+}
+
+impl Clone for Waker {
+    fn clone(self) -> Waker {
+        Waker { inner: self.inner.clone() }
+    }
+}
+
+/// Trait for wake-up notification targets.
+pub trait Wake: Send + Sync {
+    fn wake(self: Arc<Self>);
+
+    fn wake_by_ref(self: &Arc<Self>) {
+        self.clone().wake();
+    }
+}
+
+/// An atomic waker that can be shared across threads.
+pub struct AtomicWaker {
+    waker: Mutex<Option<Waker>>,
+}
+
+impl AtomicWaker {
+    pub fn new() -> AtomicWaker {
+        AtomicWaker { waker: Mutex::new(None) }
+    }
+
+    /// Registers a waker.
+    pub fn register(self, waker: Waker) {
+        *self.waker.lock() = Some(waker);
+    }
+
+    /// Wakes the registered waker, if any.
+    pub fn wake(self) {
+        if let Some(waker) = self.waker.lock().take() {
+            waker.wake();
+        }
+    }
+}
+
+// ─── Future Combinators ─────────────────────────────────────────────────────
+
+/// A future that is immediately ready with a value.
+pub struct Ready<T> {
+    value: Option<T>,
+}
+
+impl<T> Future for Ready<T> {
+    type Output = T;
+    fn poll(mut self, _cx: &mut Context) -> Poll<T> {
+        Poll::Ready(self.value.take().expect("Ready polled after completion"))
+    }
+}
+
+/// Creates a future that is immediately ready.
+pub fn ready<T>(value: T) -> Ready<T> {
+    Ready { value: Some(value) }
+}
+
+/// A future that is never ready.
+pub struct Pending<T> {
+    _phantom: PhantomData<T>,
+}
+
+impl<T> Future for Pending<T> {
+    type Output = T;
+    fn poll(self, _cx: &mut Context) -> Poll<T> {
+        Poll::Pending
+    }
+}
+
+/// Creates a future that is never ready.
+pub fn pending<T>() -> Pending<T> {
+    Pending { _phantom: PhantomData }
+}
+
+/// A future that maps the output of another future.
+pub struct Map<F, Func> {
+    future: F,
+    f: Option<Func>,
+}
+
+impl<T, U, F: Future<Output = T>, Func: FnOnce(T) -> U> Future for Map<F, Func> {
+    type Output = U;
+    fn poll(mut self, cx: &mut Context) -> Poll<U> {
+        match self.future.poll(cx) {
+            Poll::Ready(v) => Poll::Ready((self.f.take().unwrap())(v)),
+            Poll::Pending  => Poll::Pending,
+        }
+    }
+}
+
+/// A future that chains two futures.
+pub struct AndThen<F1, F2, Func> {
+    state: AndThenState<F1, F2>,
+    f: Option<Func>,
+}
+
+enum AndThenState<F1, F2> {
+    First(F1),
+    Second(F2),
+}
+
+impl<T, U, F1: Future<Output = T>, F2: Future<Output = U>, Func: FnOnce(T) -> F2>
+    Future for AndThen<F1, F2, Func>
+{
+    type Output = U;
+    fn poll(mut self, cx: &mut Context) -> Poll<U> {
+        loop {
+            match &mut self.state {
+                AndThenState::First(f1) => {
+                    match f1.poll(cx) {
+                        Poll::Ready(v) => {
+                            let f2 = (self.f.take().unwrap())(v);
+                            self.state = AndThenState::Second(f2);
+                        }
+                        Poll::Pending => return Poll::Pending,
+                    }
+                }
+                AndThenState::Second(f2) => {
+                    return f2.poll(cx);
+                }
+            }
+        }
+    }
+}
+
+/// Joins two futures, returning both results.
+pub struct Join<A, B> {
+    a: Option<A>,
+    b: Option<B>,
+    a_result: Option<A::Output>,
+    b_result: Option<B::Output>,
+}
+
+pub fn join<A: Future, B: Future>(a: A, b: B) -> Join<A, B> {
+    Join { a: Some(a), b: Some(b), a_result: None, b_result: None }
+}
+
+impl<A: Future, B: Future> Future for Join<A, B> {
+    type Output = (A::Output, B::Output);
+
+    fn poll(mut self, cx: &mut Context) -> Poll<(A::Output, B::Output)> {
+        if self.a_result.is_none() {
+            if let Some(ref mut a) = self.a {
+                if let Poll::Ready(v) = a.poll(cx) {
+                    self.a_result = Some(v);
+                    self.a = None;
+                }
+            }
+        }
+
+        if self.b_result.is_none() {
+            if let Some(ref mut b) = self.b {
+                if let Poll::Ready(v) = b.poll(cx) {
+                    self.b_result = Some(v);
+                    self.b = None;
+                }
+            }
+        }
+
+        if self.a_result.is_some() && self.b_result.is_some() {
+            Poll::Ready((self.a_result.take().unwrap(), self.b_result.take().unwrap()))
+        } else {
+            Poll::Pending
+        }
+    }
+}
+
+// ─── FutureExt — Extension methods ─────────────────────────────────────────
+
+pub trait FutureExt: Future {
+    /// Maps the output of this future.
+    fn map<U, F: FnOnce(Self::Output) -> U>(self, f: F) -> Map<Self, F> {
+        Map { future: self, f: Some(f) }
+    }
+
+    /// Chains a computation on the output.
+    fn and_then<U, F2: Future<Output = U>, F: FnOnce(Self::Output) -> F2>(
+        self, f: F
+    ) -> AndThen<Self, F2, F> {
+        AndThen { state: AndThenState::First(self), f: Some(f) }
+    }
+
+    /// Wraps this future with a timeout.
+    fn timeout(self, duration: Duration) -> Timeout<Self> {
+        Timeout { future: self, deadline: Instant::now() + duration }
+    }
+
+    /// Boxes this future for dynamic dispatch.
+    fn boxed(self) -> Box<dyn Future<Output = Self::Output> + Send> {
+        Box::new(self)
+    }
+}
+
+// Blanket implementation
+impl<F: Future> FutureExt for F {}
+
+pub struct Timeout<F> {
+    future: F,
+    deadline: Instant,
+}
+
+impl<F: Future> Future for Timeout<F> {
+    type Output = Result<F::Output, TimeoutError>;
+
+    fn poll(mut self, cx: &mut Context) -> Poll<Self::Output> {
+        match self.future.poll(cx) {
+            Poll::Ready(v) => Poll::Ready(Ok(v)),
+            Poll::Pending => {
+                if Instant::now() >= self.deadline {
+                    Poll::Ready(Err(TimeoutError))
+                } else {
+                    Poll::Pending
+                }
+            }
+        }
+    }
+}
+
+pub struct TimeoutError;

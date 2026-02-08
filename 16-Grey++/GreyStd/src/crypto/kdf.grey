@@ -1,0 +1,296 @@
+/// crypto::kdf — Key derivation functions (PBKDF2, HKDF, scrypt, Argon2).
+
+use crate::core::vec::Vec;
+use crate::core::string::String;
+use crate::crypto::{CryptoResult, CryptoError};
+use crate::crypto::hash::HashAlgorithm;
+
+/// Parameters for key derivation functions.
+pub struct KdfParams {
+    /// Output key length in bytes.
+    pub key_len: usize,
+    /// Salt value.
+    pub salt: Vec<u8>,
+}
+
+impl KdfParams {
+    pub fn new(key_len: usize, salt: &[u8]) -> KdfParams {
+        KdfParams { key_len, salt: salt.to_vec() }
+    }
+
+    /// Generate a random salt of the given length.
+    pub fn with_random_salt(key_len: usize, salt_len: usize) -> CryptoResult<KdfParams> {
+        let salt = crate::crypto::random::random_bytes(salt_len)?;
+        Ok(KdfParams { key_len, salt })
+    }
+}
+
+// ─── PBKDF2 ─────────────────────────────────────────────────
+
+/// Derive a key using PBKDF2-HMAC.
+///
+/// # Parameters
+/// - `password`: Password bytes
+/// - `salt`: Salt bytes (should be >= 16 bytes)
+/// - `iterations`: Number of iterations (OWASP recommends >= 600,000 for SHA-256)
+/// - `hash_alg`: Hash algorithm (SHA-256 recommended)
+/// - `key_len`: Desired output length in bytes
+pub fn pbkdf2(
+    password: &[u8],
+    salt: &[u8],
+    iterations: u32,
+    hash_alg: HashAlgorithm,
+    key_len: usize,
+) -> CryptoResult<Vec<u8>> {
+    if iterations == 0 {
+        return Err(CryptoError::InvalidKey(String::from("iterations must be > 0")));
+    }
+
+    let hash_len = hash_alg.output_len();
+    let blocks_needed = (key_len + hash_len - 1) / hash_len;
+    let mut derived = Vec::with_capacity(blocks_needed * hash_len);
+
+    for block_idx in 1..=blocks_needed as u32 {
+        // U1 = HMAC(password, salt || INT_32_BE(block_idx))
+        let mut salt_block = salt.to_vec();
+        salt_block.extend_from_slice(&block_idx.to_be_bytes());
+
+        let hmac = crate::crypto::hmac::Hmac::new(hash_alg, password);
+        let mut u = hmac.sign(&salt_block);
+        let mut result = u.as_bytes().to_vec();
+
+        // U2..Un
+        for _ in 1..iterations {
+            u = hmac.sign(u.as_bytes());
+            let u_bytes = u.as_bytes();
+            for j in 0..result.len() {
+                result[j] ^= u_bytes[j];
+            }
+        }
+
+        derived.extend_from_slice(&result);
+    }
+
+    derived.truncate(key_len);
+    Ok(derived)
+}
+
+// ─── HKDF ───────────────────────────────────────────────────
+
+/// HKDF (HMAC-based Key Derivation Function, RFC 5869).
+///
+/// # Parameters
+/// - `ikm`: Input keying material
+/// - `salt`: Optional salt (if empty, uses a zero-filled hash-length array)
+/// - `info`: Application-specific context
+/// - `hash_alg`: Hash algorithm
+/// - `key_len`: Desired output length
+pub fn hkdf(
+    ikm: &[u8],
+    salt: &[u8],
+    info: &[u8],
+    hash_alg: HashAlgorithm,
+    key_len: usize,
+) -> CryptoResult<Vec<u8>> {
+    let hash_len = hash_alg.output_len();
+
+    // Step 1: Extract
+    let actual_salt = if salt.is_empty() {
+        vec![0u8; hash_len]
+    } else {
+        salt.to_vec()
+    };
+    let prk = crate::crypto::hmac::Hmac::new(hash_alg, &actual_salt).sign(ikm);
+
+    // Step 2: Expand
+    let n = (key_len + hash_len - 1) / hash_len;
+    if n > 255 {
+        return Err(CryptoError::InvalidKey(String::from("HKDF output too long")));
+    }
+
+    let hmac = crate::crypto::hmac::Hmac::new(hash_alg, prk.as_bytes());
+    let mut okm = Vec::with_capacity(n * hash_len);
+    let mut t = Vec::new();
+
+    for i in 1..=n {
+        let mut input = Vec::new();
+        input.extend_from_slice(&t);
+        input.extend_from_slice(info);
+        input.push(i as u8);
+        let digest = hmac.sign(&input);
+        t = digest.as_bytes().to_vec();
+        okm.extend_from_slice(&t);
+    }
+
+    okm.truncate(key_len);
+    Ok(okm)
+}
+
+// ─── scrypt ─────────────────────────────────────────────────
+
+/// scrypt parameters.
+pub struct ScryptParams {
+    /// CPU/memory cost parameter (N). Must be a power of 2.
+    pub n: u64,
+    /// Block size parameter (r).
+    pub r: u32,
+    /// Parallelism parameter (p).
+    pub p: u32,
+}
+
+impl ScryptParams {
+    /// Recommended parameters for interactive logins.
+    pub fn interactive() -> ScryptParams {
+        ScryptParams { n: 32768, r: 8, p: 1 }
+    }
+
+    /// Recommended parameters for sensitive data.
+    pub fn sensitive() -> ScryptParams {
+        ScryptParams { n: 1048576, r: 8, p: 1 }
+    }
+}
+
+/// Derive a key using scrypt.
+pub fn scrypt(
+    password: &[u8],
+    salt: &[u8],
+    params: &ScryptParams,
+    key_len: usize,
+) -> CryptoResult<Vec<u8>> {
+    if !params.n.is_power_of_two() {
+        return Err(CryptoError::InvalidKey(String::from("scrypt N must be a power of 2")));
+    }
+    extern fn __grey_scrypt(password: &[u8], salt: &[u8], n: u64, r: u32, p: u32, key_len: usize) -> Option<Vec<u8>>;
+    unsafe { __grey_scrypt(password, salt, params.n, params.r, params.p, key_len) }
+        .ok_or(CryptoError::Internal(String::from("scrypt derivation failed")))
+}
+
+// ─── Argon2 ─────────────────────────────────────────────────
+
+/// Argon2 variant.
+pub enum Argon2Variant {
+    /// Data-dependent memory access (side-channel vulnerable but stronger against GPU).
+    Argon2d,
+    /// Data-independent memory access (side-channel resistant).
+    Argon2i,
+    /// Hybrid (recommended for password hashing).
+    Argon2id,
+}
+
+impl Argon2Variant {
+    pub fn name(&self) -> &str {
+        match self {
+            Argon2Variant::Argon2d => "argon2d",
+            Argon2Variant::Argon2i => "argon2i",
+            Argon2Variant::Argon2id => "argon2id",
+        }
+    }
+}
+
+/// Argon2 parameters.
+pub struct Argon2Params {
+    /// Variant to use.
+    pub variant: Argon2Variant,
+    /// Memory cost in KiB.
+    pub memory_cost: u32,
+    /// Number of iterations (time cost).
+    pub time_cost: u32,
+    /// Degree of parallelism.
+    pub parallelism: u32,
+}
+
+impl Argon2Params {
+    /// OWASP-recommended minimum parameters for Argon2id.
+    pub fn recommended() -> Argon2Params {
+        Argon2Params {
+            variant: Argon2Variant::Argon2id,
+            memory_cost: 19456, // 19 MiB
+            time_cost: 2,
+            parallelism: 1,
+        }
+    }
+
+    /// Stronger parameters (46 MiB, 3 iterations).
+    pub fn strong() -> Argon2Params {
+        Argon2Params {
+            variant: Argon2Variant::Argon2id,
+            memory_cost: 47104,
+            time_cost: 3,
+            parallelism: 1,
+        }
+    }
+}
+
+/// Derive a key using Argon2.
+pub fn argon2(
+    password: &[u8],
+    salt: &[u8],
+    params: &Argon2Params,
+    key_len: usize,
+) -> CryptoResult<Vec<u8>> {
+    if salt.len() < 8 {
+        return Err(CryptoError::InvalidKey(String::from("Argon2 salt must be >= 8 bytes")));
+    }
+    extern fn __grey_argon2(
+        variant: &str, password: &[u8], salt: &[u8],
+        memory: u32, time: u32, parallelism: u32, key_len: usize
+    ) -> Option<Vec<u8>>;
+    unsafe { __grey_argon2(
+        params.variant.name(), password, salt,
+        params.memory_cost, params.time_cost, params.parallelism, key_len
+    ) }.ok_or(CryptoError::Internal(String::from("Argon2 derivation failed")))
+}
+
+/// Hash a password using Argon2id with recommended parameters.
+/// Returns the PHC-format string: $argon2id$v=19$m=...,t=...,p=...$salt$hash
+pub fn hash_password(password: &str) -> CryptoResult<String> {
+    let params = Argon2Params::recommended();
+    let salt = crate::crypto::random::random_bytes(16)?;
+    let hash = argon2(password.as_bytes(), &salt, &params, 32)?;
+    let salt_b64 = crate::serial::binary::base64_encode(&salt);
+    let hash_b64 = crate::serial::binary::base64_encode(&hash);
+    Ok(format!(
+        "${}$v=19$m={},t={},p={}${}${}",
+        params.variant.name(), params.memory_cost, params.time_cost, params.parallelism,
+        salt_b64, hash_b64
+    ))
+}
+
+/// Verify a password against an Argon2 PHC-format hash string.
+pub fn verify_password(password: &str, hash_string: &str) -> CryptoResult<bool> {
+    // Parse: $argon2id$v=19$m=...,t=...,p=...$salt$hash
+    let parts: Vec<&str> = hash_string.split('$').collect();
+    if parts.len() < 6 { return Err(CryptoError::InvalidKey(String::from("invalid PHC hash format"))); }
+
+    let variant = match parts[1] {
+        "argon2d" => Argon2Variant::Argon2d,
+        "argon2i" => Argon2Variant::Argon2i,
+        "argon2id" => Argon2Variant::Argon2id,
+        _ => return Err(CryptoError::UnsupportedAlgorithm(String::from(parts[1]))),
+    };
+
+    let kv_pairs: Vec<&str> = parts[3].split(',').collect();
+    let mut memory_cost = 0u32;
+    let mut time_cost = 0u32;
+    let mut parallelism = 0u32;
+    for kv in &kv_pairs {
+        if kv.starts_with("m=") { memory_cost = kv[2..].parse().unwrap_or(0); }
+        if kv.starts_with("t=") { time_cost = kv[2..].parse().unwrap_or(0); }
+        if kv.starts_with("p=") { parallelism = kv[2..].parse().unwrap_or(0); }
+    }
+
+    let salt = crate::serial::binary::base64_decode(parts[4])
+        .map_err(|_| CryptoError::InvalidKey(String::from("invalid salt encoding")))?;
+    let expected_hash = crate::serial::binary::base64_decode(parts[5])
+        .map_err(|_| CryptoError::InvalidKey(String::from("invalid hash encoding")))?;
+
+    let params = Argon2Params { variant, memory_cost, time_cost, parallelism };
+    let computed = argon2(password.as_bytes(), &salt, &params, expected_hash.len())?;
+
+    // Constant-time comparison
+    let mut diff: u8 = 0;
+    for i in 0..computed.len() {
+        diff |= computed[i] ^ expected_hash[i];
+    }
+    Ok(diff == 0)
+}

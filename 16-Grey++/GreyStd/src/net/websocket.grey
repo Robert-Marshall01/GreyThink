@@ -1,0 +1,341 @@
+/// net::websocket — WebSocket client and message types.
+
+use crate::core::string::String;
+use crate::core::vec::Vec;
+use crate::core::option::Option;
+use crate::net::{NetResult, NetError, TcpStream};
+use crate::net::tls::TlsStream;
+use crate::io::stream::{Read, Write};
+use crate::crypto::random;
+
+/// A WebSocket connection.
+///
+/// ```grey
+/// let mut ws = WebSocket::connect("wss://echo.websocket.org").await?;
+///
+/// ws.send(WsMessage::Text("Hello!".into())).await?;
+///
+/// loop {
+///     match ws.recv().await? {
+///         WsMessage::Text(msg) => println("Received: {}", msg),
+///         WsMessage::Binary(data) => println("Binary: {} bytes", data.len()),
+///         WsMessage::Ping(data) => ws.send(WsMessage::Pong(data)).await?,
+///         WsMessage::Close(_, _) => break,
+///         _ => {}
+///     }
+/// }
+/// ```
+pub struct WebSocket {
+    transport: WsTransport,
+    closed: bool,
+}
+
+enum WsTransport {
+    Plain(TcpStream),
+    Tls(TlsStream),
+}
+
+impl WebSocket {
+    /// Connects to a WebSocket server.
+    pub async fn connect(url: &str) -> NetResult<WebSocket> {
+        let parsed = parse_ws_url(url)?;
+        let is_secure = parsed.scheme == "wss";
+        let port = parsed.port.unwrap_or(if is_secure { 443 } else { 80 });
+
+        let stream = TcpStream::connect((&*parsed.host, port)).await?;
+
+        // Generate WebSocket key
+        let key = generate_ws_key();
+
+        // Build upgrade request
+        let request = format!(
+            "GET {} HTTP/1.1\r\n\
+             Host: {}\r\n\
+             Upgrade: websocket\r\n\
+             Connection: Upgrade\r\n\
+             Sec-WebSocket-Key: {}\r\n\
+             Sec-WebSocket-Version: 13\r\n\
+             \r\n",
+            parsed.path, parsed.host, key
+        );
+
+        let transport = if is_secure {
+            let mut tls = crate::net::tls::TlsConnector::new()
+                .connect(&parsed.host, stream).await?;
+            tls.write_all(request.as_bytes())
+                .map_err(|e| NetError::WebSocketError(format!("handshake write: {}", e)))?;
+
+            // Read and validate upgrade response
+            validate_upgrade_response(&mut tls, &key)?;
+            WsTransport::Tls(tls)
+        } else {
+            let mut plain = stream;
+            plain.write_all(request.as_bytes())
+                .map_err(|e| NetError::WebSocketError(format!("handshake write: {}", e)))?;
+
+            validate_upgrade_response(&mut plain, &key)?;
+            WsTransport::Plain(plain)
+        };
+
+        Ok(WebSocket { transport, closed: false })
+    }
+
+    /// Sends a WebSocket message.
+    pub async fn send(mut self, msg: WsMessage) -> NetResult<()> {
+        if self.closed {
+            return Err(NetError::WebSocketError(String::from("connection closed")));
+        }
+
+        let (opcode, payload) = match &msg {
+            WsMessage::Text(s) => (OPCODE_TEXT, s.as_bytes().to_vec()),
+            WsMessage::Binary(b) => (OPCODE_BINARY, b.clone()),
+            WsMessage::Ping(b) => (OPCODE_PING, b.clone()),
+            WsMessage::Pong(b) => (OPCODE_PONG, b.clone()),
+            WsMessage::Close(code, reason) => {
+                let mut data = Vec::new();
+                if let Some(c) = code {
+                    data.push((*c >> 8) as u8);
+                    data.push(*c as u8);
+                    if let Some(r) = reason {
+                        data.extend_from_slice(r.as_bytes());
+                    }
+                }
+                self.closed = true;
+                (OPCODE_CLOSE, data)
+            }
+        };
+
+        let frame = encode_frame(opcode, &payload, true); // client must mask
+        self.write_raw(&frame)?;
+        Ok(())
+    }
+
+    /// Receives a WebSocket message.
+    pub async fn recv(mut self) -> NetResult<WsMessage> {
+        if self.closed {
+            return Err(NetError::WebSocketError(String::from("connection closed")));
+        }
+
+        let (opcode, payload) = decode_frame(&mut self)?;
+
+        match opcode {
+            OPCODE_TEXT => {
+                let text = String::from_utf8(payload)
+                    .map_err(|_| NetError::WebSocketError(String::from("invalid UTF-8")))?;
+                Ok(WsMessage::Text(text))
+            }
+            OPCODE_BINARY => Ok(WsMessage::Binary(payload)),
+            OPCODE_PING => Ok(WsMessage::Ping(payload)),
+            OPCODE_PONG => Ok(WsMessage::Pong(payload)),
+            OPCODE_CLOSE => {
+                self.closed = true;
+                if payload.len() >= 2 {
+                    let code = ((payload[0] as u16) << 8) | (payload[1] as u16);
+                    let reason = if payload.len() > 2 {
+                        Some(String::from_utf8_lossy(&payload[2..]))
+                    } else {
+                        None
+                    };
+                    Ok(WsMessage::Close(Some(code), reason))
+                } else {
+                    Ok(WsMessage::Close(None, None))
+                }
+            }
+            _ => Err(NetError::WebSocketError(format!("unknown opcode: {}", opcode))),
+        }
+    }
+
+    /// Sends a close message and waits for acknowledgment.
+    pub async fn close(mut self) -> NetResult<()> {
+        self.send(WsMessage::Close(Some(1000), Some(String::from("normal closure")))).await
+    }
+
+    /// Returns true if the connection is closed.
+    pub fn is_closed(self) -> bool { self.closed }
+
+    fn write_raw(mut self, data: &[u8]) -> NetResult<()> {
+        match &mut self.transport {
+            WsTransport::Plain(s) => s.write_all(data).map_err(|e| NetError::Io(e)),
+            WsTransport::Tls(s) => s.write_all(data).map_err(|e| NetError::Io(e)),
+        }
+    }
+
+    fn read_raw(mut self, buf: &mut [u8]) -> NetResult<usize> {
+        match &mut self.transport {
+            WsTransport::Plain(s) => s.read(buf).map_err(|e| NetError::Io(e)),
+            WsTransport::Tls(s) => s.read(buf).map_err(|e| NetError::Io(e)),
+        }
+    }
+
+    fn read_exact_raw(mut self, buf: &mut [u8]) -> NetResult<()> {
+        let mut filled = 0;
+        while filled < buf.len() {
+            let n = self.read_raw(&mut buf[filled..])?;
+            if n == 0 {
+                return Err(NetError::WebSocketError(String::from("unexpected eof")));
+            }
+            filled = filled + n;
+        }
+        Ok(())
+    }
+}
+
+/// WebSocket message types.
+pub enum WsMessage {
+    /// A UTF-8 text message.
+    Text(String),
+    /// A binary message.
+    Binary(Vec<u8>),
+    /// A ping control frame.
+    Ping(Vec<u8>),
+    /// A pong control frame.
+    Pong(Vec<u8>),
+    /// A close frame with optional code and reason.
+    Close(Option<u16>, Option<String>),
+}
+
+// ─── Frame encoding/decoding ────────────────────────────────
+
+const OPCODE_TEXT: u8   = 0x1;
+const OPCODE_BINARY: u8 = 0x2;
+const OPCODE_CLOSE: u8  = 0x8;
+const OPCODE_PING: u8   = 0x9;
+const OPCODE_PONG: u8   = 0xA;
+
+fn encode_frame(opcode: u8, payload: &[u8], mask: bool) -> Vec<u8> {
+    let mut frame = Vec::new();
+
+    // FIN bit + opcode
+    frame.push(0x80 | opcode);
+
+    // Payload length
+    let mask_bit: u8 = if mask { 0x80 } else { 0x00 };
+    if payload.len() < 126 {
+        frame.push(mask_bit | payload.len() as u8);
+    } else if payload.len() <= 65535 {
+        frame.push(mask_bit | 126);
+        frame.push((payload.len() >> 8) as u8);
+        frame.push(payload.len() as u8);
+    } else {
+        frame.push(mask_bit | 127);
+        let len = payload.len() as u64;
+        for i in (0..8).rev() {
+            frame.push((len >> (i * 8)) as u8);
+        }
+    }
+
+    // Masking key (client → server must be masked per RFC 6455)
+    if mask {
+        let mask_key = random::random_bytes(4);
+        frame.extend_from_slice(&mask_key);
+        // Apply mask
+        for (i, byte) in payload.iter().enumerate() {
+            frame.push(byte ^ mask_key[i % 4]);
+        }
+    } else {
+        frame.extend_from_slice(payload);
+    }
+
+    frame
+}
+
+fn decode_frame(ws: &mut WebSocket) -> NetResult<(u8, Vec<u8>)> {
+    let mut header = [0u8; 2];
+    ws.read_exact_raw(&mut header)?;
+
+    let opcode = header[0] & 0x0F;
+    let masked = (header[1] & 0x80) != 0;
+    let mut payload_len = (header[1] & 0x7F) as u64;
+
+    if payload_len == 126 {
+        let mut ext = [0u8; 2];
+        ws.read_exact_raw(&mut ext)?;
+        payload_len = ((ext[0] as u64) << 8) | (ext[1] as u64);
+    } else if payload_len == 127 {
+        let mut ext = [0u8; 8];
+        ws.read_exact_raw(&mut ext)?;
+        payload_len = 0;
+        for b in ext.iter() {
+            payload_len = (payload_len << 8) | (*b as u64);
+        }
+    }
+
+    let mask_key = if masked {
+        let mut key = [0u8; 4];
+        ws.read_exact_raw(&mut key)?;
+        Some(key)
+    } else {
+        None
+    };
+
+    let mut payload = vec![0u8; payload_len as usize];
+    ws.read_exact_raw(&mut payload)?;
+
+    if let Some(key) = mask_key {
+        for (i, byte) in payload.iter_mut().enumerate() {
+            *byte = *byte ^ key[i % 4];
+        }
+    }
+
+    Ok((opcode, payload))
+}
+
+// ─── URL parsing ────────────────────────────────────────────
+
+struct WsUrl {
+    scheme: String,
+    host: String,
+    port: Option<u16>,
+    path: String,
+}
+
+fn parse_ws_url(url: &str) -> NetResult<WsUrl> {
+    let (scheme, rest) = if url.starts_with("wss://") {
+        ("wss", &url[6..])
+    } else if url.starts_with("ws://") {
+        ("ws", &url[5..])
+    } else {
+        return Err(NetError::WebSocketError(String::from("invalid WebSocket URL")));
+    };
+
+    let (host_port, path) = match rest.find('/') {
+        Some(i) => (&rest[..i], String::from(&rest[i..])),
+        None => (rest, String::from("/")),
+    };
+
+    let (host, port) = match host_port.find(':') {
+        Some(i) => {
+            let p = host_port[i + 1..].parse::<u16>()
+                .map_err(|_| NetError::WebSocketError(String::from("invalid port")))?;
+            (String::from(&host_port[..i]), Some(p))
+        }
+        None => (String::from(host_port), None),
+    };
+
+    Ok(WsUrl { scheme: String::from(scheme), host, port, path })
+}
+
+fn generate_ws_key() -> String {
+    let bytes = random::random_bytes(16);
+    crate::serial::binary::base64_encode(&bytes)
+}
+
+fn validate_upgrade_response<S: Read>(stream: &mut S, _expected_key: &str) -> NetResult<()> {
+    let mut buf = Vec::new();
+    let mut tmp = [0u8; 1];
+    // Simple: read until \r\n\r\n
+    loop {
+        let n = stream.read(&mut tmp).map_err(|e| NetError::Io(e))?;
+        if n == 0 { break; }
+        buf.push(tmp[0]);
+        if buf.len() >= 4 && &buf[buf.len()-4..] == b"\r\n\r\n" {
+            break;
+        }
+    }
+
+    let response = String::from_utf8_lossy(&buf);
+    if !response.contains("101") {
+        return Err(NetError::WebSocketError(format!("upgrade failed: {}", response)));
+    }
+    Ok(())
+}

@@ -1,0 +1,28 @@
+[package]
+name = "greystd"
+version = "1.0.0"
+edition = "2026"
+description = "The Grey++ Standard Library — core types, memory, concurrency, IO, networking, serialization, time, crypto, system interfaces, modules, diagnostics, testing, reflection, and deterministic execution."
+authors = ["Grey++ Core Team"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/greylang/greystd"
+
+[modules]
+core       = { path = "src/core",          description = "Core language primitives" }
+mem        = { path = "src/mem",           description = "Memory & ownership utilities" }
+concurrent = { path = "src/concurrent",    description = "Concurrency & parallelism" }
+io         = { path = "src/io",            description = "IO & filesystem" }
+net        = { path = "src/net",           description = "Networking" }
+serial     = { path = "src/serial",        description = "Serialization & data formats" }
+time       = { path = "src/time",          description = "Time, date, and scheduling" }
+crypto     = { path = "src/crypto",        description = "Crypto & security" }
+sys        = { path = "src/sys",           description = "Process & system utilities" }
+module     = { path = "src/module",        description = "Module & package utilities" }
+error      = { path = "src/error",         description = "Error handling & diagnostics" }
+test       = { path = "src/test",          description = "Testing framework" }
+reflect    = { path = "src/reflect",       description = "Reflection & introspection" }
+det        = { path = "src/deterministic", description = "Deterministic execution mode" }
+
+[features]
+default = ["core", "mem", "concurrent", "io", "error", "time"]
+full    = ["default", "net", "serial", "crypto", "sys", "module", "test", "reflect", "det"]

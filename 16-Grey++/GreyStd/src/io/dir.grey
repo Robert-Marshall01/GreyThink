@@ -1,0 +1,299 @@
+/// io::dir — Directory operations.
+
+use crate::core::string::String;
+use crate::core::vec::Vec;
+use crate::core::option::Option;
+use crate::io::{IoResult, IoError, IoErrorKind};
+use crate::io::file::{Metadata, FileType, Permissions};
+
+/// An entry in a directory listing.
+pub struct DirEntry {
+    path: String,
+    file_name: String,
+    file_type: Option<FileType>,
+}
+
+impl DirEntry {
+    /// Returns the full path to this entry.
+    pub fn path(self) -> &str {
+        &self.path
+    }
+
+    /// Returns the file name of this entry (without the directory).
+    pub fn file_name(self) -> &str {
+        &self.file_name
+    }
+
+    /// Returns the file type of this entry.
+    pub fn file_type(self) -> IoResult<FileType> {
+        match self.file_type {
+            Some(ft) => Ok(ft),
+            None => {
+                let meta = metadata(&self.path)?;
+                Ok(meta.file_type())
+            }
+        }
+    }
+
+    /// Returns metadata for this entry.
+    pub fn metadata(self) -> IoResult<Metadata> {
+        metadata(&self.path)
+    }
+}
+
+/// An iterator over entries in a directory.
+pub struct ReadDir {
+    // Platform-specific directory handle
+    handle: RawDir,
+    path: String,
+}
+
+impl Iterator for ReadDir {
+    type Item = IoResult<DirEntry>;
+
+    fn next(mut self) -> Option<IoResult<DirEntry>> {
+        loop {
+            match intrinsics::readdir(self.handle) {
+                Ok(Some(name)) => {
+                    // Skip "." and ".."
+                    if name == "." || name == ".." {
+                        continue;
+                    }
+                    let full_path = join_path(&self.path, &name);
+                    return Some(Ok(DirEntry {
+                        path: full_path,
+                        file_name: name,
+                        file_type: None,
+                    }));
+                }
+                Ok(None) => return None,
+                Err(e) => return Some(Err(e)),
+            }
+        }
+    }
+}
+
+impl Drop for ReadDir {
+    fn drop(mut self) {
+        let _ = intrinsics::closedir(self.handle);
+    }
+}
+
+/// Reads the entries of a directory.
+///
+/// ```grey
+/// for entry in read_dir(".")? {
+///     let entry = entry?;
+///     println("{}", entry.file_name());
+/// }
+/// ```
+pub fn read_dir(path: &str) -> IoResult<ReadDir> {
+    let handle = intrinsics::opendir(path)?;
+    Ok(ReadDir { handle, path: String::from(path) })
+}
+
+/// Creates a new directory.
+pub fn create_dir(path: &str) -> IoResult<()> {
+    intrinsics::mkdir(path, 0o755)
+}
+
+/// Creates a directory and all its parent directories.
+pub fn create_dir_all(path: &str) -> IoResult<()> {
+    if path.is_empty() {
+        return Ok(());
+    }
+
+    match create_dir(path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == IoErrorKind::NotFound => {
+            // Parent doesn't exist, create it first
+            if let Some(parent) = parent_dir(path) {
+                create_dir_all(&parent)?;
+                create_dir(path)
+            } else {
+                Err(e)
+            }
+        }
+        Err(e) if e.kind() == IoErrorKind::AlreadyExists => {
+            // Already exists, check if it's actually a directory
+            let meta = metadata(path)?;
+            if meta.is_dir() {
+                Ok(())
+            } else {
+                Err(e)
+            }
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Removes an empty directory.
+pub fn remove_dir(path: &str) -> IoResult<()> {
+    intrinsics::rmdir(path)
+}
+
+/// Removes a directory and all its contents recursively.
+pub fn remove_dir_all(path: &str) -> IoResult<()> {
+    for entry in read_dir(path)? {
+        let entry = entry?;
+        let ft = entry.file_type()?;
+        if ft == FileType::Directory {
+            remove_dir_all(entry.path())?;
+        } else {
+            crate::io::file::remove_file(entry.path())?;
+        }
+    }
+    remove_dir(path)
+}
+
+/// Returns metadata about a path.
+pub fn metadata(path: &str) -> IoResult<Metadata> {
+    intrinsics::stat(path)
+}
+
+/// Returns metadata without following symlinks.
+pub fn symlink_metadata(path: &str) -> IoResult<Metadata> {
+    intrinsics::lstat(path)
+}
+
+/// Returns the canonical, absolute form of a path.
+pub fn canonicalize(path: &str) -> IoResult<String> {
+    intrinsics::realpath(path)
+}
+
+/// Sets permissions on a path.
+pub fn set_permissions(path: &str, perm: Permissions) -> IoResult<()> {
+    intrinsics::chmod(path, perm.mode())
+}
+
+/// Returns the current working directory.
+pub fn current_dir() -> IoResult<String> {
+    intrinsics::getcwd()
+}
+
+/// Changes the current working directory.
+pub fn set_current_dir(path: &str) -> IoResult<()> {
+    intrinsics::chdir(path)
+}
+
+/// Returns a temporary directory path.
+pub fn temp_dir() -> String {
+    intrinsics::temp_dir()
+}
+
+/// Returns all entries in a directory as a Vec (non-lazy).
+pub fn list_dir(path: &str) -> IoResult<Vec<DirEntry>> {
+    let mut entries = Vec::new();
+    for entry in read_dir(path)? {
+        entries.push(entry?);
+    }
+    Ok(entries)
+}
+
+/// Walk a directory tree recursively, yielding all entries.
+pub struct WalkDir {
+    stack: Vec<ReadDir>,
+}
+
+pub fn walk_dir(path: &str) -> IoResult<WalkDir> {
+    let rd = read_dir(path)?;
+    Ok(WalkDir { stack: vec![rd] })
+}
+
+impl Iterator for WalkDir {
+    type Item = IoResult<DirEntry>;
+
+    fn next(mut self) -> Option<IoResult<DirEntry>> {
+        loop {
+            let dir = self.stack.last_mut()?;
+            match dir.next() {
+                Some(Ok(entry)) => {
+                    // If this is a directory, push it on the stack to recurse
+                    if let Ok(ft) = entry.file_type() {
+                        if ft == FileType::Directory {
+                            if let Ok(rd) = read_dir(entry.path()) {
+                                self.stack.push(rd);
+                            }
+                        }
+                    }
+                    return Some(Ok(entry));
+                }
+                Some(Err(e)) => return Some(Err(e)),
+                None => {
+                    // Finished this directory, pop and continue
+                    self.stack.pop();
+                }
+            }
+        }
+    }
+}
+
+/// Glob pattern matching for directory entries.
+pub fn glob(dir: &str, pattern: &str) -> IoResult<Vec<DirEntry>> {
+    let mut results = Vec::new();
+    for entry in read_dir(dir)? {
+        let entry = entry?;
+        if glob_match(pattern, entry.file_name()) {
+            results.push(entry);
+        }
+    }
+    Ok(results)
+}
+
+/// Simple glob matching: supports `*` (any chars) and `?` (single char).
+fn glob_match(pattern: &str, name: &str) -> bool {
+    let p = pattern.as_bytes();
+    let n = name.as_bytes();
+    glob_match_impl(p, n, 0, 0)
+}
+
+fn glob_match_impl(p: &[u8], n: &[u8], pi: usize, ni: usize) -> bool {
+    if pi == p.len() && ni == n.len() {
+        return true;
+    }
+    if pi == p.len() {
+        return false;
+    }
+
+    if p[pi] == b'*' {
+        // '*' matches zero or more characters
+        let mut i = ni;
+        while i <= n.len() {
+            if glob_match_impl(p, n, pi + 1, i) {
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+
+    if ni == n.len() {
+        return false;
+    }
+
+    if p[pi] == b'?' || p[pi] == n[ni] {
+        return glob_match_impl(p, n, pi + 1, ni + 1);
+    }
+
+    false
+}
+
+// Helper functions
+fn join_path(dir: &str, name: &str) -> String {
+    if dir.ends_with('/') || dir.ends_with('\\') {
+        format!("{}{}", dir, name)
+    } else {
+        format!("{}/{}", dir, name)
+    }
+}
+
+fn parent_dir(path: &str) -> Option<String> {
+    let trimmed = path.trim_end_matches('/').trim_end_matches('\\');
+    match trimmed.rfind('/').or(trimmed.rfind('\\')) {
+        Some(i) if i > 0 => Some(String::from(&trimmed[..i])),
+        Some(0) => Some(String::from("/")),
+        _ => None,
+    }
+}
+
+type RawDir = *mut ();
