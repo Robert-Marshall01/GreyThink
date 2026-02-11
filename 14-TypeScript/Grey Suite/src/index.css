@@ -1,0 +1,139 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: #495057 transparent;
+    }
+
+    *::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+
+    *::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    *::-webkit-scrollbar-thumb {
+        background-color: #495057;
+        border-radius: 3px;
+    }
+
+    ::selection {
+        background-color: rgba(26, 143, 224, 0.3);
+    }
+}
+
+@layer components {
+    .gs-card {
+        @apply bg-grey-900 border border-grey-800 rounded-xl shadow-card transition-all duration-200;
+    }
+
+    .gs-card:hover {
+        @apply shadow-card-hover border-grey-700;
+    }
+
+    .gs-btn-primary {
+        @apply bg-brand-500 hover:bg-brand-600 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-150;
+    }
+
+    .gs-btn-secondary {
+        @apply bg-grey-800 hover:bg-grey-700 text-grey-200 font-medium px-4 py-2 rounded-lg border border-grey-700 transition-colors duration-150;
+    }
+
+    .gs-btn-ghost {
+        @apply hover:bg-grey-800 text-grey-400 hover:text-grey-200 font-medium px-3 py-2 rounded-lg transition-colors duration-150;
+    }
+
+    .gs-input {
+        @apply bg-grey-900 border border-grey-700 rounded-lg px-3 py-2 text-grey-100 placeholder-grey-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors duration-150;
+    }
+
+    .gs-badge {
+        @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+    }
+
+    .gs-table th {
+        @apply text-left text-xs font-semibold text-grey-400 uppercase tracking-wider px-4 py-3 border-b border-grey-800;
+    }
+
+    .gs-table td {
+        @apply px-4 py-3 text-sm text-grey-300 border-b border-grey-800/50;
+    }
+
+    .gs-table tr:hover td {
+        @apply bg-grey-800/30;
+    }
+
+    .gs-sidebar-item {
+        @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-grey-400 hover:text-grey-100 hover:bg-grey-800/60 transition-colors duration-150 cursor-pointer;
+    }
+
+    .gs-sidebar-item.active {
+        @apply text-brand-400 bg-brand-500/10 border-l-2 border-brand-400;
+    }
+
+    .gs-stat-card {
+        @apply gs-card p-5 flex flex-col gap-2;
+    }
+
+    .gs-section-title {
+        @apply text-lg font-semibold text-grey-100;
+    }
+
+    .gs-page-header {
+        @apply flex items-center justify-between mb-6;
+    }
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-12px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes pulse-dot {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.4;
+    }
+}
+
+.animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slide-in {
+    animation: slideIn 0.25s ease-out;
+}
+
+.dot-pulse {
+    animation: pulse-dot 2s ease-in-out infinite;
+}
