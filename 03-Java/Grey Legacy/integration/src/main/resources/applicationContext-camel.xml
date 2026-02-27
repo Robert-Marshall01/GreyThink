@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:camel="http://camel.apache.org/schema/spring"
+       xsi:schemaLocation="
+           http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans-4.3.xsd
+           http://camel.apache.org/schema/spring
+           http://camel.apache.org/schema/spring/camel-spring.xsd">
+
+    <description>
+        Apache Camel Configuration for Grey Legacy Integration Routes
+        =============================================================
+        Configures the CamelContext, route builders, and supporting
+        beans for the claim file ingest and notification pipelines.
+
+        In legacy Java EE shops, Camel typically coexists with existing
+        JMS infrastructure (ActiveMQ), SOAP services (CXF), and Spring
+        XML configuration. This context imports the existing JMS connection
+        factory and adds Camel-specific components on top.
+    </description>
+
+    <!-- ================================================================== -->
+    <!-- Property Placeholder for Camel route configuration                 -->
+    <!-- ================================================================== -->
+    <bean id="camelProperties"
+          class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+        <property name="ignoreUnresolvablePlaceholders" value="true"/>
+        <property name="properties">
+            <props>
+                <!-- File ingest directory -->
+                <prop key="camel.file.inbox">${camel.file.inbox:${java.io.tmpdir}/greylegacy/inbox}</prop>
+                <prop key="camel.file.outbox">${camel.file.outbox:${java.io.tmpdir}/greylegacy/outbox}</prop>
+
+                <!-- JMS settings (reuses the existing ActiveMQ connection factory) -->
+                <prop key="camel.jms.concurrentConsumers">3</prop>
+                <prop key="camel.jms.maxConcurrentConsumers">10</prop>
+
+                <!-- Throttle settings -->
+                <prop key="camel.throttle.csv.perSecond">50</prop>
+                <prop key="camel.throttle.outbound.perSecond">10</prop>
+            </props>
+        </property>
+    </bean>
+
+    <!-- ================================================================== -->
+    <!-- JMS Component — bridges Camel routes to existing ActiveMQ broker   -->
+    <!-- ================================================================== -->
+    <!-- Uses the JMS ConnectionFactory already defined in                   -->
+    <!-- applicationContext-jms.xml (ActiveMQ)                               -->
+    <bean id="jms" class="org.apache.camel.component.jms.JmsComponent">
+        <property name="connectionFactory" ref="cachingConnectionFactory"/>
+        <property name="transacted" value="true"/>
+        <property name="concurrentConsumers" value="3"/>
+        <property name="maxConcurrentConsumers" value="10"/>
+        <property name="cacheLevelName" value="CACHE_CONSUMER"/>
+    </bean>
+
+    <!-- ================================================================== -->
+    <!-- Camel Context                                                       -->
+    <!-- ================================================================== -->
+    <camel:camelContext id="greyLegacyCamelContext"
+                        autoStartup="true"
+                        streamCache="true"
+                        useMDCLogging="true"
+                        managementNamePattern="#name#">
+
+        <!-- JMX management for route monitoring -->
+        <camel:jmxAgent id="camelJmxAgent"
+                        createConnector="false"
+                        usePlatformMBeanServer="true"/>
+
+        <!-- Register route builders -->
+        <camel:routeBuilder ref="claimIntegrationRouteBuilder"/>
+
+        <!-- Global interceptors for logging/auditing -->
+        <camel:intercept>
+            <camel:log message="[CAMEL] ${routeId} — processing: ${in.header.CamelFileName}"
+                       loggingLevel="DEBUG"/>
+        </camel:intercept>
+
+    </camel:camelContext>
+
+    <!-- Route Builder bean -->
+    <bean id="claimIntegrationRouteBuilder"
+          class="com.greylegacy.integration.camel.ClaimIntegrationRouteBuilder"/>
+
+</beans>

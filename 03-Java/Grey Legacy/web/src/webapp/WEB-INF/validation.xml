@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE form-validation PUBLIC
+    "-//Apache Software Foundation//DTD Commons Validator Rules Configuration 1.3.0//EN"
+    "http://jakarta.apache.org/commons/dtds/validator_1_3_0.dtd">
+
+<!--
+    Struts Validation Framework - XML-based validation rules.
+    Demonstrates the legacy pattern of declarative, server-side
+    form validation using the Commons Validator integration.
+    
+    Each <form> corresponds to a form-bean defined in struts-config.xml.
+    Fields reference validation rules from validator-rules.xml.
+-->
+<form-validation>
+
+    <global>
+        <constant>
+            <constant-name>policyNumberPattern</constant-name>
+            <constant-value>^POL-[A-Z]{2}-\d{6}$</constant-value>
+        </constant>
+        <constant>
+            <constant-name>phonePattern</constant-name>
+            <constant-value>^\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}$</constant-value>
+        </constant>
+        <constant>
+            <constant-name>emailPattern</constant-name>
+            <constant-value>^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$</constant-value>
+        </constant>
+        <constant>
+            <constant-name>currencyPattern</constant-name>
+            <constant-value>^\d{1,12}(\.\d{1,2})?$</constant-value>
+        </constant>
+        <constant>
+            <constant-name>datePattern</constant-name>
+            <constant-value>^\d{4}-\d{2}-\d{2}$</constant-value>
+        </constant>
+        <constant>
+            <constant-name>adjusterCodePattern</constant-name>
+            <constant-value>^ADJ-\d{4}$</constant-value>
+        </constant>
+    </global>
+
+    <formset>
+
+        <!-- ============================================ -->
+        <!-- FNOL (First Notice of Loss) Form Validation  -->
+        <!-- ============================================ -->
+        <form name="fnolForm">
+            <field property="policyNumber" depends="required,mask">
+                <arg key="fnolForm.policyNumber" position="0"/>
+                <var>
+                    <var-name>mask</var-name>
+                    <var-value>${policyNumberPattern}</var-value>
+                </var>
+                <msg name="mask" key="error.policyNumber.format"/>
+            </field>
+
+            <field property="claimantFirstName" depends="required,minlength,maxlength">
+                <arg key="fnolForm.claimantFirstName" position="0"/>
+                <var>
+                    <var-name>minlength</var-name>
+                    <var-value>2</var-value>
+                </var>
+                <var>
+                    <var-name>maxlength</var-name>
+                    <var-value>50</var-value>
+                </var>
+            </field>
+
+            <field property="claimantLastName" depends="required,minlength,maxlength">
+                <arg key="fnolForm.claimantLastName" position="0"/>
+                <var>
+                    <var-name>minlength</var-name>
+                    <var-value>2</var-value>
+                </var>
+                <var>
+                    <var-name>maxlength</var-name>
+                    <var-value>50</var-value>
+                </var>
+            </field>
+
+            <field property="claimantPhone" depends="mask">
+                <arg key="fnolForm.claimantPhone" position="0"/>
+                <var>
+                    <var-name>mask</var-name>
+                    <var-value>${phonePattern}</var-value>
+                </var>
+                <msg name="mask" key="error.phone.format"/>
+            </field>
+
+            <field property="claimantEmail" depends="mask">
+                <arg key="fnolForm.claimantEmail" position="0"/>
+                <var>
+                    <var-name>mask</var-name>
+                    <var-value>${emailPattern}</var-value>
+                </var>
+                <msg name="mask" key="error.email.format"/>
+            </field>
+
+            <field property="claimType" depends="required">
+                <arg key="fnolForm.claimType" position="0"/>
+            </field>
+
+            <field property="lossDate" depends="required,mask,date">
+                <arg key="fnolForm.lossDate" position="0"/>
+                <var>
+                    <var-name>mask</var-name>
+                    <var-value>${datePattern}</var-value>
+                </var>
+                <var>
+                    <var-name>datePatternStrict</var-name>
+                    <var-value>yyyy-MM-dd</var-value>
+                </var>
+                <msg name="mask" key="error.date.format"/>
+            </field>
+
+            <field property="lossDescription" depends="required,maxlength">
+                <arg key="fnolForm.lossDescription" position="0"/>
+                <var>
+                    <var-name>maxlength</var-name>
+                    <var-value>2000</var-value>
+                </var>
+            </field>
+
+            <field property="lossLocation" depends="maxlength">
+                <arg key="fnolForm.lossLocation" position="0"/>
+                <var>
+                    <var-name>maxlength</var-name>
+                    <var-value>200</var-value>
+                </var>
+            </field>
+
+            <field property="estimatedLoss" depends="mask">
+                <arg key="fnolForm.estimatedLoss" position="0"/>
+                <var>
+                    <var-name>mask</var-name>
+                    <var-value>${currencyPattern}</var-value>
+                </var>
+                <msg name="mask" key="error.currency.format"/>
+            </field>
+        </form>
+
+        <!-- ============================================ -->
+        <!-- Claim Search Form Validation                 -->
+        <!-- ============================================ -->
+        <form name="claimSearchForm">
+            <field property="claimNumber" depends="mask">
+                <arg key="claimSearchForm.claimNumber" position="0"/>
+                <var>
+                    <var-name>mask</var-name>
+                    <var-value>^CLM-\d{8}$</var-value>
+                </var>
+                <msg name="mask" key="error.claimNumber.format"/>
+            </field>
+
+            <field property="policyNumber" depends="mask">
+                <arg key="claimSearchForm.policyNumber" position="0"/>
+                <var>
+                    <var-name>mask</var-name>
+                    <var-value>${policyNumberPattern}</var-value>
+                </var>
+                <msg name="mask" key="error.policyNumber.format"/>
+            </field>
+
+            <field property="claimantLastName" depends="maxlength">
+                <arg key="claimSearchForm.claimantLastName" position="0"/>
+                <var>
+                    <var-name>maxlength</var-name>
+                    <var-value>50</var-value>
+                </var>
+            </field>
+
+            <field property="dateFrom" depends="mask">
+                <arg key="claimSearchForm.dateFrom" position="0"/>
+                <var>
+                    <var-name>mask</var-name>
+                    <var-value>${datePattern}</var-value>
+                </var>
+                <msg name="mask" key="error.date.format"/>
+            </field>
+
+            <field property="dateTo" depends="mask">
+                <arg key="claimSearchForm.dateTo" position="0"/>
+                <var>
+                    <var-name>mask</var-name>
+                    <var-value>${datePattern}</var-value>
+                </var>
+                <msg name="mask" key="error.date.format"/>
+            </field>
+        </form>
+
+        <!-- ============================================ -->
+        <!-- Adjuster Review Form Validation              -->
+        <!-- ============================================ -->
+        <form name="adjusterReviewForm">
+            <field property="claimId" depends="required,long">
+                <arg key="adjusterReviewForm.claimId" position="0"/>
+            </field>
+
+            <field property="adjusterCode" depends="required,mask">
+                <arg key="adjusterReviewForm.adjusterCode" position="0"/>
+                <var>
+                    <var-name>mask</var-name>
+                    <var-value>${adjusterCodePattern}</var-value>
+                </var>
+                <msg name="mask" key="error.adjusterCode.format"/>
+            </field>
+
+            <field property="findings" depends="required,maxlength">
+                <arg key="adjusterReviewForm.findings" position="0"/>
+                <var>
+                    <var-name>maxlength</var-name>
+                    <var-value>2000</var-value>
+                </var>
+            </field>
+
+            <field property="recommendedAmount" depends="required,mask">
+                <arg key="adjusterReviewForm.recommendedAmount" position="0"/>
+                <var>
+                    <var-name>mask</var-name>
+                    <var-value>${currencyPattern}</var-value>
+                </var>
+                <msg name="mask" key="error.currency.format"/>
+            </field>
+
+            <field property="recommendation" depends="required">
+                <arg key="adjusterReviewForm.recommendation" position="0"/>
+            </field>
+        </form>
+
+    </formset>
+</form-validation>

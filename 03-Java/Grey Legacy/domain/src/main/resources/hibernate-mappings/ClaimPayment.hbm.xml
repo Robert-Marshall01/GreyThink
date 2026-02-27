@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+        "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+        "http://www.hibernate.org/dtd/hibernate-mapping-3.0.dtd">
+
+<hibernate-mapping package="com.greylegacy.domain">
+
+    <class name="ClaimPayment" table="CLAIM_PAYMENT">
+
+        <id name="id" column="ID" type="long">
+            <generator class="sequence">
+                <param name="sequence_name">PAYMENT_SEQ</param>
+            </generator>
+        </id>
+
+        <version name="version" column="VERSION"/>
+
+        <property name="paymentNumber"  column="PAYMENT_NUMBER"/>
+        <property name="paymentStatus"  column="PAYMENT_STATUS"  type="string"/>
+        <property name="paymentMethod"  column="PAYMENT_METHOD"  type="string"/>
+        <property name="amount"         column="AMOUNT"          type="big_decimal"/>
+        <property name="scheduledDate"  column="SCHEDULED_DATE"  type="date"/>
+        <property name="processedDate"  column="PROCESSED_DATE"  type="timestamp"/>
+        <property name="payeeName"      column="PAYEE_NAME"/>
+        <property name="payeeAddress"   column="PAYEE_ADDRESS"/>
+        <property name="checkNumber"    column="CHECK_NUMBER"/>
+        <property name="memo"           column="MEMO"/>
+        <property name="approvedBy"     column="APPROVED_BY"/>
+        <property name="createdBy"      column="CREATED_BY"/>
+        <property name="createdDate"    column="CREATED_DATE"    type="timestamp"/>
+        <property name="updatedBy"      column="UPDATED_BY"/>
+        <property name="updatedDate"    column="UPDATED_DATE"    type="timestamp"/>
+
+        <many-to-one name="claim" class="Claim" column="CLAIM_ID"/>
+
+    </class>
+
+</hibernate-mapping>

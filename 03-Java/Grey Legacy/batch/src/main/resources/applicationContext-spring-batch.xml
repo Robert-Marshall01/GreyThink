@@ -1,0 +1,274 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:batch="http://www.springframework.org/schema/batch"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:task="http://www.springframework.org/schema/task"
+       xsi:schemaLocation="
+           http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans.xsd
+           http://www.springframework.org/schema/batch
+           http://www.springframework.org/schema/batch/spring-batch.xsd
+           http://www.springframework.org/schema/context
+           http://www.springframework.org/schema/context/spring-context.xsd
+           http://www.springframework.org/schema/task
+           http://www.springframework.org/schema/task/spring-task.xsd">
+
+    <description>
+        Spring Batch Configuration — Grey Legacy Claims Platform
+        ==========================================================
+        Defines the batch infrastructure, job repository, and all
+        Spring Batch jobs:
+
+          1. claimExportJob       — chunk-oriented CSV export
+          2. partitionedExportJob — partitioned variant of claimExportJob
+          3. policyImportJob      — chunk-oriented CSV import with validation
+          4. reconciliationJob    — tasklet-based payment reconciliation
+
+        Infrastructure:
+          - JDBC-backed JobRepository for production restartability
+          - In-memory MapJobRepository fallback for dev/test
+          - Configurable via spring.profiles.active or property override
+
+        Integration:
+          - Quartz triggers defined in applicationContext-batch.xml
+          - SpringBatchQuartzJobLauncher bridges Quartz → Spring Batch
+    </description>
+
+    <!-- ================================================================== -->
+    <!-- Spring Batch Infrastructure                                        -->
+    <!-- ================================================================== -->
+
+    <!--
+        JDBC-backed JobRepository for production.
+
+        Uses the same DataSource as the application. Spring Batch tables
+        (BATCH_JOB_INSTANCE, BATCH_JOB_EXECUTION, BATCH_STEP_EXECUTION,
+        BATCH_JOB_EXECUTION_PARAMS, BATCH_STEP_EXECUTION_CONTEXT,
+        BATCH_JOB_EXECUTION_CONTEXT) must exist in the database.
+
+        To create them, run the DDL scripts from:
+          spring-batch-core-<version>.jar!/org/springframework/batch/core/schema-*.sql
+
+        For development/testing, uncomment the MapJobRepositoryFactoryBean
+        below and comment out this JDBC repository.
+    -->
+    <bean id="jobRepository"
+          class="org.springframework.batch.core.repository.support.JobRepositoryFactoryBean">
+        <property name="dataSource" ref="dataSource"/>
+        <property name="transactionManager" ref="transactionManager"/>
+        <property name="isolationLevelForCreate" value="ISOLATION_DEFAULT"/>
+        <!-- Table prefix can be changed to avoid collisions in shared schemas -->
+        <property name="tablePrefix" value="BATCH_"/>
+    </bean>
+
+    <!--
+        In-memory JobRepository (dev/test only).
+        Uncomment this and comment out the JDBC version above for local
+        development. WARNING: jobs are NOT restartable with this option.
+
+    <bean id="jobRepository"
+          class="org.springframework.batch.core.repository.support.MapJobRepositoryFactoryBean">
+        <property name="transactionManager" ref="transactionManager"/>
+    </bean>
+    -->
+
+    <!-- Job launcher wired to the repository -->
+    <bean id="jobLauncher"
+          class="org.springframework.batch.core.launch.support.SimpleJobLauncher">
+        <property name="jobRepository" ref="jobRepository"/>
+    </bean>
+
+    <!--
+        JobExplorer — provides read-only access to the job repository.
+        Used by operators and monitoring tools to query execution history.
+    -->
+    <bean id="jobExplorer"
+          class="org.springframework.batch.core.explore.support.JobExplorerFactoryBean">
+        <property name="dataSource" ref="dataSource"/>
+        <property name="tablePrefix" value="BATCH_"/>
+    </bean>
+
+    <!--
+        JobOperator — provides operational control (stop, restart, abandon).
+        Wired to both the launcher and explorer so the ops team can manage
+        jobs without restarting the application.
+    -->
+    <bean id="jobOperator"
+          class="org.springframework.batch.core.launch.support.SimpleJobOperator">
+        <property name="jobLauncher" ref="jobLauncher"/>
+        <property name="jobExplorer" ref="jobExplorer"/>
+        <property name="jobRepository" ref="jobRepository"/>
+        <property name="jobRegistry" ref="jobRegistry"/>
+    </bean>
+
+    <bean id="jobRegistry"
+          class="org.springframework.batch.core.configuration.support.MapJobRegistry"/>
+
+    <bean class="org.springframework.batch.core.configuration.support.JobRegistryBeanPostProcessor">
+        <property name="jobRegistry" ref="jobRegistry"/>
+    </bean>
+
+    <!-- Task executor for partitioned steps -->
+    <bean id="batchTaskExecutor"
+          class="org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor">
+        <property name="corePoolSize" value="4"/>
+        <property name="maxPoolSize" value="8"/>
+        <property name="queueCapacity" value="25"/>
+        <property name="threadNamePrefix" value="batch-partition-"/>
+    </bean>
+
+    <!-- ================================================================== -->
+    <!-- Shared Listener                                                     -->
+    <!-- ================================================================== -->
+
+    <bean id="jobCompletionListener"
+          class="com.greylegacy.batch.springbatch.BatchJobCompletionListener"/>
+
+    <!-- ================================================================== -->
+    <!-- Claim Export Job — Single-threaded (original)                       -->
+    <!-- ================================================================== -->
+
+    <bean id="claimExportReader"
+          class="com.greylegacy.batch.springbatch.ClaimExportItemReader">
+        <property name="sessionFactory" ref="sessionFactory"/>
+        <property name="claimStatus" value="APPROVED"/>
+    </bean>
+
+    <bean id="claimExportProcessor"
+          class="com.greylegacy.batch.springbatch.ClaimExportItemProcessor"/>
+
+    <bean id="claimExportWriter"
+          class="com.greylegacy.batch.springbatch.ClaimExportItemWriter">
+        <property name="outputDirectory" value="${batch.export.directory:/tmp/greylegacy/export}"/>
+        <property name="filenamePattern" value="claim_export_%s.csv"/>
+    </bean>
+
+    <batch:job id="claimExportJob" restartable="true">
+        <batch:listeners>
+            <batch:listener ref="jobCompletionListener"/>
+        </batch:listeners>
+        <batch:step id="exportStep">
+            <batch:tasklet>
+                <batch:chunk reader="claimExportReader"
+                             processor="claimExportProcessor"
+                             writer="claimExportWriter"
+                             commit-interval="100"
+                             skip-limit="10">
+                    <batch:skippable-exception-classes>
+                        <batch:include class="java.lang.Exception"/>
+                    </batch:skippable-exception-classes>
+                    <batch:streams>
+                        <batch:stream ref="claimExportReader"/>
+                        <batch:stream ref="claimExportWriter"/>
+                    </batch:streams>
+                </batch:chunk>
+            </batch:tasklet>
+        </batch:step>
+    </batch:job>
+
+    <!-- ================================================================== -->
+    <!-- Claim Export Job — Partitioned (parallel)                           -->
+    <!--                                                                     -->
+    <!-- Splits claims by ID range into N partitions and processes them      -->
+    <!-- concurrently via the batchTaskExecutor thread pool.                 -->
+    <!--                                                                     -->
+    <!-- Use this variant for large volumes where single-threaded export     -->
+    <!-- is too slow. Each partition writes to its own output file.          -->
+    <!-- ================================================================== -->
+
+    <bean id="claimExportPartitioner"
+          class="com.greylegacy.batch.springbatch.ClaimExportPartitioner">
+        <property name="dataSource" ref="dataSource"/>
+        <property name="claimStatus" value="APPROVED"/>
+    </bean>
+
+    <!--
+        The slave step uses step-scoped beans so each partition thread
+        gets its own reader/writer instance with its own minId/maxId range.
+    -->
+    <batch:job id="partitionedExportJob" restartable="true">
+        <batch:listeners>
+            <batch:listener ref="jobCompletionListener"/>
+        </batch:listeners>
+        <batch:step id="partitionedExportMasterStep">
+            <batch:partition step="exportSlaveStep"
+                             partitioner="claimExportPartitioner">
+                <batch:handler grid-size="4"
+                               task-executor="batchTaskExecutor"/>
+            </batch:partition>
+        </batch:step>
+    </batch:job>
+
+    <batch:step id="exportSlaveStep">
+        <batch:tasklet>
+            <batch:chunk reader="claimExportReader"
+                         processor="claimExportProcessor"
+                         writer="claimExportWriter"
+                         commit-interval="100"
+                         skip-limit="10">
+                <batch:skippable-exception-classes>
+                    <batch:include class="java.lang.Exception"/>
+                </batch:skippable-exception-classes>
+                <batch:streams>
+                    <batch:stream ref="claimExportReader"/>
+                    <batch:stream ref="claimExportWriter"/>
+                </batch:streams>
+            </batch:chunk>
+        </batch:tasklet>
+    </batch:step>
+
+    <!-- ================================================================== -->
+    <!-- Policy Import Job                                                   -->
+    <!-- ================================================================== -->
+
+    <bean id="policyImportReader"
+          class="com.greylegacy.batch.springbatch.PolicyFileImportReader"/>
+
+    <bean id="policyImportProcessor"
+          class="com.greylegacy.batch.springbatch.PolicyImportProcessor"/>
+
+    <bean id="policyImportWriter"
+          class="com.greylegacy.batch.springbatch.PolicyImportWriter">
+        <property name="sessionFactory" ref="sessionFactory"/>
+    </bean>
+
+    <batch:job id="policyImportJob" restartable="true">
+        <batch:listeners>
+            <batch:listener ref="jobCompletionListener"/>
+        </batch:listeners>
+        <batch:step id="importStep">
+            <batch:tasklet>
+                <batch:chunk reader="policyImportReader"
+                             processor="policyImportProcessor"
+                             writer="policyImportWriter"
+                             commit-interval="100"
+                             skip-limit="10">
+                    <batch:skippable-exception-classes>
+                        <batch:include
+                            class="org.springframework.batch.item.file.FlatFileParseException"/>
+                    </batch:skippable-exception-classes>
+                </batch:chunk>
+            </batch:tasklet>
+        </batch:step>
+    </batch:job>
+
+    <!-- ================================================================== -->
+    <!-- Reconciliation Job                                                  -->
+    <!-- ================================================================== -->
+
+    <bean id="claimReconciliationTasklet"
+          class="com.greylegacy.batch.springbatch.ClaimReconciliationTasklet">
+        <property name="dataSource" ref="dataSource"/>
+    </bean>
+
+    <batch:job id="reconciliationJob" restartable="true">
+        <batch:listeners>
+            <batch:listener ref="jobCompletionListener"/>
+        </batch:listeners>
+        <batch:step id="reconcileStep">
+            <batch:tasklet ref="claimReconciliationTasklet"/>
+        </batch:step>
+    </batch:job>
+
+</beans>

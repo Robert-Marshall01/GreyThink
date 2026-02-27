@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ============================================================================
+     Grey Legacy — WebSphere Application Server Binding Descriptor
+     ============================================================================
+     IBM WebSphere-specific deployment descriptor that maps application security
+     roles to the WebSphere security registry (LDAP, file-based, or custom).
+
+     This file sits alongside web.xml in WEB-INF/ and is read by WebSphere
+     during application deployment. It establishes bindings between the
+     portable <security-role> names in web.xml and WebSphere's internal
+     user/group registry.
+
+     WebSphere versions: 8.5.5+, Liberty Profile 17.0.0.1+
+     ============================================================================
+     
+     DEPLOYMENT NOTES:
+       1. In WebSphere Traditional, this file is auto-generated during the
+          "Map security roles to users or groups" step of application install.
+          Manual editing is rare but necessary when deploying via wsadmin
+          scripting (e.g., Jython deployment scripts).
+       2. In WebSphere Liberty, this file maps to <application-bnd> in
+          server.xml or to this standalone file.
+       3. Group names must match the LDAP groups or internal registry groups
+          configured in the WebSphere security configuration.
+     ============================================================================ -->
+<web-bnd xmlns="http://websphere.ibm.com/xml/ns/javaee"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://websphere.ibm.com/xml/ns/javaee
+                             http://websphere.ibm.com/xml/ns/javaee/ibm-web-bnd_1_0.xsd"
+         version="1.0">
+
+    <!-- ================================================================
+         Virtual Host Binding
+         Maps this WAR to a WebSphere virtual host. Default is
+         'default_host' which handles all unmatched requests.
+         For production, you might use a dedicated virtual host
+         (e.g., 'claims_host') with its own DNS entry and SSL cert.
+         ================================================================ -->
+    <virtual-host name="default_host"/>
+
+    <!-- ================================================================
+         Security Role Bindings
+         Maps web.xml <security-role> names to WebSphere registry
+         groups. When using LDAP, these group names must match the
+         LDAP group CN (Common Name) values.
+         
+         WebSphere Resolution Order:
+           1. Special subjects (ALL_AUTHENTICATED_USERS, EVERYONE)
+           2. Explicit group mappings (below)
+           3. Explicit user mappings (below)
+         ================================================================ -->
+
+    <!-- Read-only access for auditors and compliance officers -->
+    <security-role name="READONLY">
+        <group name="cn=GreyLegacy_Readonly,ou=Groups,dc=greylegacy,dc=com"/>
+        <group name="cn=Compliance_Officers,ou=Groups,dc=greylegacy,dc=com"/>
+    </security-role>
+
+    <!-- Claims adjusters — daily claim processing -->
+    <security-role name="CLAIMS_ADJUSTER">
+        <group name="cn=Claims_Adjusters,ou=Groups,dc=greylegacy,dc=com"/>
+        <!-- Include manager and admin groups (role hierarchy) -->
+        <group name="cn=Claims_Managers,ou=Groups,dc=greylegacy,dc=com"/>
+        <group name="cn=GreyLegacy_Admins,ou=Groups,dc=greylegacy,dc=com"/>
+    </security-role>
+
+    <!-- Claims managers — supervisory authority -->
+    <security-role name="CLAIMS_MANAGER">
+        <group name="cn=Claims_Managers,ou=Groups,dc=greylegacy,dc=com"/>
+        <group name="cn=GreyLegacy_Admins,ou=Groups,dc=greylegacy,dc=com"/>
+    </security-role>
+
+    <!-- System administrators -->
+    <security-role name="ADMIN">
+        <group name="cn=GreyLegacy_Admins,ou=Groups,dc=greylegacy,dc=com"/>
+        <!-- Named admin users for emergency access -->
+        <user name="uid=admin,ou=ServiceAccounts,dc=greylegacy,dc=com"/>
+    </security-role>
+
+    <!-- Batch service account — no LDAP group, explicit user binding -->
+    <security-role name="SYSTEM_BATCH">
+        <user name="uid=batch_service,ou=ServiceAccounts,dc=greylegacy,dc=com"/>
+    </security-role>
+
+    <!-- ================================================================
+         Resource Reference Bindings
+         Maps portable JNDI names from web.xml <resource-ref> to
+         WebSphere-configured JNDI names.
+         
+         In WebSphere, DataSources are configured in the admin console
+         under Resources > JDBC > Data sources. The JNDI name there
+         must match the 'binding-name' below.
+         ================================================================ -->
+
+    <!-- DataSource: Grey Legacy production database -->
+    <resource-ref name="jdbc/GreyLegacyDS"
+                  binding-name="jdbc/GreyLegacyDS"/>
+
+    <!-- JMS Connection Factory: ActiveMQ/MQ integration -->
+    <resource-ref name="jms/ConnectionFactory"
+                  binding-name="jms/GreyLegacyConnectionFactory"/>
+
+    <!-- JMS Queue: Claim events processing -->
+    <resource-ref name="jms/queue/ClaimEvents"
+                  binding-name="jms/GreyLegacyClaimEventsQueue"/>
+
+    <!-- JMS Topic: Claim notification broadcast -->
+    <resource-ref name="jms/topic/ClaimNotifications"
+                  binding-name="jms/GreyLegacyClaimNotificationsTopic"/>
+
+</web-bnd>

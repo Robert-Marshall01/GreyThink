@@ -1,0 +1,405 @@
+#!/usr/bin/env groovy
+// =============================================================================
+// Grey Legacy Insurance Claims System - Jenkins Pipeline (Scripted)
+//
+// This is a SCRIPTED pipeline (not declarative) which was the standard
+// approach for Jenkins pipelines prior to the introduction of the declarative
+// syntax in Jenkins Pipeline 2.5. Many legacy enterprise shops continue to
+// use scripted pipelines due to their flexibility and because migrating
+// existing pipelines carries risk with no functional benefit.
+//
+// Pipeline Stages:
+//   1. Checkout          - Pull source from SCM
+//   2. Build             - Compile all modules
+//   3. Unit Tests        - Run JUnit tests with report archiving
+//   4. Integration Tests - Run integration test profile
+//   5. Static Analysis   - SonarQube analysis (when configured)
+//   6. Package           - Build WAR and EAR artifacts
+//   7. Archive Artifacts - Store artifacts in Jenkins
+//   8. Deploy to Dev     - Auto-deploy on develop branch
+//   9. Deploy to Staging - Manual approval for release branches
+//  10. Deploy to Prod    - Double approval for master branch
+//
+// Author: Grey Legacy Build Engineering
+// Last Modified: 2025-11-15
+// =============================================================================
+
+// ---------------------------------------------------------------------------
+// Run the entire pipeline on a node labeled 'legacy-build-agent'.
+// In legacy environments, build agents are often dedicated VMs with
+// pre-installed JDK, Maven, and deployment tools rather than ephemeral
+// containers.
+// ---------------------------------------------------------------------------
+node('legacy-build-agent') {
+
+    // -----------------------------------------------------------------------
+    // Environment variables - configure tool paths and build settings.
+    // These assume the Jenkins server has Maven and JDK configured as
+    // global tools via Manage Jenkins > Global Tool Configuration.
+    // -----------------------------------------------------------------------
+    def mvnHome = tool name: 'Maven-3.6', type: 'maven'
+    def jdkHome = tool name: 'JDK-1.8', type: 'jdk'
+    def antHome = tool name: 'Ant-1.10', type: 'ant'
+
+    env.JAVA_HOME = jdkHome
+    env.MAVEN_HOME = mvnHome
+    env.ANT_HOME = antHome
+    env.PATH = "${mvnHome}/bin:${jdkHome}/bin:${antHome}/bin:${env.PATH}"
+
+    // Maven options: increase memory for large enterprise builds,
+    // use the legacy local repository to avoid re-downloading artifacts
+    env.MAVEN_OPTS = '-Xmx1024m -XX:MaxPermSize=256m'
+
+    // Build metadata for traceability and compliance
+    def buildTimestamp = new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))
+    def artifactVersion = "${env.BUILD_NUMBER}-${env.BRANCH_NAME?.replaceAll('/', '-') ?: 'unknown'}"
+
+    // Track build result - default to SUCCESS, set to FAILURE in catch blocks
+    currentBuild.result = 'SUCCESS'
+
+    try {
+
+        // ===================================================================
+        // Stage 1: Checkout
+        // Pull the latest source code from the SCM configured in the
+        // Jenkins job. Uses the built-in 'checkout scm' step which reads
+        // the SCM configuration from the Multibranch Pipeline or the
+        // job's SCM settings.
+        // ===================================================================
+        stage('Checkout') {
+            echo "Checking out source code from SCM..."
+            checkout scm
+            echo "Branch: ${env.BRANCH_NAME}"
+            echo "Commit: ${env.GIT_COMMIT}"
+        }
+
+        // ===================================================================
+        // Stage 2: Build
+        // Compile all modules in dependency order. The Maven reactor
+        // handles module ordering based on the parent POM's <modules>
+        // declaration.
+        // ===================================================================
+        stage('Build') {
+            echo "Compiling all modules..."
+            sh "${mvnHome}/bin/mvn clean compile -B -V"
+        }
+
+        // ===================================================================
+        // Stage 3: Unit Tests
+        // Run JUnit tests across all modules. Test results are archived
+        // in Jenkins for trend reporting. The build continues even if
+        // tests fail so that artifacts and reports are still captured.
+        // ===================================================================
+        stage('Unit Tests') {
+            try {
+                echo "Running unit tests..."
+                sh "${mvnHome}/bin/mvn test -B"
+            } catch (testException) {
+                currentBuild.result = 'UNSTABLE'
+                echo "Unit tests failed - marking build as UNSTABLE"
+            } finally {
+                // Archive JUnit XML reports for Jenkins test result trend
+                // This works with the JUnit plugin to show pass/fail trends
+                junit allowEmptyResults: true,
+                     testResults: '**/target/surefire-reports/*.xml'
+            }
+        }
+
+        // ===================================================================
+        // Stage 4: Integration Tests
+        // Run integration tests using the 'integration-tests' Maven profile.
+        // These tests typically require database connectivity and external
+        // service availability. They are separated from unit tests to allow
+        // faster feedback on the basic build.
+        // ===================================================================
+        stage('Integration Tests') {
+            try {
+                echo "Running integration tests..."
+                sh "${mvnHome}/bin/mvn verify -Pintegration-tests -B"
+            } catch (integrationException) {
+                currentBuild.result = 'UNSTABLE'
+                echo "Integration tests failed - marking build as UNSTABLE"
+            } finally {
+                // Archive failsafe integration test reports
+                junit allowEmptyResults: true,
+                     testResults: '**/target/failsafe-reports/*.xml'
+            }
+        }
+
+        // ===================================================================
+        // Stage 5: Static Analysis
+        // SonarQube analysis for code quality metrics. This stage is
+        // commented out until the SonarQube server is provisioned and the
+        // Jenkins SonarQube plugin is configured (JIRA: INFRA-4521).
+        //
+        // Prerequisites:
+        //   1. SonarQube server running at http://sonar.greylegacy.internal
+        //   2. Jenkins SonarQube plugin installed and configured
+        //   3. SonarQube quality gate webhook configured
+        // ===================================================================
+        stage('Static Analysis') {
+            echo "Static analysis stage - SonarQube integration pending (INFRA-4521)"
+            // TODO: Uncomment when SonarQube server is available
+            //
+            // withSonarQubeEnv('SonarQube-Legacy') {
+            //     sh "${mvnHome}/bin/mvn sonar:sonar " +
+            //        "-Dsonar.projectKey=grey-legacy " +
+            //        "-Dsonar.projectName='Grey Legacy Claims System' " +
+            //        "-Dsonar.java.source=1.8 " +
+            //        "-Dsonar.coverage.jacoco.xmlReportPaths=**/target/site/jacoco/jacoco.xml"
+            // }
+            //
+            // // Wait for SonarQube quality gate result
+            // timeout(time: 5, unit: 'MINUTES') {
+            //     def qualityGate = waitForQualityGate()
+            //     if (qualityGate.status != 'OK') {
+            //         currentBuild.result = 'UNSTABLE'
+            //         echo "Quality gate failed: ${qualityGate.status}"
+            //     }
+            // }
+        }
+
+        // ===================================================================
+        // Stage 6: Package
+        // Build the final WAR and EAR artifacts. Tests are skipped here
+        // since they were already run in previous stages. The -DskipTests
+        // flag skips test execution but still compiles test classes.
+        // ===================================================================
+        stage('Package') {
+            echo "Packaging WAR and EAR artifacts..."
+            sh "${mvnHome}/bin/mvn package -DskipTests -B"
+        }
+
+        // ===================================================================
+        // Stage 7: Archive Artifacts
+        // Store build artifacts in Jenkins for downstream jobs and
+        // manual retrieval. WAR and EAR files are the primary deployment
+        // artifacts.
+        // ===================================================================
+        stage('Archive Artifacts') {
+            echo "Archiving build artifacts..."
+            archiveArtifacts artifacts: 'web/target/*.war, ear/target/*.ear',
+                             allowEmptyArchive: false,
+                             fingerprint: true
+
+            // Generate build manifest for compliance traceability
+            writeFile file: 'build-manifest.txt', text: """
+Grey Legacy Build Manifest
+===========================
+Build Number:  ${env.BUILD_NUMBER}
+Branch:        ${env.BRANCH_NAME}
+Commit:        ${env.GIT_COMMIT}
+Timestamp:     ${buildTimestamp}
+Java Version:  1.8
+Maven Version: 3.6
+Builder:       ${env.NODE_NAME}
+Artifacts:     web/target/grey-legacy-web.war, ear/target/grey-legacy.ear
+"""
+            archiveArtifacts artifacts: 'build-manifest.txt', fingerprint: true
+            echo "Artifacts archived and fingerprinted"
+        }
+
+        // ===================================================================
+        // Stage 7.5: Ant Verification Build
+        // Run the Ant build as a secondary verification. In legacy
+        // environments, the Ant build must continue working even as the
+        // primary build moves to Maven. This stage catches drift between
+        // the two build systems.
+        // ===================================================================
+        stage('Ant Verification') {
+            echo "Running Ant build verification..."
+            try {
+                sh "${antHome}/bin/ant -f build.xml clean compile generate-build-info"
+                echo "Ant build verification passed"
+            } catch (antException) {
+                echo "WARNING: Ant build failed — build.xml may need updating"
+                // Don't fail the pipeline — Ant is secondary
+            }
+        }
+
+        // ===================================================================
+        // Stage 8: Deploy to Dev
+        // Automatically deploy to the development environment when
+        // building the 'develop' branch. Uses SSH to copy the WAR file
+        // to the dev Tomcat server. This follows the GitFlow branching
+        // model common in legacy enterprise shops.
+        // ===================================================================
+        if (env.BRANCH_NAME == 'develop') {
+            stage('Deploy to Dev') {
+                echo "Deploying to development environment..."
+                // Use Jenkins SSH credentials to deploy the WAR
+                // Credential ID 'dev-deploy-key' must be configured in
+                // Jenkins Credentials store
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: 'dev-deploy-key',
+                    keyFileVariable: 'SSH_KEY',
+                    usernameVariable: 'SSH_USER')]) {
+
+                    sh """
+                        scp -i \$SSH_KEY -o StrictHostKeyChecking=no \\
+                            web/target/grey-legacy-web.war \\
+                            \$SSH_USER@dev-server-01:/opt/tomcat/webapps/grey-legacy.war
+                    """
+                    // Restart Tomcat on dev server to pick up new deployment
+                    sh """
+                        ssh -i \$SSH_KEY -o StrictHostKeyChecking=no \\
+                            \$SSH_USER@dev-server-01 \\
+                            'sudo systemctl restart tomcat'
+                    """
+                }
+                echo "Development deployment complete"
+            }
+        }
+
+        // ===================================================================
+        // Stage 9: Deploy to Staging
+        // Deploy to staging for release branches (release/*). Requires
+        // manual approval from a team lead or QA manager before
+        // proceeding. This is a gating step to prevent untested code
+        // from reaching staging.
+        // ===================================================================
+        if (env.BRANCH_NAME ==~ /release\/.*/) {
+            stage('Deploy to Staging') {
+                // Manual approval gate - sends notification and waits
+                // for a human to approve or abort the deployment
+                def approver = input(
+                    message: 'Deploy to Staging environment?',
+                    submitter: 'claims-team-leads,qa-managers',
+                    parameters: [
+                        string(name: 'APPROVER_NOTES',
+                               defaultValue: '',
+                               description: 'Optional notes for this deployment')
+                    ]
+                )
+                echo "Staging deployment approved. Notes: ${approver}"
+
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: 'staging-deploy-key',
+                    keyFileVariable: 'SSH_KEY',
+                    usernameVariable: 'SSH_USER')]) {
+
+                    sh """
+                        scp -i \$SSH_KEY -o StrictHostKeyChecking=no \\
+                            web/target/grey-legacy-web.war \\
+                            \$SSH_USER@staging-server-01:/opt/tomcat/webapps/grey-legacy.war
+                    """
+                }
+                echo "Staging deployment complete"
+            }
+        }
+
+        // ===================================================================
+        // Stage 10: Deploy to Production
+        // Production deployment for the master branch ONLY. Requires
+        // TWO separate manual approvals (four-eyes principle) as mandated
+        // by the company's change management policy and SOX compliance
+        // requirements. This is a common pattern in insurance/financial
+        // industry CI/CD pipelines.
+        // ===================================================================
+        if (env.BRANCH_NAME == 'master') {
+            stage('Deploy to Production') {
+                // First approval - Release Manager
+                input(
+                    message: 'PRODUCTION DEPLOYMENT - First Approval Required',
+                    submitter: 'release-managers',
+                    ok: 'Approve (1 of 2)'
+                )
+                echo "First production approval received"
+
+                // Second approval - IT Director or VP Engineering
+                input(
+                    message: 'PRODUCTION DEPLOYMENT - Second Approval Required (Final)',
+                    submitter: 'it-directors,vp-engineering',
+                    ok: 'Approve and Deploy to Production'
+                )
+                echo "Second production approval received - proceeding with deployment"
+
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: 'prod-deploy-key',
+                    keyFileVariable: 'SSH_KEY',
+                    usernameVariable: 'SSH_USER')]) {
+
+                    // Pre-deployment: database backup (regulatory requirement)
+                    echo "Running pre-deployment database backup..."
+                    sh """
+                        ssh -i \$SSH_KEY -o StrictHostKeyChecking=no \\
+                            \$SSH_USER@prod-server-01 \\
+                            '/opt/scripts/backup-database.sh pre-deploy-${env.BUILD_NUMBER}'
+                    """
+
+                    // Pre-deployment: snapshot current WAR for rollback
+                    echo "Creating rollback snapshot..."
+                    sh """
+                        ssh -i \$SSH_KEY -o StrictHostKeyChecking=no \\
+                            \$SSH_USER@prod-server-01 \\
+                            'cp /opt/tomcat/webapps/grey-legacy.war /opt/backups/grey-legacy-rollback-${env.BUILD_NUMBER}.war 2>/dev/null || true'
+                    """
+
+                    // Deploy the WAR
+                    sh """
+                        scp -i \$SSH_KEY -o StrictHostKeyChecking=no \\
+                            web/target/grey-legacy-web.war \\
+                            \$SSH_USER@prod-server-01:/opt/tomcat/webapps/grey-legacy.war
+                    """
+
+                    // Post-deployment: health check with retry
+                    echo "Running post-deployment health check..."
+                    sh """
+                        ssh -i \$SSH_KEY -o StrictHostKeyChecking=no \\
+                            \$SSH_USER@prod-server-01 \\
+                            '/opt/scripts/health-check.sh || {
+                                echo "HEALTH CHECK FAILED — initiating rollback"
+                                cp /opt/backups/grey-legacy-rollback-${env.BUILD_NUMBER}.war /opt/tomcat/webapps/grey-legacy.war
+                                sudo systemctl restart tomcat
+                                exit 1
+                            }'
+                    """
+                }
+                echo "PRODUCTION deployment complete for build ${env.BUILD_NUMBER}"
+                echo "Deployment manifest: branch=${env.BRANCH_NAME}, commit=${env.GIT_COMMIT}, time=${buildTimestamp}"
+            }
+        }
+
+    } catch (exception) {
+        // ===================================================================
+        // Global error handler - catches any unhandled exceptions from
+        // the pipeline stages and marks the build as FAILED.
+        // ===================================================================
+        currentBuild.result = 'FAILURE'
+        echo "Build FAILED: ${exception.getMessage()}"
+        throw exception
+
+    } finally {
+        // ===================================================================
+        // Post-build actions - always execute regardless of build result.
+        // Send email notifications on failure or recovery to keep the
+        // team informed. This uses the Jenkins Email Extension plugin
+        // which is standard in most enterprise Jenkins installations.
+        // ===================================================================
+        echo "Build result: ${currentBuild.result}"
+
+        if (currentBuild.result == 'FAILURE' || currentBuild.result == 'UNSTABLE') {
+            // Send failure notification email
+            emailext(
+                subject: "[GREY LEGACY] Build ${currentBuild.result}: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """
+                    Build ${currentBuild.result} for Grey Legacy Claims System.
+
+                    Job: ${env.JOB_NAME}
+                    Build Number: ${env.BUILD_NUMBER}
+                    Branch: ${env.BRANCH_NAME}
+                    Build URL: ${env.BUILD_URL}
+
+                    Please investigate and fix the issues.
+                """,
+                to: 'claims-dev-team@greylegacy.com',
+                replyTo: 'noreply@greylegacy.com',
+                mimeType: 'text/plain'
+            )
+        }
+
+        // Clean up workspace to save disk space on the build agent
+        // (optional - uncomment if disk space is a concern)
+        // cleanWs()
+    }
+}

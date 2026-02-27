@@ -1,0 +1,296 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="
+           http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans.xsd">
+
+    <!--
+        JMS Configuration for Grey Legacy Claims Processing System
+        ============================================================
+        Demonstrates enterprise JMS patterns:
+          - ActiveMQ broker connection with failover URI
+          - Caching connection factory for session reuse
+          - Queue and Topic destinations
+          - Message producer with priority routing
+          - Message-driven consumer with concurrency control
+          - Dead Letter Queue (DLQ) with dedicated listener
+          - Durable topic subscription for audit events
+          - Redelivery policy with exponential backoff
+          - Idempotent consumer pattern
+          - Custom error handler with metrics
+          - Transactional messaging
+
+        In legacy insurance systems, JMS powers asynchronous workflows:
+        claim submission events, adjuster assignment notifications,
+        payout scheduling, fraud detection alerts, and partner feeds.
+    -->
+
+    <!-- ================================================================== -->
+    <!-- ActiveMQ ConnectionFactory with Redelivery Policy                  -->
+    <!-- ================================================================== -->
+
+    <!--
+        Redelivery policy: controls how the broker handles failed messages.
+        After max redeliveries, the message is routed to the DLQ.
+        Exponential backoff prevents thundering-herd failures.
+    -->
+    <bean id="redeliveryPolicy"
+          class="org.apache.activemq.RedeliveryPolicy">
+        <!-- Maximum number of redelivery attempts before DLQ routing -->
+        <property name="maximumRedeliveries" value="5"/>
+        <!-- Initial delay before first redelivery (1 second) -->
+        <property name="initialRedeliveryDelay" value="1000"/>
+        <!-- Use exponential backoff: delay doubles each attempt -->
+        <property name="useExponentialBackOff" value="true"/>
+        <!-- Backoff multiplier (1s → 2s → 4s → 8s → 16s) -->
+        <property name="backOffMultiplier" value="2.0"/>
+        <!-- Maximum delay cap (30 seconds) -->
+        <property name="maximumRedeliveryDelay" value="30000"/>
+        <!-- Send to DLQ after exhausting retries -->
+        <property name="destination">
+            <bean class="org.apache.activemq.command.ActiveMQQueue">
+                <constructor-arg value="queue.claim.dlq"/>
+            </bean>
+        </property>
+    </bean>
+
+    <bean id="activeMqConnectionFactory"
+          class="org.apache.activemq.ActiveMQConnectionFactory">
+        <!--
+            Failover URI:
+            - Dev: single broker at localhost
+            - Prod: failover across two brokers with randomize=false
+              for predictable primary/secondary ordering.
+            Maven resource filtering replaces ${jms.broker.url} per profile.
+        -->
+        <property name="brokerURL"
+                  value="${jms.broker.url:tcp://localhost:61616}"/>
+        <property name="userName" value="${jms.broker.username:admin}"/>
+        <property name="password" value="${jms.broker.password:admin}"/>
+        <!-- Required to deserialise ClaimEventMessage across classloaders -->
+        <property name="trustAllPackages" value="true"/>
+        <!-- Apply redelivery policy to all destinations -->
+        <property name="redeliveryPolicy" ref="redeliveryPolicy"/>
+        <!-- Non-blocking redelivery so listener threads aren't held -->
+        <property name="nonBlockingRedelivery" value="true"/>
+    </bean>
+
+    <!-- Caching wrapper to avoid creating a new connection per send/receive -->
+    <bean id="cachingConnectionFactory"
+          class="org.springframework.jms.connection.CachingConnectionFactory">
+        <property name="targetConnectionFactory" ref="activeMqConnectionFactory"/>
+        <property name="sessionCacheSize" value="10"/>
+        <!-- Reconnect automatically if connection drops -->
+        <property name="reconnectOnException" value="true"/>
+    </bean>
+
+    <!-- ================================================================== -->
+    <!-- JMS Destinations (Queues + Topics)                                 -->
+    <!-- ================================================================== -->
+
+    <!-- Primary claim events queue — transactional processing -->
+    <bean id="claimEventQueue"
+          class="org.apache.activemq.command.ActiveMQQueue">
+        <constructor-arg value="queue.claim.events"/>
+    </bean>
+
+    <!-- Notification queue — downstream system notifications -->
+    <bean id="claimNotificationQueue"
+          class="org.apache.activemq.command.ActiveMQQueue">
+        <constructor-arg value="queue.claim.notifications"/>
+    </bean>
+
+    <!-- Dead Letter Queue — failed messages after max redelivery -->
+    <bean id="deadLetterQueue"
+          class="org.apache.activemq.command.ActiveMQQueue">
+        <constructor-arg value="queue.claim.dlq"/>
+    </bean>
+
+    <!--
+        Claim events topic — publish/subscribe for audit, analytics,
+        and regulatory reporting consumers that need ALL events.
+        Queues are for competing consumers (load balancing);
+        topics are for broadcast to all subscribers.
+    -->
+    <bean id="claimEventTopic"
+          class="org.apache.activemq.command.ActiveMQTopic">
+        <constructor-arg value="topic.claim.events"/>
+    </bean>
+
+    <!-- ================================================================== -->
+    <!-- JmsTemplate for sending messages                                   -->
+    <!-- ================================================================== -->
+
+    <bean id="jmsTemplate"
+          class="org.springframework.jms.core.JmsTemplate">
+        <property name="connectionFactory" ref="cachingConnectionFactory"/>
+        <property name="defaultDestination" ref="claimEventQueue"/>
+        <property name="messageConverter" ref="claimMessageConverter"/>
+        <!-- Persistent delivery mode — messages survive broker restart -->
+        <property name="deliveryPersistent" value="true"/>
+        <!-- Session-level transactions for exactly-once semantics -->
+        <property name="sessionTransacted" value="true"/>
+        <!-- Receive timeout for synchronous reads (5 seconds) -->
+        <property name="receiveTimeout" value="5000"/>
+        <!-- Time-to-live: messages expire after 24 hours if not consumed -->
+        <property name="timeToLive" value="86400000"/>
+    </bean>
+
+    <!-- Separate template for topic publishing (pub/sub mode) -->
+    <bean id="jmsTopicTemplate"
+          class="org.springframework.jms.core.JmsTemplate">
+        <property name="connectionFactory" ref="cachingConnectionFactory"/>
+        <property name="defaultDestination" ref="claimEventTopic"/>
+        <property name="messageConverter" ref="claimMessageConverter"/>
+        <property name="deliveryPersistent" value="true"/>
+        <property name="sessionTransacted" value="true"/>
+        <!-- Required for topic mode -->
+        <property name="pubSubDomain" value="true"/>
+    </bean>
+
+    <!-- ================================================================== -->
+    <!-- Message Converter                                                  -->
+    <!-- ================================================================== -->
+
+    <bean id="claimMessageConverter"
+          class="com.greylegacy.integration.jms.ClaimMessageConverter"/>
+
+    <!-- ================================================================== -->
+    <!-- Error Handler                                                      -->
+    <!-- ================================================================== -->
+
+    <!--
+        Custom error handler that classifies exceptions, tracks metrics,
+        and provides deduplication of error logs.
+        Replaces the default Spring/container error handling.
+    -->
+    <bean id="jmsErrorHandler"
+          class="com.greylegacy.integration.jms.JmsErrorHandler"/>
+
+    <!-- ================================================================== -->
+    <!-- Idempotent Consumer                                                -->
+    <!-- ================================================================== -->
+
+    <!--
+        In-memory LRU cache for duplicate message detection.
+        In production, replace with a JDBC or Redis-backed implementation.
+    -->
+    <bean id="idempotentConsumer"
+          class="com.greylegacy.integration.jms.IdempotentMessageConsumer"/>
+
+    <!-- ================================================================== -->
+    <!-- Claim Notification Sender (Producer)                               -->
+    <!-- ================================================================== -->
+
+    <bean id="claimNotificationSender"
+          class="com.greylegacy.integration.jms.ClaimNotificationSender">
+        <property name="jmsTemplate" ref="jmsTemplate"/>
+        <property name="destination" ref="claimEventQueue"/>
+        <property name="replyToQueue" ref="claimNotificationQueue"/>
+    </bean>
+
+    <!-- ================================================================== -->
+    <!-- Claim Event Listener (Queue Consumer — competing consumers)        -->
+    <!-- ================================================================== -->
+
+    <bean id="claimEventListener"
+          class="com.greylegacy.integration.jms.ClaimEventListener">
+        <property name="messageConverter" ref="claimMessageConverter"/>
+        <property name="idempotentConsumer" ref="idempotentConsumer"/>
+    </bean>
+
+    <!--
+        DefaultMessageListenerContainer — manages listener lifecycle.
+        Transactional: messages are committed only after successful
+        processing.  On exception, the message is rolled back and
+        redelivered per the broker's redelivery policy.
+    -->
+    <bean id="claimEventListenerContainer"
+          class="org.springframework.jms.listener.DefaultMessageListenerContainer">
+        <property name="connectionFactory" ref="cachingConnectionFactory"/>
+        <property name="destination" ref="claimEventQueue"/>
+        <property name="messageListener" ref="claimEventListener"/>
+        <!-- 3 concurrent consumers, scaling up to 10 under load -->
+        <property name="concurrentConsumers" value="3"/>
+        <property name="maxConcurrentConsumers" value="10"/>
+        <!-- Session-level transactions for reliable processing -->
+        <property name="sessionTransacted" value="true"/>
+        <!-- Receive timeout — how long to wait for a message -->
+        <property name="receiveTimeout" value="5000"/>
+        <!-- Custom error handler for uncaught listener exceptions -->
+        <property name="errorHandler" ref="jmsErrorHandler"/>
+        <!-- Cache level: CACHE_CONSUMER for non-durable queue listeners -->
+        <property name="cacheLevelName" value="CACHE_CONSUMER"/>
+    </bean>
+
+    <!-- ================================================================== -->
+    <!-- Dead Letter Queue Processor                                        -->
+    <!-- ================================================================== -->
+
+    <bean id="deadLetterQueueProcessor"
+          class="com.greylegacy.integration.jms.DeadLetterQueueProcessor">
+        <property name="messageConverter" ref="claimMessageConverter"/>
+    </bean>
+
+    <!--
+        DLQ listener container — single consumer, no concurrency.
+        DLQ processing is deliberately sequential to avoid compounding
+        failures.  Messages in the DLQ are logged, analysed, and
+        optionally persisted for operational review.
+    -->
+    <bean id="dlqListenerContainer"
+          class="org.springframework.jms.listener.DefaultMessageListenerContainer">
+        <property name="connectionFactory" ref="cachingConnectionFactory"/>
+        <property name="destination" ref="deadLetterQueue"/>
+        <property name="messageListener" ref="deadLetterQueueProcessor"/>
+        <property name="concurrentConsumers" value="1"/>
+        <property name="maxConcurrentConsumers" value="1"/>
+        <property name="sessionTransacted" value="true"/>
+        <property name="receiveTimeout" value="10000"/>
+        <property name="errorHandler" ref="jmsErrorHandler"/>
+    </bean>
+
+    <!-- ================================================================== -->
+    <!-- Durable Topic Subscription (Audit/Regulatory Consumer)             -->
+    <!-- ================================================================== -->
+
+    <!--
+        Durable subscription ensures that the audit consumer receives ALL
+        claim events, even if the consumer is temporarily offline.  The
+        broker retains messages published while the subscriber is down
+        and delivers them when it reconnects.
+
+        This is the pattern used by regulatory reporting systems that
+        must capture every claim lifecycle event for compliance.
+
+        Key config:
+          - subscriptionDurable=true: broker retains messages
+          - durableSubscriptionName: unique ID for the subscription
+          - clientId: required for durable topics in JMS 1.1
+          - pubSubDomain=true: topic mode (not queue)
+    -->
+    <bean id="auditTopicListenerContainer"
+          class="org.springframework.jms.listener.DefaultMessageListenerContainer">
+        <property name="connectionFactory" ref="activeMqConnectionFactory"/>
+        <property name="destination" ref="claimEventTopic"/>
+        <property name="messageListener" ref="claimEventListener"/>
+        <property name="pubSubDomain" value="true"/>
+        <property name="subscriptionDurable" value="true"/>
+        <property name="durableSubscriptionName" value="greylegacy-audit-subscriber"/>
+        <property name="clientId" value="greylegacy-audit-client"/>
+        <property name="concurrentConsumers" value="1"/>
+        <property name="sessionTransacted" value="true"/>
+        <property name="errorHandler" ref="jmsErrorHandler"/>
+    </bean>
+
+    <!-- ================================================================== -->
+    <!-- JMS Transaction Manager                                            -->
+    <!-- ================================================================== -->
+
+    <bean id="jmsTransactionManager"
+          class="org.springframework.jms.connection.JmsTransactionManager">
+        <property name="connectionFactory" ref="cachingConnectionFactory"/>
+    </bean>
+
+</beans>

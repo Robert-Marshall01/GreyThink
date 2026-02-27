@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Grey Legacy Insurance Claims System - EAR Module POM
+
+    This module packages the web application (WAR) and batch processing (JAR)
+    modules into a Java EE Enterprise Application Archive (EAR) for deployment
+    to a Java EE application server such as JBoss EAP, WildFly, or WebLogic.
+
+    The EAR structure follows Java EE 7 conventions with shared libraries
+    bundled in the lib/ directory.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- Parent POM reference -->
+    <parent>
+        <groupId>com.greylegacy</groupId>
+        <artifactId>grey-legacy-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>grey-legacy-ear</artifactId>
+    <packaging>ear</packaging>
+    <name>Grey Legacy Claims System - EAR</name>
+    <description>
+        Enterprise Application Archive packaging the web and batch modules
+        for deployment to a Java EE application server.
+    </description>
+
+    <dependencies>
+        <!-- Web module - packaged as a WAR inside the EAR -->
+        <dependency>
+            <groupId>com.greylegacy</groupId>
+            <artifactId>grey-legacy-web</artifactId>
+            <version>${project.version}</version>
+            <type>war</type>
+        </dependency>
+
+        <!-- Batch module - packaged as a JAR inside the EAR -->
+        <dependency>
+            <groupId>com.greylegacy</groupId>
+            <artifactId>grey-legacy-batch</artifactId>
+            <version>${project.version}</version>
+            <type>jar</type>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-ear-plugin</artifactId>
+                <version>3.3.0</version>
+                <configuration>
+                    <!-- Java EE 7 application descriptor version -->
+                    <version>7</version>
+
+                    <!-- Shared libraries are placed in the EAR's lib/ directory
+                         so they are available to all modules via the EAR classloader -->
+                    <defaultLibBundleDir>lib/</defaultLibBundleDir>
+
+                    <!-- Generate application.xml from module definitions below.
+                         This supplements the hand-crafted application.xml in
+                         src/main/application/META-INF/ -->
+                    <generateApplicationXml>true</generateApplicationXml>
+
+                    <!-- Module definitions controlling EAR structure -->
+                    <modules>
+                        <!-- Web module with context root configuration -->
+                        <webModule>
+                            <groupId>com.greylegacy</groupId>
+                            <artifactId>grey-legacy-web</artifactId>
+                            <contextRoot>/grey-legacy</contextRoot>
+                            <bundleFileName>grey-legacy-web.war</bundleFileName>
+                        </webModule>
+
+                        <!-- Batch processing JAR module -->
+                        <jarModule>
+                            <groupId>com.greylegacy</groupId>
+                            <artifactId>grey-legacy-batch</artifactId>
+                            <bundleFileName>grey-legacy-batch.jar</bundleFileName>
+                        </jarModule>
+                    </modules>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

@@ -1,0 +1,248 @@
+<!DOCTYPE module PUBLIC
+    "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+    "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!--
+    Grey Legacy Checkstyle Configuration
+    =====================================
+    Enforces baseline coding standards for the legacy codebase.
+    Intentionally permissive — this is a legacy system adopting static
+    analysis incrementally. Strict rules (e.g., missing Javadoc) are
+    set to WARNING severity so they don't break the build.
+
+    Usage:
+      - Ant:   ant checkstyle (uses build.xml target)
+      - Maven: mvn checkstyle:check -Dcheckstyle.config.location=config/checkstyle/checkstyle.xml
+
+    Severity levels:
+      - error   = fails the build (critical issues only)
+      - warning = reported but does not fail the build
+      - info    = informational, logged but ignored
+
+    Reference: https://checkstyle.org/checks.html
+-->
+<module name="Checker">
+
+    <!-- ================================================================== -->
+    <!-- File-level checks                                                  -->
+    <!-- ================================================================== -->
+
+    <!-- Enforce UTF-8 encoding across all source files -->
+    <property name="charset" value="UTF-8"/>
+
+    <!-- Severity default: warning (does not break the build) -->
+    <property name="severity" value="warning"/>
+
+    <!-- File extensions to scan -->
+    <property name="fileExtensions" value="java, properties, xml"/>
+
+    <!-- Suppress warnings for generated code and test fixtures -->
+    <module name="SuppressionFilter">
+        <property name="file" value="${config_loc}/checkstyle-suppressions.xml" default=""/>
+        <property name="optional" value="true"/>
+    </module>
+
+    <!-- No tab characters in source files -->
+    <module name="FileTabCharacter">
+        <property name="eachLine" value="true"/>
+        <property name="severity" value="warning"/>
+    </module>
+
+    <!-- Maximum file length: 2000 lines (legacy files are long) -->
+    <module name="FileLength">
+        <property name="max" value="2000"/>
+        <property name="severity" value="warning"/>
+    </module>
+
+    <!-- No trailing whitespace -->
+    <module name="RegexpSingleline">
+        <property name="format" value="\s+$"/>
+        <property name="message" value="Line has trailing whitespace."/>
+        <property name="severity" value="info"/>
+    </module>
+
+    <!-- ================================================================== -->
+    <!-- TreeWalker: AST-based checks on Java source                        -->
+    <!-- ================================================================== -->
+    <module name="TreeWalker">
+
+        <!-- ============================================================ -->
+        <!-- Naming Conventions                                           -->
+        <!-- ============================================================ -->
+
+        <!-- Classes: PascalCase -->
+        <module name="TypeName">
+            <property name="format" value="^[A-Z][a-zA-Z0-9]*$"/>
+            <property name="severity" value="error"/>
+        </module>
+
+        <!-- Methods: camelCase -->
+        <module name="MethodName">
+            <property name="format" value="^[a-z][a-zA-Z0-9]*$"/>
+            <property name="severity" value="error"/>
+        </module>
+
+        <!-- Constants: UPPER_SNAKE_CASE -->
+        <module name="ConstantName">
+            <property name="format" value="^(log(ger)?|[A-Z][A-Z0-9]*(_[A-Z0-9]+)*)$"/>
+            <property name="severity" value="warning"/>
+        </module>
+
+        <!-- Local variables: camelCase -->
+        <module name="LocalVariableName">
+            <property name="format" value="^[a-z][a-zA-Z0-9]*$"/>
+            <property name="severity" value="warning"/>
+        </module>
+
+        <!-- Member variables: camelCase (allow legacy m_ prefix) -->
+        <module name="MemberName">
+            <property name="format" value="^(m_)?[a-z][a-zA-Z0-9]*$"/>
+            <property name="severity" value="warning"/>
+        </module>
+
+        <!-- Parameters: camelCase (allow p_ prefix for stored proc params) -->
+        <module name="ParameterName">
+            <property name="format" value="^(p_)?[a-z][a-zA-Z0-9]*$"/>
+            <property name="severity" value="warning"/>
+        </module>
+
+        <!-- Package names: lowercase -->
+        <module name="PackageName">
+            <property name="format" value="^[a-z]+(\.[a-z][a-z0-9]*)*$"/>
+            <property name="severity" value="error"/>
+        </module>
+
+        <!-- ============================================================ -->
+        <!-- Import Rules                                                 -->
+        <!-- ============================================================ -->
+
+        <!-- No star imports (except static for test assertions) -->
+        <module name="AvoidStarImport">
+            <property name="allowStaticMemberImports" value="true"/>
+            <property name="severity" value="warning"/>
+        </module>
+
+        <!-- No unused imports -->
+        <module name="UnusedImports">
+            <property name="severity" value="warning"/>
+        </module>
+
+        <!-- No redundant imports -->
+        <module name="RedundantImport">
+            <property name="severity" value="warning"/>
+        </module>
+
+        <!-- Block sun.* / com.sun.* internal APIs -->
+        <module name="IllegalImport">
+            <property name="illegalPkgs" value="sun, com.sun"/>
+            <property name="severity" value="error"/>
+        </module>
+
+        <!-- ============================================================ -->
+        <!-- Size / Complexity Limits                                     -->
+        <!-- These are intentionally generous for legacy code.            -->
+        <!-- ============================================================ -->
+
+        <!-- Method length: max 150 lines (legacy methods are long) -->
+        <module name="MethodLength">
+            <property name="max" value="150"/>
+            <property name="severity" value="warning"/>
+        </module>
+
+        <!-- Parameter count: max 10 (legacy constructors are wide) -->
+        <module name="ParameterNumber">
+            <property name="max" value="10"/>
+            <property name="severity" value="warning"/>
+        </module>
+
+        <!-- Cyclomatic complexity: max 20 (legacy business logic) -->
+        <module name="CyclomaticComplexity">
+            <property name="max" value="20"/>
+            <property name="severity" value="warning"/>
+        </module>
+
+        <!-- Line length: max 150 characters -->
+        <module name="LineLength">
+            <property name="max" value="150"/>
+            <property name="ignorePattern" value="^package.*|^import.*|a]* href|href|http://|https://|ftp://"/>
+            <property name="severity" value="warning"/>
+        </module>
+
+        <!-- ============================================================ -->
+        <!-- Code Quality                                                 -->
+        <!-- ============================================================ -->
+
+        <!-- Require @Override annotation -->
+        <module name="MissingOverride">
+            <property name="severity" value="warning"/>
+        </module>
+
+        <!-- Empty catch blocks must have a comment explaining why -->
+        <module name="EmptyCatchBlock">
+            <property name="exceptionVariableName" value="expected|ignored"/>
+            <property name="severity" value="error"/>
+        </module>
+
+        <!-- No empty statements (stray semicolons) -->
+        <module name="EmptyStatement">
+            <property name="severity" value="error"/>
+        </module>
+
+        <!-- Require default in switch -->
+        <module name="MissingSwitchDefault">
+            <property name="severity" value="warning"/>
+        </module>
+
+        <!-- No fall-through in switch without comment -->
+        <module name="FallThrough">
+            <property name="severity" value="error"/>
+        </module>
+
+        <!-- Equals/hashCode: if one is overridden, both must be -->
+        <module name="EqualsHashCode">
+            <property name="severity" value="error"/>
+        </module>
+
+        <!-- String literal equality: use .equals(), not == -->
+        <module name="StringLiteralEquality">
+            <property name="severity" value="error"/>
+        </module>
+
+        <!-- ============================================================ -->
+        <!-- Javadoc (informational only — legacy code rarely has it)     -->
+        <!-- ============================================================ -->
+
+        <!-- Public methods should have Javadoc (info only) -->
+        <module name="MissingJavadocMethod">
+            <property name="scope" value="public"/>
+            <property name="severity" value="info"/>
+            <property name="allowMissingPropertyJavadoc" value="true"/>
+        </module>
+
+        <!-- Public types should have Javadoc (info only) -->
+        <module name="MissingJavadocType">
+            <property name="scope" value="public"/>
+            <property name="severity" value="info"/>
+        </module>
+
+        <!-- ============================================================ -->
+        <!-- Whitespace / Formatting                                      -->
+        <!-- ============================================================ -->
+
+        <!-- No whitespace after certain tokens -->
+        <module name="NoWhitespaceAfter">
+            <property name="tokens" value="AT, INC, DEC, UNARY_MINUS, UNARY_PLUS, BNOT, LNOT, DOT, ARRAY_DECLARATOR, INDEX_OP"/>
+            <property name="severity" value="info"/>
+        </module>
+
+        <!-- Whitespace around operators -->
+        <module name="WhitespaceAround">
+            <property name="allowEmptyConstructors" value="true"/>
+            <property name="allowEmptyMethods" value="true"/>
+            <property name="allowEmptyTypes" value="true"/>
+            <property name="severity" value="info"/>
+        </module>
+
+    </module>
+
+</module>

@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ============================================================================
+     Grey Legacy — Oracle WebLogic Deployment Descriptor
+     ============================================================================
+     WebLogic-specific deployment descriptor that customizes WAR deployment
+     behavior on Oracle WebLogic Server 12c/14c.
+
+     This file supplements the standard web.xml with WebLogic-specific
+     configuration for class loading, security, session management,
+     JNDI references, and container tuning.
+
+     WebLogic versions: 12.2.1+, 14.1.1+
+     ============================================================================
+     
+     DEPLOYMENT NOTES:
+       1. Place in WEB-INF/ alongside web.xml
+       2. WebLogic reads this during deployment to configure container behavior
+       3. Settings here override WebLogic domain-level defaults for this app
+       4. For EAR deployments, weblogic-application.xml at the EAR level
+          can also provide similar overrides
+     ============================================================================ -->
+<weblogic-web-app xmlns="http://xmlns.oracle.com/weblogic/weblogic-web-app"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xsi:schemaLocation="http://xmlns.oracle.com/weblogic/weblogic-web-app
+                                      http://xmlns.oracle.com/weblogic/weblogic-web-app/1.9/weblogic-web-app.xsd">
+
+    <!-- ================================================================
+         Context Root
+         Overrides the context-root specified in application.xml (EAR)
+         or the WAR filename-based default.
+         ================================================================ -->
+    <context-root>/grey-legacy</context-root>
+
+    <!-- ================================================================
+         Class Loading Configuration
+         
+         WebLogic uses parent-first (standard Java) delegation by default.
+         For legacy applications with specific library version requirements,
+         prefer-web-inf-classes forces child-first loading so that
+         WEB-INF/lib JARs take precedence over server-level JARs.
+         
+         This is essential when the WebLogic server bundles an older
+         version of a library (e.g., Jackson, Commons Logging) that
+         conflicts with the application's requirements.
+         ================================================================ -->
+    <container-descriptor>
+        <prefer-web-inf-classes>true</prefer-web-inf-classes>
+
+        <!-- Alternatively, use prefer-application-packages for selective override -->
+        <!--
+        <prefer-application-packages>
+            <package-name>org.apache.commons.logging.*</package-name>
+            <package-name>org.slf4j.*</package-name>
+            <package-name>com.fasterxml.jackson.*</package-name>
+            <package-name>org.hibernate.*</package-name>
+        </prefer-application-packages>
+        -->
+
+        <!-- Servlet reload check interval (seconds). Set to -1 in production. -->
+        <servlet-reload-check-secs>-1</servlet-reload-check-secs>
+
+        <!-- Enable session monitoring via JMX -->
+        <session-monitoring-enabled>true</session-monitoring-enabled>
+    </container-descriptor>
+
+    <!-- ================================================================
+         Session Descriptor
+         WebLogic-specific session configuration supplementing
+         <session-config> in web.xml.
+         ================================================================ -->
+    <session-descriptor>
+        <timeout-secs>1800</timeout-secs>
+        <cookie-name>GREYLEGACY_SESSIONID</cookie-name>
+        <cookie-http-only>true</cookie-http-only>
+        <cookie-secure>true</cookie-secure>
+        <cookie-path>/grey-legacy</cookie-path>
+        <url-rewriting-enabled>false</url-rewriting-enabled>
+
+        <!-- Session persistence for failover (WebLogic clustering) -->
+        <persistent-store-type>replicated_if_clustered</persistent-store-type>
+
+        <!-- Limit session size to prevent memory issues -->
+        <max-in-memory-sessions>5000</max-in-memory-sessions>
+
+        <!-- Sharing sessions across web apps (disabled for security) -->
+        <sharing-enabled>false</sharing-enabled>
+    </session-descriptor>
+
+    <!-- ================================================================
+         JSP Descriptor
+         ================================================================ -->
+    <jsp-descriptor>
+        <keepgenerated>false</keepgenerated>
+        <page-check-seconds>-1</page-check-seconds>
+        <precompile>true</precompile>
+        <encoding>UTF-8</encoding>
+    </jsp-descriptor>
+
+    <!-- ================================================================
+         Security Role Assignments
+         Maps portable security-role names from web.xml to WebLogic
+         security principals (users and groups from the configured
+         security realm — typically LDAP or embedded LDAP).
+         ================================================================ -->
+    <security-role-assignment>
+        <role-name>READONLY</role-name>
+        <principal-name>GreyLegacy_Readonly</principal-name>
+        <principal-name>Compliance_Officers</principal-name>
+    </security-role-assignment>
+
+    <security-role-assignment>
+        <role-name>CLAIMS_ADJUSTER</role-name>
+        <principal-name>Claims_Adjusters</principal-name>
+        <principal-name>Claims_Managers</principal-name>
+        <principal-name>GreyLegacy_Admins</principal-name>
+    </security-role-assignment>
+
+    <security-role-assignment>
+        <role-name>CLAIMS_MANAGER</role-name>
+        <principal-name>Claims_Managers</principal-name>
+        <principal-name>GreyLegacy_Admins</principal-name>
+    </security-role-assignment>
+
+    <security-role-assignment>
+        <role-name>ADMIN</role-name>
+        <principal-name>GreyLegacy_Admins</principal-name>
+    </security-role-assignment>
+
+    <security-role-assignment>
+        <role-name>SYSTEM_BATCH</role-name>
+        <principal-name>batch_service</principal-name>
+    </security-role-assignment>
+
+    <!-- ================================================================
+         JNDI Resource Reference Mappings
+         Maps portable JNDI names to WebLogic server-configured resources.
+         
+         In WebLogic, DataSources and JMS resources are configured via
+         the admin console or WLST scripts. The jndi-name below must
+         match the JNDI name in the WebLogic domain configuration.
+         ================================================================ -->
+
+    <!-- DataSource mapping -->
+    <resource-description>
+        <res-ref-name>jdbc/GreyLegacyDS</res-ref-name>
+        <jndi-name>jdbc/GreyLegacyDS</jndi-name>
+    </resource-description>
+
+    <!-- JMS Connection Factory -->
+    <resource-description>
+        <res-ref-name>jms/ConnectionFactory</res-ref-name>
+        <jndi-name>jms/GreyLegacyConnectionFactory</jndi-name>
+    </resource-description>
+
+    <!-- ================================================================
+         Character Encoding
+         ================================================================ -->
+    <charset-params>
+        <input-charset>
+            <resource-path>/*</resource-path>
+            <java-charset-name>UTF-8</java-charset-name>
+        </input-charset>
+    </charset-params>
+
+    <!-- ================================================================
+         Logging
+         WebLogic server-specific logging configuration.
+         Application logs go to the server log by default.
+         ================================================================ -->
+    <logging>
+        <log-filename>servers/AdminServer/logs/grey-legacy.log</log-filename>
+        <rotation-type>bySize</rotation-type>
+        <file-size-limit>10240</file-size-limit>
+        <file-count>10</file-count>
+    </logging>
+
+</weblogic-web-app>

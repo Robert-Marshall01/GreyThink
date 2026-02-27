@@ -1,0 +1,241 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ehcache xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="http://www.ehcache.org/ehcache.xsd"
+         updateCheck="false"
+         monitoring="autodetect"
+         dynamicConfig="true"
+         name="greylegacy-ehcache">
+
+    <!--
+        Ehcache Configuration for Hibernate Second-Level (L2) Cache
+        ============================================================
+        Hibernate's L2 cache sits between the SessionFactory and the database,
+        caching entity data across Session boundaries. This dramatically reduces
+        database round-trips for frequently-read, rarely-modified data.
+
+        In legacy insurance applications, L2 caching is critical for:
+          - Reference/lookup tables (claim statuses, coverage types, states)
+            that are read on every request but rarely change
+          - Policy data that is read far more often than written
+          - Adjuster profiles that rarely change
+
+        Cache Levels:
+          L1 = Hibernate Session cache (per-transaction, always on)
+          L2 = Ehcache (per-SessionFactory, configurable per entity)
+          Query Cache = Caches query results by query+parameters
+
+        Integration:
+          - hibernate.cache.region.factory_class = org.hibernate.cache.ehcache.EhCacheRegionFactory
+          - hibernate.cache.use_second_level_cache = true
+          - hibernate.cache.use_query_cache = true
+          - Entities must be annotated with @Cacheable / @Cache
+          - Cache regions map to entity class names or collection roles
+    -->
+
+    <!-- ================================================================== -->
+    <!-- Disk Store — overflow location for evicted entries                  -->
+    <!-- ================================================================== -->
+    <diskStore path="java.io.tmpdir/greylegacy-ehcache"/>
+
+    <!-- ================================================================== -->
+    <!-- Default Cache — fallback for entities without explicit config       -->
+    <!-- ================================================================== -->
+    <defaultCache
+        maxEntriesLocalHeap="500"
+        eternal="false"
+        timeToIdleSeconds="300"
+        timeToLiveSeconds="600"
+        overflowToDisk="false"
+        statistics="true">
+    </defaultCache>
+
+    <!-- ================================================================== -->
+    <!-- Reference Data Caches (long-lived, read-mostly)                    -->
+    <!-- ================================================================== -->
+    <!-- These tables change extremely rarely (only via DBA or deployment)  -->
+    <!-- so aggressive caching is safe.                                     -->
+
+    <!-- Claim Status Reference — 12 rows, read on every claim view -->
+    <cache name="com.greylegacy.domain.ClaimStatusRef"
+           maxEntriesLocalHeap="50"
+           eternal="true"
+           overflowToDisk="false"
+           statistics="true">
+    </cache>
+
+    <!-- Coverage Type Reference — 10 rows, read during FNOL submission -->
+    <cache name="com.greylegacy.domain.CoverageTypeRef"
+           maxEntriesLocalHeap="50"
+           eternal="true"
+           overflowToDisk="false"
+           statistics="true">
+    </cache>
+
+    <!-- State/Province Reference — 50+ rows, read during regulatory checks -->
+    <cache name="com.greylegacy.domain.StateProvinceRef"
+           maxEntriesLocalHeap="100"
+           eternal="true"
+           overflowToDisk="false"
+           statistics="true">
+    </cache>
+
+    <!-- ================================================================== -->
+    <!-- Entity Caches (medium-lived, read-heavy)                           -->
+    <!-- ================================================================== -->
+
+    <!-- Adjuster profiles — ~100 adjusters, read for every claim assignment -->
+    <!-- TTL 30 minutes — refreshed when adjusters are added/modified       -->
+    <cache name="com.greylegacy.domain.Adjuster"
+           maxEntriesLocalHeap="200"
+           eternal="false"
+           timeToIdleSeconds="900"
+           timeToLiveSeconds="1800"
+           overflowToDisk="false"
+           statistics="true">
+    </cache>
+
+    <!-- Policy — frequently read during claim processing and coverage checks -->
+    <!-- TTL 10 minutes — balances freshness with database load reduction    -->
+    <cache name="com.greylegacy.domain.Policy"
+           maxEntriesLocalHeap="5000"
+           eternal="false"
+           timeToIdleSeconds="300"
+           timeToLiveSeconds="600"
+           overflowToDisk="true"
+           maxEntriesLocalDisk="20000"
+           statistics="true">
+    </cache>
+
+    <!-- Claim — cached with shorter TTL since claims change more frequently -->
+    <!-- TTL 5 minutes — acceptable staleness for search/dashboard queries  -->
+    <cache name="com.greylegacy.domain.Claim"
+           maxEntriesLocalHeap="10000"
+           eternal="false"
+           timeToIdleSeconds="120"
+           timeToLiveSeconds="300"
+           overflowToDisk="true"
+           maxEntriesLocalDisk="50000"
+           statistics="true">
+    </cache>
+
+    <!-- ClaimPayment — read during claim detail views -->
+    <cache name="com.greylegacy.domain.ClaimPayment"
+           maxEntriesLocalHeap="5000"
+           eternal="false"
+           timeToIdleSeconds="120"
+           timeToLiveSeconds="300"
+           overflowToDisk="false"
+           statistics="true">
+    </cache>
+
+    <!-- ClaimAuditEntry — immutable (write-once), safe for long caching -->
+    <cache name="com.greylegacy.domain.ClaimAuditEntry"
+           maxEntriesLocalHeap="1000"
+           eternal="false"
+           timeToIdleSeconds="1800"
+           timeToLiveSeconds="3600"
+           overflowToDisk="true"
+           maxEntriesLocalDisk="10000"
+           statistics="true">
+    </cache>
+
+    <!-- ClaimSnapshot — immutable, safe for long caching -->
+    <cache name="com.greylegacy.domain.ClaimSnapshot"
+           maxEntriesLocalHeap="500"
+           eternal="false"
+           timeToIdleSeconds="1800"
+           timeToLiveSeconds="3600"
+           overflowToDisk="false"
+           statistics="true">
+    </cache>
+
+    <!-- PolicyEndorsement — rarely accessed, shorter cache -->
+    <cache name="com.greylegacy.domain.PolicyEndorsement"
+           maxEntriesLocalHeap="2000"
+           eternal="false"
+           timeToIdleSeconds="300"
+           timeToLiveSeconds="600"
+           overflowToDisk="false"
+           statistics="true">
+    </cache>
+
+    <!-- ================================================================== -->
+    <!-- Collection Caches                                                   -->
+    <!-- ================================================================== -->
+    <!-- Hibernate caches collections (one-to-many, many-to-many) separately -->
+    <!-- from the owning entity.                                             -->
+
+    <!-- Claim → Payments collection (accessed in claim detail view) -->
+    <cache name="com.greylegacy.domain.Claim.payments"
+           maxEntriesLocalHeap="5000"
+           eternal="false"
+           timeToIdleSeconds="120"
+           timeToLiveSeconds="300"
+           overflowToDisk="false"
+           statistics="true">
+    </cache>
+
+    <!-- Claim → Audit entries collection -->
+    <cache name="com.greylegacy.domain.Claim.auditEntries"
+           maxEntriesLocalHeap="2000"
+           eternal="false"
+           timeToIdleSeconds="600"
+           timeToLiveSeconds="1800"
+           overflowToDisk="false"
+           statistics="true">
+    </cache>
+
+    <!-- Claim → Notes collection -->
+    <cache name="com.greylegacy.domain.Claim.notes"
+           maxEntriesLocalHeap="2000"
+           eternal="false"
+           timeToIdleSeconds="300"
+           timeToLiveSeconds="600"
+           overflowToDisk="false"
+           statistics="true">
+    </cache>
+
+    <!-- Policy → Claims collection -->
+    <cache name="com.greylegacy.domain.Policy.claims"
+           maxEntriesLocalHeap="5000"
+           eternal="false"
+           timeToIdleSeconds="120"
+           timeToLiveSeconds="300"
+           overflowToDisk="false"
+           statistics="true">
+    </cache>
+
+    <!-- Policy → Endorsements collection -->
+    <cache name="com.greylegacy.domain.Policy.endorsements"
+           maxEntriesLocalHeap="2000"
+           eternal="false"
+           timeToIdleSeconds="300"
+           timeToLiveSeconds="600"
+           overflowToDisk="false"
+           statistics="true">
+    </cache>
+
+    <!-- ================================================================== -->
+    <!-- Hibernate Query Cache                                               -->
+    <!-- ================================================================== -->
+    <!-- Caches the results of HQL/Criteria queries by query string + params -->
+    <!-- Automatically invalidated when any entity in the cached query's     -->
+    <!-- tables is modified.                                                 -->
+    <cache name="org.hibernate.cache.internal.StandardQueryCache"
+           maxEntriesLocalHeap="500"
+           eternal="false"
+           timeToIdleSeconds="120"
+           timeToLiveSeconds="300"
+           overflowToDisk="false"
+           statistics="true">
+    </cache>
+
+    <!-- Tracks which query caches need invalidation when tables change -->
+    <cache name="org.hibernate.cache.spi.UpdateTimestampsCache"
+           maxEntriesLocalHeap="5000"
+           eternal="true"
+           overflowToDisk="false"
+           statistics="true">
+    </cache>
+
+</ehcache>

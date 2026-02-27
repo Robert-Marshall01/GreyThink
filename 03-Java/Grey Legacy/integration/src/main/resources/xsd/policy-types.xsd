@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+            xmlns:tns="http://www.greylegacy.com/schema/policy"
+            targetNamespace="http://www.greylegacy.com/schema/policy"
+            elementFormDefault="qualified">
+
+    <!-- ================================================================== -->
+    <!-- Root elements                                                      -->
+    <!-- ================================================================== -->
+    <xsd:element name="policyLookupRequest"      type="tns:PolicyLookupRequest"/>
+    <xsd:element name="policyLookupResponse"     type="tns:PolicyLookupResponse"/>
+    <xsd:element name="validateCoverageRequest"  type="tns:ValidateCoverageRequest"/>
+    <xsd:element name="validateCoverageResponse" type="tns:ValidateCoverageResponse"/>
+    <xsd:element name="policyFault"              type="tns:PolicyFault"/>
+
+    <!-- ================================================================== -->
+    <!-- Simple types                                                       -->
+    <!-- ================================================================== -->
+    <xsd:simpleType name="PolicyStatusType">
+        <xsd:restriction base="xsd:string">
+            <xsd:enumeration value="ACTIVE"/>
+            <xsd:enumeration value="CANCELLED"/>
+            <xsd:enumeration value="EXPIRED"/>
+            <xsd:enumeration value="SUSPENDED"/>
+            <xsd:enumeration value="PENDING_REVIEW"/>
+            <xsd:enumeration value="LAPSED"/>
+        </xsd:restriction>
+    </xsd:simpleType>
+
+    <xsd:simpleType name="PolicyTypeEnum">
+        <xsd:restriction base="xsd:string">
+            <xsd:enumeration value="AUTO"/>
+            <xsd:enumeration value="HOME"/>
+            <xsd:enumeration value="COMMERCIAL"/>
+            <xsd:enumeration value="LIFE"/>
+            <xsd:enumeration value="HEALTH"/>
+            <xsd:enumeration value="UMBRELLA"/>
+            <xsd:enumeration value="WORKERS_COMP"/>
+        </xsd:restriction>
+    </xsd:simpleType>
+
+    <!-- ================================================================== -->
+    <!-- Complex types – Policy Lookup                                      -->
+    <!-- ================================================================== -->
+    <xsd:complexType name="PolicyLookupRequest">
+        <xsd:sequence>
+            <xsd:element name="policyNumber" type="xsd:string"/>
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <xsd:complexType name="PolicyLookupResponse">
+        <xsd:sequence>
+            <xsd:element name="policyNumber"   type="xsd:string"/>
+            <xsd:element name="status"         type="tns:PolicyStatusType"/>
+            <xsd:element name="holderName"     type="xsd:string"/>
+            <xsd:element name="policyType"     type="tns:PolicyTypeEnum"/>
+            <xsd:element name="effectiveDate"  type="xsd:date"/>
+            <xsd:element name="expirationDate" type="xsd:date"/>
+            <xsd:element name="premiumAmount"  type="xsd:decimal"/>
+            <xsd:element name="coverageLimit"  type="xsd:decimal"/>
+            <xsd:element name="deductible"     type="xsd:decimal"/>
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <!-- ================================================================== -->
+    <!-- Complex types – Validate Coverage                                  -->
+    <!-- ================================================================== -->
+    <xsd:complexType name="ValidateCoverageRequest">
+        <xsd:sequence>
+            <xsd:element name="policyNumber" type="xsd:string"/>
+            <xsd:element name="lossDate"     type="xsd:date"/>
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <xsd:complexType name="ValidateCoverageResponse">
+        <xsd:sequence>
+            <xsd:element name="valid"        type="xsd:boolean"/>
+            <xsd:element name="policyStatus" type="tns:PolicyStatusType"/>
+            <xsd:element name="reason"       type="xsd:string" minOccurs="0"/>
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <!-- ================================================================== -->
+    <!-- Fault                                                              -->
+    <!-- ================================================================== -->
+    <xsd:complexType name="PolicyFault">
+        <xsd:sequence>
+            <xsd:element name="errorCode"    type="xsd:string"/>
+            <xsd:element name="errorMessage" type="xsd:string"/>
+        </xsd:sequence>
+    </xsd:complexType>
+
+</xsd:schema>

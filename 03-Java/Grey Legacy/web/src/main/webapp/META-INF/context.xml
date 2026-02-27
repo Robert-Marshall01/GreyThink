@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ============================================================================
+  Grey Legacy — Tomcat Context Configuration
+  ============================================================================
+  This file goes into:
+    META-INF/context.xml   (inside the WAR — shipped with the application)
+    OR
+    $CATALINA_BASE/conf/Catalina/localhost/grey-legacy.xml (ops-managed override)
+
+  It links the application to the global JNDI resources defined in server.xml
+  and adds application-specific settings.
+
+  In legacy enterprise shops, the separation between server.xml (ops) and
+  context.xml (dev) is a key operational pattern:
+    - Ops controls credentials, connection pools, and JMS broker URLs
+    - Dev uses JNDI lookups and never touches server.xml
+  ============================================================================
+-->
+<Context path="/grey-legacy"
+         docBase="grey-legacy"
+         reloadable="false"
+         crossContext="false"
+         cookies="true"
+         swallowOutput="true">
+
+    <!-- ================================================================== -->
+    <!-- JNDI Resource Links                                                -->
+    <!--                                                                     -->
+    <!-- These link the application's local JNDI names to the global names  -->
+    <!-- defined in server.xml's <GlobalNamingResources>.                    -->
+    <!--                                                                     -->
+    <!-- Application code looks up:                                          -->
+    <!--   java:comp/env/jdbc/GreyLegacyDS                                  -->
+    <!--   java:comp/env/jms/ConnectionFactory                               -->
+    <!--                                                                     -->
+    <!-- The Container resolves these to the global resources.               -->
+    <!-- ================================================================== -->
+
+    <!-- Primary claims database -->
+    <ResourceLink name="jdbc/GreyLegacyDS"
+                  global="jdbc/GreyLegacyDS"
+                  type="javax.sql.DataSource"/>
+
+    <!-- JMS ConnectionFactory for claim event messaging -->
+    <ResourceLink name="jms/ConnectionFactory"
+                  global="jms/ConnectionFactory"
+                  type="javax.jms.ConnectionFactory"/>
+
+    <!-- JMS Claim Events Queue -->
+    <ResourceLink name="jms/queue/ClaimEvents"
+                  global="jms/queue/ClaimEvents"
+                  type="javax.jms.Queue"/>
+
+    <!-- JMS Claim Notifications Topic -->
+    <ResourceLink name="jms/topic/ClaimNotifications"
+                  global="jms/topic/ClaimNotifications"
+                  type="javax.jms.Topic"/>
+
+    <!-- ================================================================== -->
+    <!-- Session Persistence (optional)                                      -->
+    <!-- ================================================================== -->
+    <!--
+        In clustered deployments, sessions can be persisted to a shared
+        store (JDBC or file). Grey Legacy uses sticky sessions in production,
+        so this is only enabled in DR (disaster recovery) configurations.
+
+    <Manager className="org.apache.catalina.session.PersistentManager"
+             saveOnRestart="true"
+             maxActiveSessions="500"
+             minIdleSwap="60"
+             maxIdleSwap="300"
+             maxIdleBackup="30">
+        <Store className="org.apache.catalina.session.JDBCStore"
+               driverName="org.postgresql.Driver"
+               connectionURL="jdbc:postgresql://db-prod-cluster.greylegacy.internal:5432/greylegacy"
+               sessionTable="TOMCAT_SESSIONS"
+               sessionIdCol="SESSION_ID"
+               sessionDataCol="SESSION_DATA"
+               sessionValidCol="SESSION_VALID"
+               sessionMaxInactiveCol="MAX_INACTIVE"
+               sessionLastAccessedCol="LAST_ACCESSED"
+               sessionAppCol="APP_NAME"/>
+    </Manager>
+    -->
+
+    <!-- ================================================================== -->
+    <!-- Environment Entries                                                 -->
+    <!-- ================================================================== -->
+    <!--
+        Application reads these via JNDI:
+          Context ctx = new InitialContext();
+          String env = (String) ctx.lookup("java:comp/env/app/environment");
+    -->
+    <Environment name="app/environment"
+                 value="production"
+                 type="java.lang.String"
+                 override="true"/>
+
+    <Environment name="app/version"
+                 value="1.0.0-SNAPSHOT"
+                 type="java.lang.String"
+                 override="false"/>
+
+    <Environment name="batch/export/directory"
+                 value="/opt/greylegacy/export"
+                 type="java.lang.String"
+                 override="true"/>
+
+    <!-- ================================================================== -->
+    <!-- Logging                                                             -->
+    <!-- ================================================================== -->
+    <!--
+        Use JULI logging bridge to route Tomcat-internal logs through
+        the application's SLF4J/Log4j configuration.
+    -->
+
+    <!-- ================================================================== -->
+    <!-- Security Valve (anti-clickjacking, etc.)                            -->
+    <!-- ================================================================== -->
+    <!--
+        These headers satisfy SOX/PCI compliance scanning tools:
+        - X-Frame-Options: DENY prevents clickjacking
+        - X-Content-Type-Options: nosniff prevents MIME sniffing
+        - Strict-Transport-Security: forces HTTPS
+    -->
+
+</Context>

@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xsi:schemaLocation="
+           http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans-4.3.xsd
+           http://www.springframework.org/schema/context
+           http://www.springframework.org/schema/context/spring-context-4.3.xsd
+           http://www.springframework.org/schema/tx
+           http://www.springframework.org/schema/tx/spring-tx-4.3.xsd
+           http://www.springframework.org/schema/aop
+           http://www.springframework.org/schema/aop/spring-aop-4.3.xsd">
+
+    <description>Grey Legacy - Root Application Context</description>
+
+    <!-- Import module-specific contexts -->
+    <import resource="classpath:applicationContext-dao.xml" />
+    <import resource="classpath:applicationContext-service.xml" />
+    <import resource="classpath:applicationContext-integration.xml" />
+    <import resource="classpath:applicationContext-ws-security.xml" />
+    <import resource="classpath:applicationContext-jms.xml" />
+    <import resource="classpath:applicationContext-batch.xml" />
+    <import resource="classpath:applicationContext-spring-batch.xml" />
+    <import resource="classpath:applicationContext-jmx.xml" />
+
+    <!-- Property placeholder for externalized configuration -->
+    <context:property-placeholder
+        location="classpath:database.properties,classpath:application.properties"
+        ignore-resource-not-found="true" />
+
+    <!-- Component scan (limited — most beans are XML-defined for legacy authenticity) -->
+    <context:component-scan base-package="com.greylegacy">
+        <context:exclude-filter type="annotation"
+            expression="org.springframework.stereotype.Controller" />
+    </context:component-scan>
+
+    <!-- Transaction Management -->
+    <tx:annotation-driven transaction-manager="transactionManager" />
+
+    <!-- AOP for performance logging -->
+    <aop:config>
+        <aop:pointcut id="serviceLayer"
+            expression="execution(* com.greylegacy.service..*(..))" />
+        <aop:advisor advice-ref="txAdvice" pointcut-ref="serviceLayer" />
+    </aop:config>
+
+    <tx:advice id="txAdvice" transaction-manager="transactionManager">
+        <tx:attributes>
+            <tx:method name="find*" read-only="true" propagation="SUPPORTS" />
+            <tx:method name="get*" read-only="true" propagation="SUPPORTS" />
+            <tx:method name="count*" read-only="true" propagation="SUPPORTS" />
+            <tx:method name="submit*" propagation="REQUIRES_NEW" />
+            <tx:method name="schedule*" propagation="REQUIRES_NEW" />
+            <tx:method name="*" propagation="REQUIRED" />
+        </tx:attributes>
+    </tx:advice>
+
+</beans>

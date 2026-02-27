@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Grey Legacy Insurance Claims System - Java EE Application Descriptor
+
+    Defines the modules and security roles for the Grey Legacy EAR deployment.
+    This descriptor follows the Java EE 7 application schema and is used by
+    the application server to configure module loading, context roots, and
+    role-based access control.
+
+    Supported application servers: JBoss EAP 7.x, WildFly 10+, WebLogic 12c
+-->
+<application xmlns="http://xmlns.jcp.org/xml/ns/javaee"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee
+                                 http://xmlns.jcp.org/xml/ns/javaee/application_7.xsd"
+             version="7">
+
+    <display-name>Grey Legacy Claims System</display-name>
+    <description>
+        Enterprise insurance claims processing system providing FNOL intake,
+        adjuster assignment, claim lifecycle management, and payment processing.
+    </description>
+
+    <!-- =======================================================================
+         Module Definitions
+         ======================================================================= -->
+
+    <!-- Web module: Struts-based claims management UI -->
+    <module>
+        <web>
+            <web-uri>grey-legacy-web.war</web-uri>
+            <context-root>/grey-legacy</context-root>
+        </web>
+    </module>
+
+    <!-- Java module: Spring Batch jobs for claims processing -->
+    <module>
+        <java>grey-legacy-batch.jar</java>
+    </module>
+
+    <!-- =======================================================================
+         Security Role Definitions
+         These roles are referenced by web.xml security constraints and
+         are mapped to enterprise identity provider groups (LDAP/Active Directory)
+         via the application server's security domain configuration.
+         ======================================================================= -->
+
+    <security-role>
+        <description>
+            Claims adjusters who can view, update, and process individual claims
+            assigned to them. Cannot approve payments above their authority limit.
+        </description>
+        <role-name>CLAIMS_ADJUSTER</role-name>
+    </security-role>
+
+    <security-role>
+        <description>
+            Claims managers who can reassign claims, approve high-value payments,
+            override adjuster decisions, and generate management reports.
+        </description>
+        <role-name>CLAIMS_MANAGER</role-name>
+    </security-role>
+
+    <security-role>
+        <description>
+            System administrators with full access to all application functions,
+            configuration screens, and batch job management.
+        </description>
+        <role-name>ADMIN</role-name>
+    </security-role>
+
+    <security-role>
+        <description>
+            Read-only users who can view claims data and run reports but cannot
+            modify any records. Typically used by auditors and compliance staff.
+        </description>
+        <role-name>READONLY</role-name>
+    </security-role>
+
+</application>

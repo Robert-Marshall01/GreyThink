@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="
+           http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans-4.3.xsd">
+
+    <description>Grey Legacy - DAO Layer Configuration</description>
+
+    <!-- ==================== DataSource ==================== -->
+
+    <bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource"
+          destroy-method="close">
+        <property name="driverClass" value="${db.driver}" />
+        <property name="jdbcUrl" value="${db.url}" />
+        <property name="user" value="${db.username}" />
+        <property name="password" value="${db.password}" />
+
+        <!-- C3P0 Connection Pool Settings -->
+        <property name="minPoolSize" value="${db.pool.minSize}" />
+        <property name="maxPoolSize" value="${db.pool.maxSize}" />
+        <property name="maxIdleTime" value="${db.pool.maxIdleTime}" />
+        <property name="acquireIncrement" value="${db.pool.acquireIncrement}" />
+        <property name="maxStatements" value="${db.pool.maxStatements}" />
+        <property name="testConnectionOnCheckout" value="${db.pool.testConnectionOnCheckout}" />
+    </bean>
+
+    <!-- ==================== Hibernate SessionFactory ==================== -->
+
+    <bean id="sessionFactory"
+          class="org.springframework.orm.hibernate5.LocalSessionFactoryBean">
+        <property name="dataSource" ref="dataSource" />
+        <property name="packagesToScan" value="com.greylegacy.domain" />
+        <property name="mappingLocations">
+            <list>
+                <value>classpath:hibernate-mappings/Policy.hbm.xml</value>
+                <value>classpath:hibernate-mappings/Claim.hbm.xml</value>
+                <value>classpath:hibernate-mappings/ClaimPayment.hbm.xml</value>
+            </list>
+        </property>
+        <property name="hibernateProperties">
+            <props>
+                <prop key="hibernate.dialect">${hibernate.dialect}</prop>
+                <prop key="hibernate.show_sql">${hibernate.show_sql}</prop>
+                <prop key="hibernate.format_sql">${hibernate.format_sql}</prop>
+                <prop key="hibernate.hbm2ddl.auto">${hibernate.hbm2ddl.auto}</prop>
+                <prop key="hibernate.use_sql_comments">true</prop>
+                <prop key="hibernate.jdbc.batch_size">${hibernate.jdbc.batch_size}</prop>
+                <prop key="hibernate.order_inserts">${hibernate.order_inserts}</prop>
+                <prop key="hibernate.order_updates">${hibernate.order_updates}</prop>
+                <prop key="hibernate.jdbc.batch_versioned_data">true</prop>
+                <prop key="hibernate.cache.use_second_level_cache">true</prop>
+                <prop key="hibernate.cache.use_query_cache">true</prop>
+                <prop key="hibernate.cache.region.factory_class">org.hibernate.cache.ehcache.EhCacheRegionFactory</prop>
+                <prop key="hibernate.net.sf.ehcache.configurationResourceName">ehcache.xml</prop>
+            </props>
+        </property>
+    </bean>
+
+    <!-- ==================== Transaction Manager ==================== -->
+
+    <bean id="transactionManager"
+          class="org.springframework.orm.hibernate5.HibernateTransactionManager">
+        <property name="sessionFactory" ref="sessionFactory" />
+    </bean>
+
+    <!-- ==================== DAO Beans ==================== -->
+
+    <!-- ==================== MyBatis SqlSessionFactory ==================== -->
+    <!-- Shares the same DataSource as Hibernate. MyBatis handles reporting -->
+    <!-- queries while Hibernate handles entity CRUD. Hybrid ORM strategy.  -->
+    <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+        <property name="dataSource" ref="dataSource"/>
+        <property name="configLocation" value="classpath:mybatis-config.xml"/>
+    </bean>
+
+    <!-- MyBatis DAO beans (complement the Hibernate DAOs) -->
+    <bean id="claimMyBatisDao" class="com.greylegacy.dao.mybatis.ClaimMyBatisDao">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory"/>
+    </bean>
+    <bean id="policyMyBatisDao" class="com.greylegacy.dao.mybatis.PolicyMyBatisDao">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory"/>
+    </bean>
+
+    <!-- ==================== Stored Procedure DAO ==================== -->
+    <bean id="storedProcedureDao" class="com.greylegacy.dao.jdbc.StoredProcedureDao">
+        <property name="dataSource" ref="dataSource"/>
+    </bean>
+
+    <!-- ==================== Hibernate DAO Beans ==================== -->
+
+    <bean id="policyDao" class="com.greylegacy.dao.impl.PolicyDaoImpl">
+        <property name="sessionFactory" ref="sessionFactory" />
+    </bean>
+
+    <bean id="claimDao" class="com.greylegacy.dao.impl.ClaimDaoImpl">
+        <property name="sessionFactory" ref="sessionFactory" />
+    </bean>
+
+    <bean id="claimPaymentDao" class="com.greylegacy.dao.impl.ClaimPaymentDaoImpl">
+        <property name="sessionFactory" ref="sessionFactory" />
+    </bean>
+
+    <bean id="adjusterDao" class="com.greylegacy.dao.impl.AdjusterDaoImpl">
+        <property name="sessionFactory" ref="sessionFactory" />
+    </bean>
+
+    <bean id="claimAuditDao" class="com.greylegacy.dao.impl.ClaimAuditDaoImpl">
+        <property name="sessionFactory" ref="sessionFactory" />
+    </bean>
+
+    <bean id="claimSnapshotDao" class="com.greylegacy.dao.impl.ClaimSnapshotDaoImpl">
+        <property name="sessionFactory" ref="sessionFactory" />
+    </bean>
+
+</beans>

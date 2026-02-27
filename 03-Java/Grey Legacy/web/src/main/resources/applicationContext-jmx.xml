@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="
+           http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans-4.3.xsd">
+
+    <!--
+        Grey Legacy – JMX Monitoring Configuration
+        ============================================
+        Exposes MBeans for claim processing metrics and C3P0 connection pool
+        health to any JMX-capable management console (JConsole, VisualVM, etc.).
+    -->
+
+    <!-- ── Platform MBean Server ─────────────────────────────────────── -->
+    <bean id="mbeanServer"
+          class="org.springframework.jmx.support.MBeanServerFactoryBean">
+        <property name="locateExistingServerIfPossible" value="true"/>
+    </bean>
+
+    <!-- ── MBean Definitions ─────────────────────────────────────────── -->
+    <bean id="claimProcessingMBean"
+          class="com.greylegacy.web.jmx.ClaimProcessingMBeanImpl"/>
+
+    <bean id="connectionPoolMonitorMBean"
+          class="com.greylegacy.web.jmx.ConnectionPoolMonitorMBeanImpl">
+        <property name="dataSource" ref="dataSource"/>
+    </bean>
+
+    <!-- ── MBean Exporter ────────────────────────────────────────────── -->
+    <bean id="mbeanExporter"
+          class="org.springframework.jmx.export.MBeanExporter">
+        <property name="server" ref="mbeanServer"/>
+        <property name="beans">
+            <map>
+                <entry key="com.greylegacy:type=Claims,name=ClaimProcessing"
+                       value-ref="claimProcessingMBean"/>
+                <entry key="com.greylegacy:type=DataSource,name=ConnectionPool"
+                       value-ref="connectionPoolMonitorMBean"/>
+            </map>
+        </property>
+        <property name="registrationPolicy" value="REPLACE_EXISTING"/>
+    </bean>
+
+    <!--
+        ── Remote JMX Connector (DISABLED for security) ───────────────
+        Uncomment to allow remote JMX access over RMI.
+        Make sure firewall rules restrict access to trusted management hosts.
+
+    <bean id="jmxConnectorServer"
+          class="org.springframework.jmx.support.ConnectorServerFactoryBean">
+        <property name="objectName" value="connector:name=rmi"/>
+        <property name="serviceUrl"
+                  value="service:jmx:rmi://localhost:9875/jndi/rmi://localhost:9876/greylegacy"/>
+        <property name="environment">
+            <map>
+                <entry key="jmx.remote.authenticate" value="true"/>
+                <entry key="jmx.remote.ssl" value="false"/>
+            </map>
+        </property>
+    </bean>
+    -->
+
+</beans>

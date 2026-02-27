@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ============================================================================
+  Grey Legacy — Apache Tomcat 8.5 Server Configuration
+  ============================================================================
+  This is the PRODUCTION server.xml that mirrors the actual deployment
+  environment at Grey Legacy Insurance.
+
+  Key customisations from the default Tomcat server.xml:
+    1. AJP connector enabled for mod_jk reverse proxy (Apache httpd → Tomcat)
+    2. HTTPS connector with JSSE keystore (self-signed dev / CA-signed prod)
+    3. JNDI DataSource for PostgreSQL connection pooling
+    4. JMS ConnectionFactory for ActiveMQ broker
+    5. Access log valve with combined format + response time
+    6. Stuck-thread detector (60s threshold)
+    7. JMX remote enabled via Listener
+
+  Typically lives at: $CATALINA_HOME/conf/server.xml
+  ============================================================================
+-->
+<Server port="8005" shutdown="SHUTDOWN_GREYLEGACY_2025">
+
+    <!-- ================================================================== -->
+    <!-- Listeners                                                           -->
+    <!-- ================================================================== -->
+
+    <!-- Prevent memory leaks on application stop/redeploy -->
+    <Listener className="org.apache.catalina.core.JreMemoryLeakPreventionListener"/>
+    <Listener className="org.apache.catalina.core.ThreadLocalLeakPreventionListener"/>
+
+    <!-- APR lifecycle (uses OpenSSL if available) -->
+    <Listener className="org.apache.catalina.core.AprLifecycleListener"
+              SSLEngine="on"/>
+
+    <!-- JMX Remote Lifecycle — enables JMX monitoring on port 9010 -->
+    <Listener className="org.apache.catalina.mbeans.JmxRemoteLifecycleListener"
+              rmiRegistryPortPlatform="9010"
+              rmiServerPortPlatform="9011"
+              useLocalPorts="false"/>
+
+    <!-- Global naming resources (JNDI) — to be looked up by the application -->
+    <Listener className="org.apache.catalina.mbeans.GlobalResourcesLifecycleListener"/>
+
+    <!-- ================================================================== -->
+    <!-- Global JNDI Resources                                              -->
+    <!-- ================================================================== -->
+    <!--
+        These resources are available to ALL applications deployed in this
+        Tomcat instance.  Applications reference them via <ResourceLink>
+        in their META-INF/context.xml.
+
+        This pattern is standard in legacy enterprise shops where the
+        Operations team manages database credentials in server.xml and
+        the development team uses JNDI lookups (never hardcoded passwords).
+    -->
+    <GlobalNamingResources>
+
+        <!-- ============================================================== -->
+        <!-- PostgreSQL DataSource (production)                              -->
+        <!-- ============================================================== -->
+        <!--
+            Connection pool for the Grey Legacy claims database.
+            Production PostgreSQL 12 cluster behind pgBouncer.
+
+            In dev/staging environments, swap url/username/password or
+            override via $CATALINA_BASE/conf/context.xml.
+        -->
+        <Resource name="jdbc/GreyLegacyDS"
+                  auth="Container"
+                  type="javax.sql.DataSource"
+                  factory="org.apache.tomcat.jdbc.pool.DataSourceFactory"
+
+                  driverClassName="org.postgresql.Driver"
+                  url="jdbc:postgresql://db-prod-cluster.greylegacy.internal:5432/greylegacy"
+                  username="greylegacy_app"
+                  password="${DB_PASSWORD}"
+
+                  initialSize="10"
+                  minIdle="10"
+                  maxIdle="30"
+                  maxActive="50"
+                  maxWait="10000"
+
+                  testOnBorrow="true"
+                  testOnReturn="false"
+                  testWhileIdle="true"
+                  validationQuery="SELECT 1"
+                  validationInterval="30000"
+                  timeBetweenEvictionRunsMillis="30000"
+                  minEvictableIdleTimeMillis="60000"
+
+                  removeAbandoned="true"
+                  removeAbandonedTimeout="120"
+                  logAbandoned="true"
+
+                  jdbcInterceptors="ConnectionState;StatementFinalizer;
+                      ResetAbandonedTimer;SlowQueryReport(threshold=5000)"/>
+
+        <!-- ============================================================== -->
+        <!-- ActiveMQ JMS ConnectionFactory                                  -->
+        <!-- ============================================================== -->
+        <!--
+            JNDI-managed JMS factory. The broker runs on a dedicated host
+            in production; devs use an embedded broker via vm://localhost.
+        -->
+        <Resource name="jms/ConnectionFactory"
+                  auth="Container"
+                  type="org.apache.activemq.ActiveMQConnectionFactory"
+                  factory="org.apache.activemq.jndi.JNDIReferenceFactory"
+                  brokerURL="failover:(tcp://mq-prod.greylegacy.internal:61616)?timeout=5000"
+                  brokerName="GreyLegacyBroker"
+                  useAsyncSend="true"/>
+
+        <!-- ============================================================== -->
+        <!-- ActiveMQ Queues / Topics via JNDI                               -->
+        <!-- ============================================================== -->
+        <Resource name="jms/queue/ClaimEvents"
+                  auth="Container"
+                  type="org.apache.activemq.command.ActiveMQQueue"
+                  factory="org.apache.activemq.jndi.JNDIReferenceFactory"
+                  physicalName="greylegacy.claims.events"/>
+
+        <Resource name="jms/topic/ClaimNotifications"
+                  auth="Container"
+                  type="org.apache.activemq.command.ActiveMQTopic"
+                  factory="org.apache.activemq.jndi.JNDIReferenceFactory"
+                  physicalName="topic.claim.events"/>
+
+        <!-- ============================================================== -->
+        <!-- UserDatabase for container-managed authentication               -->
+        <!-- ============================================================== -->
+        <Resource name="UserDatabase"
+                  auth="Container"
+                  type="org.apache.catalina.UserDatabase"
+                  description="Grey Legacy user database for container-managed auth"
+                  factory="org.apache.catalina.users.MemoryUserDatabaseFactory"
+                  pathname="conf/tomcat-users.xml"/>
+
+    </GlobalNamingResources>
+
+    <!-- ================================================================== -->
+    <!-- Service: Grey Legacy                                                -->
+    <!-- ================================================================== -->
+    <Service name="GreyLegacy">
+
+        <!-- ============================================================== -->
+        <!-- HTTP Connector (port 8080)                                      -->
+        <!-- ============================================================== -->
+        <!--
+            In production, this connector is NOT exposed externally.
+            Apache httpd (or F5 load balancer) terminates SSL and
+            forwards to Tomcat via AJP on port 8009.
+
+            Kept for local development and health checks from localhost.
+        -->
+        <Connector port="8080"
+                   protocol="HTTP/1.1"
+                   connectionTimeout="20000"
+                   redirectPort="8443"
+                   maxThreads="200"
+                   minSpareThreads="25"
+                   acceptCount="100"
+                   enableLookups="false"
+                   compression="on"
+                   compressionMinSize="2048"
+                   compressableMimeType="text/html,text/xml,text/plain,
+                       text/css,text/javascript,application/javascript,
+                       application/json,application/xml"
+                   URIEncoding="UTF-8"
+                   server="GreyLegacy"/>
+
+        <!-- ============================================================== -->
+        <!-- HTTPS Connector (port 8443)                                     -->
+        <!-- ============================================================== -->
+        <!--
+            TLS 1.2 only (insurance regulatory requirement).
+            Keystore managed by the security team; renewed annually.
+            Dev uses a self-signed cert generated via:
+              keytool -genkey -alias greylegacy -keyalg RSA -keysize 2048 \
+                -keystore $CATALINA_HOME/conf/greylegacy.jks \
+                -validity 365 -storepass changeit
+        -->
+        <Connector port="8443"
+                   protocol="org.apache.coyote.http11.Http11NioProtocol"
+                   maxThreads="150"
+                   SSLEnabled="true"
+                   scheme="https"
+                   secure="true"
+                   keystoreFile="${catalina.home}/conf/greylegacy.jks"
+                   keystorePass="changeit"
+                   clientAuth="false"
+                   sslProtocol="TLSv1.2"
+                   sslEnabledProtocols="TLSv1.2"
+                   ciphers="TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+                            TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+                   URIEncoding="UTF-8"/>
+
+        <!-- ============================================================== -->
+        <!-- AJP Connector (port 8009)                                       -->
+        <!-- ============================================================== -->
+        <!--
+            Apache httpd → Tomcat connector for production reverse proxy.
+            Restricted to localhost traffic only via the address attribute.
+
+            Used with mod_jk or mod_proxy_ajp:
+              ProxyPass /grey-legacy ajp://localhost:8009/grey-legacy
+        -->
+        <Connector port="8009"
+                   protocol="AJP/1.3"
+                   redirectPort="8443"
+                   address="127.0.0.1"
+                   secretRequired="true"
+                   secret="${AJP_SECRET}"
+                   maxThreads="100"
+                   URIEncoding="UTF-8"/>
+
+        <!-- ============================================================== -->
+        <!-- Engine + Host                                                   -->
+        <!-- ============================================================== -->
+        <Engine name="Catalina"
+                defaultHost="localhost"
+                jvmRoute="tomcat-node1">
+            <!--
+                jvmRoute is used for sticky sessions in a clustered setup.
+                The load balancer appends .tomcat-node1 to the JSESSIONID.
+            -->
+
+            <!-- Container-managed authentication via tomcat-users.xml -->
+            <Realm className="org.apache.catalina.realm.LockOutRealm"
+                   failureCount="5"
+                   lockOutTime="300">
+                <Realm className="org.apache.catalina.realm.UserDatabaseRealm"
+                       resourceName="UserDatabase"/>
+            </Realm>
+
+            <Host name="localhost"
+                  appBase="webapps"
+                  unpackWARs="true"
+                  autoDeploy="false"
+                  deployOnStartup="true">
+
+                <!-- ====================================================== -->
+                <!-- Access Log Valve                                        -->
+                <!-- ====================================================== -->
+                <!--
+                    Extended combined format with response time (%D ms).
+                    Rotated daily. Retained for 90 days per compliance policy.
+                -->
+                <Valve className="org.apache.catalina.valves.AccessLogValve"
+                       directory="logs"
+                       prefix="greylegacy_access"
+                       suffix=".log"
+                       pattern="%h %l %u %t &quot;%r&quot; %s %b %D &quot;%{Referer}i&quot; &quot;%{User-Agent}i&quot;"
+                       rotatable="true"
+                       fileDateFormat=".yyyy-MM-dd"
+                       maxDays="90"/>
+
+                <!-- ====================================================== -->
+                <!-- Remote Address Valve (production only)                  -->
+                <!-- ====================================================== -->
+                <!--
+                    Restrict direct access to the Tomcat manager app.
+                    Only the internal monitoring subnet can reach it.
+                    Uncomment in production.
+
+                <Valve className="org.apache.catalina.valves.RemoteAddrValve"
+                       allow="10\.10\.0\.\d+|127\.0\.0\.1"/>
+                -->
+
+                <!-- ====================================================== -->
+                <!-- Stuck Thread Detection Valve                            -->
+                <!-- ====================================================== -->
+                <!--
+                    Flags threads stuck for >60s. In legacy systems, this
+                    commonly catches:
+                      - Database lock contention from long-running batch queries
+                      - SOAP calls to partner systems that hang
+                      - Deadlocked Hibernate sessions
+                -->
+                <Valve className="org.apache.catalina.valves.StuckThreadDetectionValve"
+                       threshold="60"
+                       interruptThreadThreshold="120"/>
+
+            </Host>
+        </Engine>
+    </Service>
+</Server>

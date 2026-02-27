@@ -1,0 +1,309 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+    MyBatis Claim Mapper
+    ====================
+    Complex read queries that bypass Hibernate for performance and SQL clarity.
+    Demonstrates:
+      - <resultMap> with nested associations and collections
+      - Dynamic SQL with <if>, <where>, <choose>, <foreach>, <trim>
+      - Stored procedure calls via <select> with statementType="CALLABLE"
+      - Paginated queries
+      - Multi-table joins with manual column ↔ property mapping
+      - Mapper-level caching (opt-in to MyBatis L2 cache)
+-->
+<mapper namespace="com.greylegacy.dao.mybatis.ClaimMyBatisDao">
+
+    <!-- ================================================================ -->
+    <!-- Mapper-Level Cache                                                -->
+    <!-- ================================================================ -->
+    <!-- Opt-in to MyBatis L2 cache for this mapper.  Uses LRU eviction   -->
+    <!-- with a 10-minute flush interval and a max of 512 cached objects.  -->
+    <!-- Read-only = true for reporting queries (no entity mutation).      -->
+    <cache eviction="LRU" flushInterval="600000" size="512" readOnly="true"/>
+
+    <!-- ================================================================ -->
+    <!-- Result Maps                                                       -->
+    <!-- ================================================================ -->
+
+    <!-- Full Claim result map with nested Policy association -->
+    <resultMap id="claimWithPolicyMap" type="Claim">
+        <id     property="id"                column="CLAIM_ID"/>
+        <result property="claimNumber"       column="CLAIM_NUMBER"/>
+        <result property="status"            column="CLAIM_STATUS"       typeHandler="org.apache.ibatis.type.EnumTypeHandler"/>
+        <result property="claimType"         column="CLAIM_TYPE"         typeHandler="org.apache.ibatis.type.EnumTypeHandler"/>
+        <result property="lossDate"          column="LOSS_DATE"/>
+        <result property="reportedDate"      column="REPORTED_DATE"/>
+        <result property="lossDescription"   column="LOSS_DESCRIPTION"/>
+        <result property="lossLocation"      column="LOSS_LOCATION"/>
+        <result property="claimantFirstName" column="CLAIMANT_FIRST_NAME"/>
+        <result property="claimantLastName"  column="CLAIMANT_LAST_NAME"/>
+        <result property="claimantPhone"     column="CLAIMANT_PHONE"/>
+        <result property="claimantEmail"     column="CLAIMANT_EMAIL"/>
+        <result property="adjusterCode"      column="ADJUSTER_CODE"/>
+        <result property="estimatedLoss"     column="ESTIMATED_LOSS"/>
+        <result property="approvedAmount"    column="APPROVED_AMOUNT"/>
+        <result property="deductibleApplied" column="DEDUCTIBLE_APPLIED"/>
+        <result property="fraudRiskLevel"    column="FRAUD_RISK_LEVEL"   typeHandler="org.apache.ibatis.type.EnumTypeHandler"/>
+        <result property="fraudScore"        column="FRAUD_SCORE"/>
+        <result property="closedDate"        column="CLOSED_DATE"/>
+        <result property="closedReason"      column="CLOSED_REASON"/>
+        <result property="createdDate"       column="C_CREATED_DATE"/>
+        <result property="updatedDate"       column="C_UPDATED_DATE"/>
+
+        <!-- Nested association: Policy (one-to-one) -->
+        <association property="policy" javaType="Policy">
+            <id     property="id"              column="POLICY_ID"/>
+            <result property="policyNumber"    column="POLICY_NUMBER"/>
+            <result property="status"          column="POLICY_STATUS"  typeHandler="org.apache.ibatis.type.EnumTypeHandler"/>
+            <result property="policyType"      column="POLICY_TYPE"    typeHandler="org.apache.ibatis.type.EnumTypeHandler"/>
+            <result property="holderFirstName" column="HOLDER_FIRST_NAME"/>
+            <result property="holderLastName"  column="HOLDER_LAST_NAME"/>
+            <result property="premiumAmount"   column="PREMIUM_AMOUNT"/>
+            <result property="coverageLimit"   column="COVERAGE_LIMIT"/>
+            <result property="deductible"      column="DEDUCTIBLE"/>
+        </association>
+
+        <!-- Nested collection: Payments (one-to-many, lazy loaded) -->
+        <collection property="payments" ofType="ClaimPayment"
+                    column="CLAIM_ID" select="findPaymentsByClaimId"/>
+    </resultMap>
+
+    <!-- Lightweight claim summary for dashboard/search results -->
+    <resultMap id="claimSummaryMap" type="java.util.LinkedHashMap">
+        <result property="claimNumber"      column="CLAIM_NUMBER"/>
+        <result property="status"           column="STATUS"/>
+        <result property="statusDisplay"    column="STATUS_DISPLAY"/>
+        <result property="claimType"        column="CLAIM_TYPE"/>
+        <result property="lossDate"         column="LOSS_DATE"/>
+        <result property="claimantName"     column="CLAIMANT_NAME"/>
+        <result property="policyNumber"     column="POLICY_NUMBER"/>
+        <result property="holderName"       column="HOLDER_NAME"/>
+        <result property="adjusterName"     column="ADJUSTER_NAME"/>
+        <result property="estimatedLoss"    column="ESTIMATED_LOSS"/>
+        <result property="approvedAmount"   column="APPROVED_AMOUNT"/>
+        <result property="daysOpen"         column="DAYS_OPEN"/>
+        <result property="fraudRiskLevel"   column="FRAUD_RISK_LEVEL"/>
+    </resultMap>
+
+    <!-- Payment result map for nested collection -->
+    <resultMap id="paymentMap" type="ClaimPayment">
+        <id     property="id"              column="ID"/>
+        <result property="paymentNumber"   column="PAYMENT_NUMBER"/>
+        <result property="paymentStatus"   column="PAYMENT_STATUS"  typeHandler="org.apache.ibatis.type.EnumTypeHandler"/>
+        <result property="amount"          column="AMOUNT"/>
+        <result property="scheduledDate"   column="SCHEDULED_DATE"/>
+        <result property="processedDate"   column="PROCESSED_DATE"/>
+        <result property="payeeName"       column="PAYEE_NAME"/>
+        <result property="checkNumber"     column="CHECK_NUMBER"/>
+    </resultMap>
+
+    <!-- ================================================================ -->
+    <!-- SQL Fragments (reusable SQL chunks)                              -->
+    <!-- ================================================================ -->
+
+    <sql id="claimColumns">
+        c.ID            AS CLAIM_ID,
+        c.CLAIM_NUMBER,
+        c.STATUS        AS CLAIM_STATUS,
+        c.CLAIM_TYPE,
+        c.LOSS_DATE,
+        c.REPORTED_DATE,
+        c.LOSS_DESCRIPTION,
+        c.LOSS_LOCATION,
+        c.CLAIMANT_FIRST_NAME,
+        c.CLAIMANT_LAST_NAME,
+        c.CLAIMANT_PHONE,
+        c.CLAIMANT_EMAIL,
+        c.ADJUSTER_CODE,
+        c.ESTIMATED_LOSS,
+        c.APPROVED_AMOUNT,
+        c.DEDUCTIBLE_APPLIED,
+        c.FRAUD_RISK_LEVEL,
+        c.FRAUD_SCORE,
+        c.CLOSED_DATE,
+        c.CLOSED_REASON,
+        c.CREATED_DATE  AS C_CREATED_DATE,
+        c.UPDATED_DATE  AS C_UPDATED_DATE
+    </sql>
+
+    <sql id="policyColumns">
+        p.ID            AS POLICY_ID,
+        p.POLICY_NUMBER,
+        p.STATUS        AS POLICY_STATUS,
+        p.POLICY_TYPE,
+        p.HOLDER_FIRST_NAME,
+        p.HOLDER_LAST_NAME,
+        p.PREMIUM_AMOUNT,
+        p.COVERAGE_LIMIT,
+        p.DEDUCTIBLE
+    </sql>
+
+    <!-- ================================================================ -->
+    <!-- SELECT Queries                                                    -->
+    <!-- ================================================================ -->
+
+    <!-- Find claim with full policy association -->
+    <select id="findClaimWithPolicy" parameterType="long" resultMap="claimWithPolicyMap">
+        SELECT
+            <include refid="claimColumns"/>,
+            <include refid="policyColumns"/>
+        FROM CLAIM c
+        INNER JOIN POLICY p ON p.ID = c.POLICY_ID
+        WHERE c.ID = #{id}
+    </select>
+
+    <!-- Payments sub-select for lazy collection loading -->
+    <select id="findPaymentsByClaimId" parameterType="long" resultMap="paymentMap">
+        SELECT ID, PAYMENT_NUMBER, PAYMENT_STATUS, AMOUNT,
+               SCHEDULED_DATE, PROCESSED_DATE, PAYEE_NAME, CHECK_NUMBER
+        FROM CLAIM_PAYMENT
+        WHERE CLAIM_ID = #{claimId}
+        ORDER BY SCHEDULED_DATE DESC
+    </select>
+
+    <!--
+        Dynamic search with <where> and <if> — mirrors ClaimSearchAction form.
+        All conditions are optional; MyBatis builds the WHERE clause dynamically.
+    -->
+    <select id="searchClaims" parameterType="map" resultMap="claimSummaryMap">
+        SELECT
+            c.CLAIM_NUMBER,
+            c.STATUS,
+            sr.DISPLAY_NAME     AS STATUS_DISPLAY,
+            c.CLAIM_TYPE,
+            c.LOSS_DATE,
+            c.CLAIMANT_FIRST_NAME || ' ' || c.CLAIMANT_LAST_NAME AS CLAIMANT_NAME,
+            p.POLICY_NUMBER,
+            p.HOLDER_FIRST_NAME || ' ' || p.HOLDER_LAST_NAME     AS HOLDER_NAME,
+            a.FIRST_NAME || ' ' || a.LAST_NAME                   AS ADJUSTER_NAME,
+            c.ESTIMATED_LOSS,
+            c.APPROVED_AMOUNT,
+            DATEDIFF(DAY, c.REPORTED_DATE, CURRENT_TIMESTAMP)    AS DAYS_OPEN,
+            c.FRAUD_RISK_LEVEL
+        FROM CLAIM c
+        INNER JOIN POLICY p ON p.ID = c.POLICY_ID
+        LEFT  JOIN ADJUSTER a ON a.ADJUSTER_CODE = c.ADJUSTER_CODE
+        LEFT  JOIN CLAIM_STATUS_REF sr ON sr.CODE = c.STATUS
+        <where>
+            <if test="claimNumber != null and claimNumber != ''">
+                AND c.CLAIM_NUMBER LIKE #{claimNumber} || '%'
+            </if>
+            <if test="status != null and status != ''">
+                AND c.STATUS = #{status}
+            </if>
+            <if test="claimType != null and claimType != ''">
+                AND c.CLAIM_TYPE = #{claimType}
+            </if>
+            <if test="policyNumber != null and policyNumber != ''">
+                AND p.POLICY_NUMBER = #{policyNumber}
+            </if>
+            <if test="claimantLastName != null and claimantLastName != ''">
+                AND UPPER(c.CLAIMANT_LAST_NAME) LIKE UPPER(#{claimantLastName}) || '%'
+            </if>
+            <if test="adjusterCode != null and adjusterCode != ''">
+                AND c.ADJUSTER_CODE = #{adjusterCode}
+            </if>
+            <if test="lossDateFrom != null">
+                AND c.LOSS_DATE &gt;= #{lossDateFrom}
+            </if>
+            <if test="lossDateTo != null">
+                AND c.LOSS_DATE &lt;= #{lossDateTo}
+            </if>
+            <if test="minEstimatedLoss != null">
+                AND c.ESTIMATED_LOSS &gt;= #{minEstimatedLoss}
+            </if>
+            <if test="fraudRiskLevel != null and fraudRiskLevel != ''">
+                AND c.FRAUD_RISK_LEVEL = #{fraudRiskLevel}
+            </if>
+            <!-- Exclude soft-deleted claims -->
+            AND (c.DELETED = FALSE OR c.DELETED IS NULL)
+        </where>
+        <choose>
+            <when test="sortColumn != null and sortColumn == 'lossDate'">
+                ORDER BY c.LOSS_DATE
+            </when>
+            <when test="sortColumn != null and sortColumn == 'estimatedLoss'">
+                ORDER BY c.ESTIMATED_LOSS DESC
+            </when>
+            <when test="sortColumn != null and sortColumn == 'daysOpen'">
+                ORDER BY DAYS_OPEN DESC
+            </when>
+            <otherwise>
+                ORDER BY c.REPORTED_DATE DESC
+            </otherwise>
+        </choose>
+        <if test="limit != null and limit > 0">
+            LIMIT #{limit}
+            <if test="offset != null and offset > 0">
+                OFFSET #{offset}
+            </if>
+        </if>
+    </select>
+
+    <!--
+        Batch fraud update using <foreach> to generate IN clause.
+        Demonstrates MyBatis bulk operations as an alternative to
+        the raw JDBC batch in ClaimJdbcDao.
+    -->
+    <update id="batchUpdateFraudScores" parameterType="map">
+        UPDATE CLAIM
+        SET FRAUD_SCORE       = #{fraudScore},
+            FRAUD_RISK_LEVEL  = #{fraudRiskLevel},
+            FRAUD_SCORED_DATE = CURRENT_TIMESTAMP,
+            UPDATED_DATE      = CURRENT_TIMESTAMP,
+            UPDATED_BY        = 'MYBATIS_BATCH'
+        WHERE ID IN
+        <foreach collection="claimIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </update>
+
+    <!-- Aggregation query for dashboard statistics -->
+    <select id="getClaimStatisticsByStatus" resultType="java.util.LinkedHashMap">
+        SELECT
+            c.STATUS,
+            COUNT(*)                    AS CLAIM_COUNT,
+            SUM(c.ESTIMATED_LOSS)       AS TOTAL_ESTIMATED,
+            SUM(c.APPROVED_AMOUNT)      AS TOTAL_APPROVED,
+            AVG(c.ESTIMATED_LOSS)       AS AVG_ESTIMATED,
+            MIN(c.REPORTED_DATE)        AS OLDEST_REPORTED,
+            MAX(c.REPORTED_DATE)        AS NEWEST_REPORTED
+        FROM CLAIM c
+        WHERE (c.DELETED = FALSE OR c.DELETED IS NULL)
+        GROUP BY c.STATUS
+        ORDER BY CLAIM_COUNT DESC
+    </select>
+
+    <!-- Adjuster workload report -->
+    <select id="getAdjusterWorkload" resultType="java.util.LinkedHashMap">
+        SELECT
+            a.ADJUSTER_CODE,
+            a.FIRST_NAME || ' ' || a.LAST_NAME AS ADJUSTER_NAME,
+            a.SPECIALIZATION,
+            a.MAX_CASELOAD,
+            COUNT(c.ID)                          AS ACTIVE_CASES,
+            SUM(c.ESTIMATED_LOSS)                AS TOTAL_EXPOSURE,
+            AVG(DATEDIFF(DAY, c.REPORTED_DATE, CURRENT_TIMESTAMP)) AS AVG_DAYS_OPEN
+        FROM ADJUSTER a
+        LEFT JOIN CLAIM c ON c.ADJUSTER_CODE = a.ADJUSTER_CODE
+             AND c.STATUS NOT IN ('CLOSED', 'DENIED', 'SETTLED', 'WITHDRAWN')
+             AND (c.DELETED = FALSE OR c.DELETED IS NULL)
+        WHERE a.ACTIVE = TRUE
+          AND (a.DELETED = FALSE OR a.DELETED IS NULL)
+        GROUP BY a.ADJUSTER_CODE, a.FIRST_NAME, a.LAST_NAME,
+                 a.SPECIALIZATION, a.MAX_CASELOAD
+        ORDER BY ACTIVE_CASES DESC
+    </select>
+
+    <!--
+        Stored procedure call via MyBatis.
+        Uses statementType="CALLABLE" — this maps to JDBC CallableStatement.
+    -->
+    <select id="calculateClaimReserve" statementType="CALLABLE" parameterType="long"
+            resultType="java.math.BigDecimal">
+        {#{result, mode=OUT, jdbcType=DECIMAL} = CALL SP_CALCULATE_CLAIM_RESERVE(#{claimId, mode=IN})}
+    </select>
+
+</mapper>

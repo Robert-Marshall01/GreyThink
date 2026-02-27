@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:mvc="http://www.springframework.org/schema/mvc"
+       xsi:schemaLocation="
+           http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans-4.3.xsd
+           http://www.springframework.org/schema/context
+           http://www.springframework.org/schema/context/spring-context-4.3.xsd
+           http://www.springframework.org/schema/mvc
+           http://www.springframework.org/schema/mvc/spring-mvc-4.3.xsd">
+
+    <!--
+        Grey Legacy – Spring MVC DispatcherServlet Configuration
+        ==========================================================
+        Loaded by the DispatcherServlet (child context).
+        Root application context beans (services, DAOs) are inherited.
+    -->
+
+    <!-- ── Component scanning for controllers ────────────────────────── -->
+    <context:component-scan base-package="com.greylegacy.web.controller"/>
+
+    <!-- ── Annotation-driven MVC ─────────────────────────────────────── -->
+    <mvc:annotation-driven>
+        <mvc:message-converters>
+            <bean class="org.springframework.http.converter.json.MappingJackson2HttpMessageConverter">
+                <property name="objectMapper">
+                    <bean class="com.fasterxml.jackson.databind.ObjectMapper"/>
+                </property>
+            </bean>
+        </mvc:message-converters>
+    </mvc:annotation-driven>
+
+    <!-- ── JSP View Resolver ─────────────────────────────────────────── -->
+    <bean id="viewResolver"
+          class="org.springframework.web.servlet.view.InternalResourceViewResolver">
+        <property name="prefix" value="/WEB-INF/jsp/"/>
+        <property name="suffix" value=".jsp"/>
+        <property name="order" value="2"/>
+    </bean>
+
+    <!-- ── Content-Negotiating View Resolver ──────────────────────────── -->
+    <bean id="contentNegotiatingViewResolver"
+          class="org.springframework.web.servlet.view.ContentNegotiatingViewResolver">
+        <property name="order" value="1"/>
+        <property name="contentNegotiationManager">
+            <bean class="org.springframework.web.accept.ContentNegotiationManagerFactoryBean">
+                <property name="favorPathExtension" value="false"/>
+                <property name="favorParameter" value="true"/>
+                <property name="defaultContentType" value="text/html"/>
+                <property name="mediaTypes">
+                    <map>
+                        <entry key="json" value="application/json"/>
+                        <entry key="xml"  value="application/xml"/>
+                    </map>
+                </property>
+            </bean>
+        </property>
+    </bean>
+
+    <!-- ── Exception Resolver ────────────────────────────────────────── -->
+    <bean id="exceptionResolver"
+          class="org.springframework.web.servlet.handler.SimpleMappingExceptionResolver">
+        <property name="exceptionMappings">
+            <props>
+                <prop key="java.lang.Exception">error</prop>
+                <prop key="org.springframework.web.servlet.NoHandlerFoundException">error</prop>
+            </props>
+        </property>
+        <property name="defaultErrorView" value="error"/>
+        <property name="warnLogCategory" value="com.greylegacy.web.ExceptionResolver"/>
+    </bean>
+
+    <!-- ── Multipart Resolver (file uploads) ─────────────────────────── -->
+    <bean id="multipartResolver"
+          class="org.springframework.web.multipart.commons.CommonsMultipartResolver">
+        <property name="maxUploadSize" value="10485760"/> <!-- 10 MB -->
+        <property name="defaultEncoding" value="UTF-8"/>
+    </bean>
+
+</beans>

@@ -1,0 +1,373 @@
+/* ============================================================================
+   Grey Legacy Claims System - Stylesheet
+   Enterprise Insurance Claims Processing UI
+   ============================================================================ */
+
+/* --- Reset & Base --- */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #333;
+    background-color: #f5f5f5;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+/* --- Header --- */
+.header {
+    background-color: #2c3e50;
+    color: #ecf0f1;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header h2 {
+    font-size: 1.3em;
+    font-weight: 600;
+}
+
+.main-nav ul {
+    list-style: none;
+    display: flex;
+    gap: 20px;
+}
+
+.main-nav a {
+    color: #bdc3c7;
+    text-decoration: none;
+    padding: 5px 10px;
+    border-radius: 3px;
+    transition: background-color 0.2s;
+}
+
+.main-nav a:hover {
+    background-color: #34495e;
+    color: #fff;
+}
+
+/* --- Page Titles --- */
+h1 {
+    color: #2c3e50;
+    font-size: 1.5em;
+    margin: 20px 0 5px 0;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 8px;
+}
+
+.subtitle {
+    color: #7f8c8d;
+    margin-bottom: 20px;
+}
+
+/* --- Forms --- */
+.form-standard {
+    background: #fff;
+    padding: 25px;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    margin-bottom: 20px;
+}
+
+fieldset {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 15px 20px;
+    margin-bottom: 20px;
+}
+
+legend {
+    font-weight: 600;
+    color: #2c3e50;
+    padding: 0 8px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 5px;
+    color: #555;
+}
+
+.form-control {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    font-size: 14px;
+    transition: border-color 0.2s;
+}
+
+.form-control:focus {
+    border-color: #3498db;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(52,152,219,0.2);
+}
+
+textarea.form-control {
+    resize: vertical;
+}
+
+select.form-control {
+    height: 36px;
+}
+
+.form-row {
+    display: flex;
+    gap: 20px;
+}
+
+.form-row .form-group {
+    flex: 1;
+}
+
+.required {
+    color: #e74c3c;
+}
+
+.help-text {
+    font-size: 12px;
+    color: #95a5a6;
+    margin-top: 3px;
+}
+
+.form-actions {
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+    display: flex;
+    gap: 10px;
+}
+
+/* --- Buttons --- */
+.btn {
+    padding: 8px 20px;
+    border: none;
+    border-radius: 3px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-primary {
+    background-color: #3498db;
+    color: #fff;
+}
+
+.btn-primary:hover {
+    background-color: #2980b9;
+}
+
+.btn-secondary {
+    background-color: #95a5a6;
+    color: #fff;
+}
+
+.btn-secondary:hover {
+    background-color: #7f8c8d;
+}
+
+.btn-danger {
+    background-color: #e74c3c;
+    color: #fff;
+}
+
+.btn-success {
+    background-color: #27ae60;
+    color: #fff;
+}
+
+/* --- Tables --- */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    margin-bottom: 20px;
+}
+
+.data-table thead th {
+    background-color: #2c3e50;
+    color: #fff;
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 500;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.data-table tbody td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #eee;
+}
+
+.data-table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+.data-table tbody tr:nth-child(even) {
+    background-color: #fafafa;
+}
+
+/* --- Alerts --- */
+.alert {
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+    border-left: 4px solid;
+}
+
+.alert-success {
+    background-color: #d4edda;
+    border-color: #27ae60;
+    color: #155724;
+}
+
+.alert-danger {
+    background-color: #f8d7da;
+    border-color: #e74c3c;
+    color: #721c24;
+}
+
+.alert-warning {
+    background-color: #fff3cd;
+    border-color: #f39c12;
+    color: #856404;
+}
+
+.alert-info {
+    background-color: #d1ecf1;
+    border-color: #3498db;
+    color: #0c5460;
+}
+
+/* --- Dashboard Cards --- */
+.dashboard-cards {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    margin-bottom: 25px;
+}
+
+.card {
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    padding: 20px;
+    flex: 1;
+    min-width: 200px;
+}
+
+.card h3 {
+    font-size: 13px;
+    text-transform: uppercase;
+    color: #7f8c8d;
+    margin-bottom: 5px;
+}
+
+.card .count {
+    font-size: 2em;
+    font-weight: 700;
+    color: #2c3e50;
+}
+
+.card.card-danger .count { color: #e74c3c; }
+.card.card-warning .count { color: #f39c12; }
+.card.card-success .count { color: #27ae60; }
+.card.card-info .count { color: #3498db; }
+
+/* --- Status Badges --- */
+.status-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-fnol         { background: #d1ecf1; color: #0c5460; }
+.status-review       { background: #fff3cd; color: #856404; }
+.status-assigned     { background: #cce5ff; color: #004085; }
+.status-investigation { background: #f8d7da; color: #721c24; }
+.status-approved     { background: #d4edda; color: #155724; }
+.status-denied       { background: #f5c6cb; color: #721c24; }
+.status-settled      { background: #c3e6cb; color: #155724; }
+.status-closed       { background: #d6d8db; color: #383d41; }
+.status-fraud        { background: #f8d7da; color: #721c24; border: 1px solid #e74c3c; }
+
+/* --- Detail Sections --- */
+.detail-section {
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.detail-section h2 {
+    font-size: 1.1em;
+    color: #2c3e50;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 8px;
+}
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.detail-item label {
+    font-weight: 500;
+    color: #7f8c8d;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+.detail-item .value {
+    font-size: 14px;
+    color: #2c3e50;
+}
+
+/* --- Footer --- */
+.footer {
+    text-align: center;
+    padding: 15px;
+    color: #95a5a6;
+    font-size: 13px;
+}
+
+/* --- Error page --- */
+.error-page {
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.error-page h1 {
+    border: none;
+    color: #e74c3c;
+    font-size: 2em;
+}
+
+.error-page p {
+    color: #7f8c8d;
+    margin: 10px 0;
+}

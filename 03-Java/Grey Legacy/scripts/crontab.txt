@@ -1,0 +1,48 @@
+###############################################################################
+# crontab.txt - Grey Legacy Scheduled Tasks
+#
+# Install with: crontab /opt/greylegacy/scripts/crontab.txt
+# Verify with:  crontab -l
+#
+# All times are in server-local time (America/New_York).
+# Log output is appended per-job; see individual scripts for log rotation.
+#
+# Maintainer: Grey Legacy Infrastructure Team
+# Last Modified: 2025-10-10
+###############################################################################
+
+# ── Environment ──────────────────────────────────────────────────────────────
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+MAILTO=ops-alerts@greylegacy.com
+GL_HOME=/opt/greylegacy
+
+# ── Health Check ── every 5 minutes ─────────────────────────────────────────
+*/5 * * * * ${GL_HOME}/scripts/health-check.sh --json-only >> /var/log/greylegacy/health.jsonl 2>&1
+
+# ── Database Backup ── daily at 1:00 AM ─────────────────────────────────────
+0 1 * * * ${GL_HOME}/scripts/backup-database.sh --type daily >> /var/log/greylegacy/backup-daily.log 2>&1
+
+# ── Claims Aging Batch Job ── daily at 2:00 AM ──────────────────────────────
+0 2 * * * ${GL_HOME}/scripts/run-batch-job.sh ClaimAgingJob >> /var/log/greylegacy/claim-aging.log 2>&1
+
+# ── Fraud Scoring Recalculation ── daily at 2:30 AM ─────────────────────────
+30 2 * * * ${GL_HOME}/scripts/run-batch-job.sh FraudScoringJob >> /var/log/greylegacy/fraud-scoring.log 2>&1
+
+# ── Nightly ETL Claims Export ── daily at 4:00 AM ───────────────────────────
+0 4 * * * ${GL_HOME}/scripts/etl-claims-export.sh >> /var/log/greylegacy/etl-claims.log 2>&1
+
+# ── Log Rotation ── every Sunday at 3:00 AM ─────────────────────────────────
+0 3 * * 0 find /var/log/greylegacy -name "*.log" -mtime +30 -delete && find /opt/tomcat/logs -name "*.log" -mtime +14 -delete
+
+# ── Monthly Database Backup ── 1st of each month at 1:00 AM ────────────────
+0 1 1 * * ${GL_HOME}/scripts/backup-database.sh --type monthly >> /var/log/greylegacy/backup-monthly.log 2>&1
+
+# ── Monthly Reconciliation Report ── 2nd of each month at 6:00 AM ──────────
+0 6 2 * * ${GL_HOME}/scripts/run-batch-job.sh PayoutSchedulingJob >> /var/log/greylegacy/reconciliation.log 2>&1
+
+# ── Quarterly Audit Report ── 1st of Jan, Apr, Jul, Oct at 5:00 AM ─────────
+0 5 1 1,4,7,10 * ${GL_HOME}/scripts/run-batch-job.sh PremiumRecalculationJob >> /var/log/greylegacy/quarterly-audit.log 2>&1
+
+# ── Premium Recalculation ── 15th of each month at 3:00 AM ─────────────────
+0 3 15 * * ${GL_HOME}/scripts/run-batch-job.sh PremiumRecalculationJob >> /var/log/greylegacy/premium-recalc.log 2>&1

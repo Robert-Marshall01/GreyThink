@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<policyImport xmlns="http://greylegacy.com/schema/import">
+
+    <policy>
+        <policyNumber>POL-AUTO-44210</policyNumber>
+        <policyType>AUTO</policyType>
+        <status>ACTIVE</status>
+        <holderFirstName>James</holderFirstName>
+        <holderLastName>Henderson</holderLastName>
+        <holderEmail>j.henderson@email.com</holderEmail>
+        <holderPhone>217-555-0134</holderPhone>
+        <effectiveDate>2025-01-01</effectiveDate>
+        <expirationDate>2026-01-01</expirationDate>
+        <premiumAmount>1850.00</premiumAmount>
+        <coverageLimit>100000.00</coverageLimit>
+        <deductible>500.00</deductible>
+        <agentCode>AGT-101</agentCode>
+    </policy>
+
+    <policy>
+        <policyNumber>POL-HOME-77823</policyNumber>
+        <policyType>HOME</policyType>
+        <status>ACTIVE</status>
+        <holderFirstName>Maria</holderFirstName>
+        <holderLastName>Gonzalez</holderLastName>
+        <holderEmail>m.gonzalez@email.com</holderEmail>
+        <holderPhone>214-555-0278</holderPhone>
+        <effectiveDate>2024-06-15</effectiveDate>
+        <expirationDate>2025-06-15</expirationDate>
+        <premiumAmount>3200.00</premiumAmount>
+        <coverageLimit>450000.00</coverageLimit>
+        <deductible>1000.00</deductible>
+        <agentCode>AGT-205</agentCode>
+    </policy>
+
+    <policy>
+        <policyNumber>POL-COMM-99101</policyNumber>
+        <policyType>COMMERCIAL</policyType>
+        <status>ACTIVE</status>
+        <holderFirstName>Westside Bakery</holderFirstName>
+        <holderLastName>LLC</holderLastName>
+        <holderEmail>admin@westsidebakery.com</holderEmail>
+        <holderPhone>503-555-0199</holderPhone>
+        <effectiveDate>2025-03-01</effectiveDate>
+        <expirationDate>2026-03-01</expirationDate>
+        <premiumAmount>8500.00</premiumAmount>
+        <coverageLimit>1000000.00</coverageLimit>
+        <deductible>2500.00</deductible>
+        <agentCode>AGT-310</agentCode>
+    </policy>
+
+    <policy>
+        <policyNumber>POL-LIFE-55501</policyNumber>
+        <policyType>LIFE</policyType>
+        <status>ACTIVE</status>
+        <holderFirstName>Karen</holderFirstName>
+        <holderLastName>O'Brien</holderLastName>
+        <holderEmail>k.obrien@email.com</holderEmail>
+        <holderPhone>312-555-0422</holderPhone>
+        <effectiveDate>2023-09-01</effectiveDate>
+        <expirationDate>2053-09-01</expirationDate>
+        <premiumAmount>420.00</premiumAmount>
+        <coverageLimit>500000.00</coverageLimit>
+        <deductible>0.00</deductible>
+        <agentCode>AGT-101</agentCode>
+    </policy>
+
+    <policy>
+        <policyNumber>POL-AUTO-44215</policyNumber>
+        <policyType>AUTO</policyType>
+        <status>ACTIVE</status>
+        <holderFirstName>Robert</holderFirstName>
+        <holderLastName>Chen</holderLastName>
+        <holderEmail>r.chen@email.com</holderEmail>
+        <holderPhone>303-555-0187</holderPhone>
+        <effectiveDate>2025-02-15</effectiveDate>
+        <expirationDate>2026-02-15</expirationDate>
+        <premiumAmount>2100.00</premiumAmount>
+        <coverageLimit>150000.00</coverageLimit>
+        <deductible>750.00</deductible>
+        <agentCode>AGT-205</agentCode>
+    </policy>
+
+    <policy>
+        <policyNumber>POL-HOME-77830</policyNumber>
+        <policyType>HOME</policyType>
+        <status>ACTIVE</status>
+        <holderFirstName>David</holderFirstName>
+        <holderLastName>Okafor</holderLastName>
+        <holderEmail>d.okafor@email.com</holderEmail>
+        <holderPhone>918-555-0345</holderPhone>
+        <effectiveDate>2024-11-01</effectiveDate>
+        <expirationDate>2025-11-01</expirationDate>
+        <premiumAmount>2750.00</premiumAmount>
+        <coverageLimit>320000.00</coverageLimit>
+        <deductible>1500.00</deductible>
+        <agentCode>AGT-310</agentCode>
+    </policy>
+
+    <policy>
+        <policyNumber>POL-AUTO-44220</policyNumber>
+        <policyType>AUTO</policyType>
+        <status>ACTIVE</status>
+        <holderFirstName>Samantha</holderFirstName>
+        <holderLastName>Williams</holderLastName>
+        <holderEmail>s.williams@email.com</holderEmail>
+        <holderPhone>804-555-0512</holderPhone>
+        <effectiveDate>2025-04-01</effectiveDate>
+        <expirationDate>2026-04-01</expirationDate>
+        <premiumAmount>1650.00</premiumAmount>
+        <coverageLimit>100000.00</coverageLimit>
+        <deductible>500.00</deductible>
+        <agentCode>AGT-101</agentCode>
+    </policy>
+
+    <policy>
+        <policyNumber>POL-COMM-99110</policyNumber>
+        <policyType>COMMERCIAL</policyType>
+        <status>ACTIVE</status>
+        <holderFirstName>Apex Manufacturing</holderFirstName>
+        <holderLastName>Inc</holderLastName>
+        <holderEmail>insurance@apexmfg.com</holderEmail>
+        <holderPhone>313-555-0677</holderPhone>
+        <effectiveDate>2025-01-15</effectiveDate>
+        <expirationDate>2026-01-15</expirationDate>
+        <premiumAmount>15000.00</premiumAmount>
+        <coverageLimit>5000000.00</coverageLimit>
+        <deductible>5000.00</deductible>
+        <agentCode>AGT-450</agentCode>
+    </policy>
+
+    <policy>
+        <policyNumber>POL-HOME-77840</policyNumber>
+        <policyType>HOME</policyType>
+        <status>ACTIVE</status>
+        <holderFirstName>Linda</holderFirstName>
+        <holderLastName>Kowalski</holderLastName>
+        <holderEmail>l.kowalski@email.com</holderEmail>
+        <holderPhone>206-555-0893</holderPhone>
+        <effectiveDate>2024-08-01</effectiveDate>
+        <expirationDate>2025-08-01</expirationDate>
+        <premiumAmount>2900.00</premiumAmount>
+        <coverageLimit>380000.00</coverageLimit>
+        <deductible>1000.00</deductible>
+        <agentCode>AGT-205</agentCode>
+    </policy>
+
+    <policy>
+        <policyNumber>POL-HOME-77845</policyNumber>
+        <policyType>HOME</policyType>
+        <status>ACTIVE</status>
+        <holderFirstName>Richard</holderFirstName>
+        <holderLastName>St. James Jr.</holderLastName>
+        <holderEmail>r.stjames@email.com</holderEmail>
+        <holderPhone>305-555-0156</holderPhone>
+        <effectiveDate>2025-05-01</effectiveDate>
+        <expirationDate>2026-05-01</expirationDate>
+        <premiumAmount>4800.00</premiumAmount>
+        <coverageLimit>600000.00</coverageLimit>
+        <deductible>2000.00</deductible>
+        <agentCode>AGT-310</agentCode>
+    </policy>
+
+</policyImport>

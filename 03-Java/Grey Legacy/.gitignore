@@ -1,0 +1,52 @@
+# Maven
+/target/
+**/target/
+/.mvn/
+
+# Eclipse/IntelliJ
+*.classpath
+*.project
+*.settings/
+*.iml
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.swp
+
+# Build artifacts
+*.war
+*.ear
+
+# Database files
+*.h2.db
+
+# Secrets
+*.jks
+
+# IDE specific
+.vscode/
+
+# Shell scripts
+*.sh~
+
+# Batch
+*.cmd~
+
+# Maven wrapper
+mvnw.cmd
+mvnw
+
+# Other
+coverage-reports/
+
+# lock files
+**/pom.xml.tag
+**/pom.xml.next

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:jaxws="http://cxf.apache.org/jaxws"
+       xsi:schemaLocation="
+           http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans.xsd
+           http://cxf.apache.org/jaxws
+           http://cxf.apache.org/schemas/jaxws.xsd">
+
+    <!-- Import CXF core Spring configuration -->
+    <import resource="classpath:META-INF/cxf/cxf.xml"/>
+
+    <!-- ================================================================== -->
+    <!-- Service Implementation Beans                                       -->
+    <!-- ================================================================== -->
+    <!-- Bean definitions only — endpoint publication is handled by          -->
+    <!-- applicationContext-ws-security.xml, which attaches WSS4J            -->
+    <!-- interceptors to the CXF endpoints.                                 -->
+
+    <bean id="claimWebServiceImpl"
+          class="com.greylegacy.integration.soap.ClaimWebServiceImpl"/>
+
+    <bean id="policyLookupWebServiceImpl"
+          class="com.greylegacy.integration.soap.PolicyLookupWebServiceImpl"/>
+
+    <!-- ================================================================== -->
+    <!-- Unsecured endpoints (dev/test only — overridden by ws-security     -->
+    <!-- config in production profiles)                                     -->
+    <!-- ================================================================== -->
+    <!--
+        In production, these endpoints are replaced by the secured versions
+        in applicationContext-ws-security.xml.  The unsecured versions below
+        are kept commented out for local development convenience.
+
+    <jaxws:endpoint id="claimWebService"
+                    implementor="#claimWebServiceImpl"
+                    address="/ClaimService"/>
+
+    <jaxws:endpoint id="policyLookupWebService"
+                    implementor="#policyLookupWebServiceImpl"
+                    address="/PolicyLookupService"/>
+    -->
+
+</beans>

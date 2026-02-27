@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xsi:schemaLocation="
+           http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans.xsd
+           http://www.springframework.org/schema/context
+           http://www.springframework.org/schema/context/spring-context.xsd">
+
+    <!-- Scan batch job components -->
+    <context:component-scan base-package="com.greylegacy.batch"/>
+
+    <!-- ================================================================== -->
+    <!-- Job Detail Beans                                                    -->
+    <!-- ================================================================== -->
+
+    <bean id="claimAgingJobDetail"
+          class="org.springframework.scheduling.quartz.MethodInvokingJobDetailFactoryBean">
+        <property name="targetObject" ref="claimAgingJob"/>
+        <property name="targetMethod" value="execute"/>
+        <property name="concurrent" value="false"/>
+    </bean>
+
+    <bean id="fraudScoringJobDetail"
+          class="org.springframework.scheduling.quartz.MethodInvokingJobDetailFactoryBean">
+        <property name="targetObject" ref="fraudScoringJob"/>
+        <property name="targetMethod" value="execute"/>
+        <property name="concurrent" value="false"/>
+    </bean>
+
+    <bean id="payoutSchedulingJobDetail"
+          class="org.springframework.scheduling.quartz.MethodInvokingJobDetailFactoryBean">
+        <property name="targetObject" ref="payoutSchedulingJob"/>
+        <property name="targetMethod" value="execute"/>
+        <property name="concurrent" value="false"/>
+    </bean>
+
+    <bean id="premiumRecalculationJobDetail"
+          class="org.springframework.scheduling.quartz.MethodInvokingJobDetailFactoryBean">
+        <property name="targetObject" ref="premiumRecalculationJob"/>
+        <property name="targetMethod" value="execute"/>
+        <property name="concurrent" value="false"/>
+    </bean>
+
+    <!-- ================================================================== -->
+    <!-- Cron Trigger Beans                                                  -->
+    <!-- ================================================================== -->
+
+    <!-- Claim Aging: 2:00 AM daily -->
+    <bean id="claimAgingTrigger"
+          class="org.springframework.scheduling.quartz.CronTriggerFactoryBean">
+        <property name="jobDetail" ref="claimAgingJobDetail"/>
+        <property name="cronExpression" value="0 0 2 * * ?"/>
+        <property name="misfireInstruction"
+                  value="#{T(org.quartz.CronTrigger).MISFIRE_INSTRUCTION_DO_NOTHING}"/>
+    </bean>
+
+    <!-- Fraud Scoring: 2:30 AM daily -->
+    <bean id="fraudScoringTrigger"
+          class="org.springframework.scheduling.quartz.CronTriggerFactoryBean">
+        <property name="jobDetail" ref="fraudScoringJobDetail"/>
+        <property name="cronExpression" value="0 30 2 * * ?"/>
+        <property name="misfireInstruction"
+                  value="#{T(org.quartz.CronTrigger).MISFIRE_INSTRUCTION_DO_NOTHING}"/>
+    </bean>
+
+    <!-- Payout Scheduling: 3:00 AM daily -->
+    <bean id="payoutSchedulingTrigger"
+          class="org.springframework.scheduling.quartz.CronTriggerFactoryBean">
+        <property name="jobDetail" ref="payoutSchedulingJobDetail"/>
+        <property name="cronExpression" value="0 0 3 * * ?"/>
+        <property name="misfireInstruction"
+                  value="#{T(org.quartz.CronTrigger).MISFIRE_INSTRUCTION_DO_NOTHING}"/>
+    </bean>
+
+    <!-- Premium Recalculation: 1:00 AM on the 1st of every month -->
+    <bean id="premiumRecalculationTrigger"
+          class="org.springframework.scheduling.quartz.CronTriggerFactoryBean">
+        <property name="jobDetail" ref="premiumRecalculationJobDetail"/>
+        <property name="cronExpression" value="0 0 1 1 * ?"/>
+        <property name="misfireInstruction"
+                  value="#{T(org.quartz.CronTrigger).MISFIRE_INSTRUCTION_DO_NOTHING}"/>
+    </bean>
+
+    <!-- ================================================================== -->
+    <!-- Quartz Scheduler                                                    -->
+    <!-- ================================================================== -->
+
+    <bean id="schedulerFactoryBean"
+          class="org.springframework.scheduling.quartz.SchedulerFactoryBean">
+        <property name="triggers">
+            <list>
+                <ref bean="claimAgingTrigger"/>
+                <ref bean="fraudScoringTrigger"/>
+                <ref bean="payoutSchedulingTrigger"/>
+                <ref bean="premiumRecalculationTrigger"/>
+                <ref bean="claimExportBatchTrigger"/>
+                <ref bean="reconciliationBatchTrigger"/>
+            </list>
+        </property>
+        <property name="quartzProperties">
+            <props>
+                <prop key="org.quartz.threadPool.threadCount">4</prop>
+            </props>
+        </property>
+        <!-- Use Spring-managed beans for job instances -->
+        <property name="applicationContextSchedulerContextKey" value="applicationContext"/>
+        <property name="waitForJobsToCompleteOnShutdown" value="true"/>
+        <property name="overwriteExistingJobs" value="true"/>
+        <property name="autoStartup" value="true"/>
+    </bean>
+
+    <!-- ================================================================== -->
+    <!-- Quartz → Spring Batch Bridge                                        -->
+    <!--                                                                     -->
+    <!-- These triggers use SpringBatchQuartzJobLauncher to invoke Spring    -->
+    <!-- Batch jobs (defined in applicationContext-spring-batch.xml) via     -->
+    <!-- the Quartz scheduling infrastructure.                               -->
+    <!-- ================================================================== -->
+
+    <!-- Claim Export: 4:00 AM daily -->
+    <bean id="claimExportBatchJobDetail"
+          class="org.springframework.scheduling.quartz.JobDetailFactoryBean">
+        <property name="jobClass"
+                  value="com.greylegacy.batch.springbatch.SpringBatchQuartzJobLauncher"/>
+        <property name="durability" value="true"/>
+        <property name="jobDataAsMap">
+            <map>
+                <entry key="springBatchJobName" value="claimExportJob"/>
+            </map>
+        </property>
+    </bean>
+
+    <bean id="claimExportBatchTrigger"
+          class="org.springframework.scheduling.quartz.CronTriggerFactoryBean">
+        <property name="jobDetail" ref="claimExportBatchJobDetail"/>
+        <property name="cronExpression" value="0 0 4 * * ?"/>
+        <property name="misfireInstruction"
+                  value="#{T(org.quartz.CronTrigger).MISFIRE_INSTRUCTION_DO_NOTHING}"/>
+    </bean>
+
+    <!-- Reconciliation: 5:00 AM daily -->
+    <bean id="reconciliationBatchJobDetail"
+          class="org.springframework.scheduling.quartz.JobDetailFactoryBean">
+        <property name="jobClass"
+                  value="com.greylegacy.batch.springbatch.SpringBatchQuartzJobLauncher"/>
+        <property name="durability" value="true"/>
+        <property name="jobDataAsMap">
+            <map>
+                <entry key="springBatchJobName" value="reconciliationJob"/>
+            </map>
+        </property>
+    </bean>
+
+    <bean id="reconciliationBatchTrigger"
+          class="org.springframework.scheduling.quartz.CronTriggerFactoryBean">
+        <property name="jobDetail" ref="reconciliationBatchJobDetail"/>
+        <property name="cronExpression" value="0 0 5 * * ?"/>
+        <property name="misfireInstruction"
+                  value="#{T(org.quartz.CronTrigger).MISFIRE_INSTRUCTION_DO_NOTHING}"/>
+    </bean>
+
+</beans>

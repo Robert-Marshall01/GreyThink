@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+        "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+        "http://www.hibernate.org/dtd/hibernate-mapping-3.0.dtd">
+
+<hibernate-mapping package="com.greylegacy.domain">
+
+    <class name="Policy" table="POLICY">
+
+        <id name="id" column="ID" type="long">
+            <generator class="sequence">
+                <param name="sequence_name">POLICY_SEQ</param>
+            </generator>
+        </id>
+
+        <version name="version" column="VERSION"/>
+
+        <property name="policyNumber"    column="POLICY_NUMBER"/>
+        <property name="status"          column="STATUS"           type="string"/>
+        <property name="policyType"      column="POLICY_TYPE"      type="string"/>
+        <property name="holderFirstName" column="HOLDER_FIRST_NAME"/>
+        <property name="holderLastName"  column="HOLDER_LAST_NAME"/>
+        <property name="holderSsn"       column="HOLDER_SSN"/>
+        <property name="holderEmail"     column="HOLDER_EMAIL"/>
+        <property name="holderPhone"     column="HOLDER_PHONE"/>
+        <property name="effectiveDate"   column="EFFECTIVE_DATE"   type="date"/>
+        <property name="expirationDate"  column="EXPIRATION_DATE"  type="date"/>
+        <property name="premiumAmount"   column="PREMIUM_AMOUNT"   type="big_decimal"/>
+        <property name="coverageLimit"   column="COVERAGE_LIMIT"   type="big_decimal"/>
+        <property name="deductible"      column="DEDUCTIBLE"       type="big_decimal"/>
+        <property name="agentCode"       column="AGENT_CODE"/>
+        <property name="underwriterCode" column="UNDERWRITER_CODE"/>
+        <property name="createdBy"       column="CREATED_BY"/>
+        <property name="createdDate"     column="CREATED_DATE"     type="timestamp"/>
+        <property name="updatedBy"       column="UPDATED_BY"/>
+        <property name="updatedDate"     column="UPDATED_DATE"     type="timestamp"/>
+
+        <bag name="claims" inverse="true" lazy="true" cascade="all-delete-orphan">
+            <key column="POLICY_ID"/>
+            <one-to-many class="Claim"/>
+        </bag>
+
+        <bag name="endorsements" inverse="true" lazy="false" cascade="all-delete-orphan">
+            <key column="POLICY_ID"/>
+            <one-to-many class="PolicyEndorsement"/>
+        </bag>
+
+    </class>
+
+</hibernate-mapping>

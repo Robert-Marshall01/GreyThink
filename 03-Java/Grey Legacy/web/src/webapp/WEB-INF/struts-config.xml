@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE struts-config PUBLIC
+    "-//Apache Software Foundation//DTD Struts Configuration 1.3//EN"
+    "http://struts.apache.org/dtds/struts-config_1_3.dtd">
+
+<struts-config>
+    <!-- Form Beans -->
+    <form-beans>
+        <form-bean name="fnolForm" type="com.greylegacy.web.form.FnolForm" />
+        <form-bean name="claimSearchForm" type="com.greylegacy.web.form.ClaimSearchForm" />
+        <form-bean name="adjusterReviewForm" type="com.greylegacy.web.form.AdjusterReviewForm" />
+    </form-beans>
+
+    <!-- Global Exceptions -->
+    <global-exceptions>
+        <exception
+            key="error.general"
+            type="java.lang.Exception"
+            path="/WEB-INF/jsp/error.jsp" />
+    </global-exceptions>
+
+    <!-- Global Forwards -->
+    <global-forwards>
+        <forward name="error" path="/WEB-INF/jsp/error.jsp" />
+        <forward name="login" path="/login.jsp" />
+    </global-forwards>
+
+    <!-- Action Mappings -->
+    <action-mappings>
+        <!-- Dashboard -->
+        <action path="/dashboard"
+                type="com.greylegacy.web.action.ClaimDashboardAction"
+                scope="request">
+            <forward name="dashboard" path="/WEB-INF/jsp/dashboard.jsp" />
+        </action>
+
+        <!-- FNOL - Display Form -->
+        <action path="/fnol"
+                forward="/WEB-INF/jsp/fnol.jsp" />
+
+        <!-- FNOL - Submit -->
+        <action path="/submitFnol"
+                type="com.greylegacy.web.action.FnolAction"
+                name="fnolForm"
+                scope="request"
+                validate="true"
+                input="/WEB-INF/jsp/fnol.jsp">
+            <forward name="success" path="/WEB-INF/jsp/fnolSuccess.jsp" />
+            <forward name="failure" path="/WEB-INF/jsp/fnol.jsp" />
+            <forward name="error" path="/WEB-INF/jsp/error.jsp" />
+        </action>
+
+        <!-- Claim Search - Display Form -->
+        <action path="/searchClaims"
+                forward="/WEB-INF/jsp/claimSearch.jsp" />
+
+        <!-- Claim Search - Execute -->
+        <action path="/executeSearch"
+                type="com.greylegacy.web.action.ClaimSearchAction"
+                name="claimSearchForm"
+                scope="request"
+                validate="true"
+                input="/WEB-INF/jsp/claimSearch.jsp">
+            <forward name="results" path="/WEB-INF/jsp/claimSearch.jsp" />
+            <forward name="failure" path="/WEB-INF/jsp/claimSearch.jsp" />
+        </action>
+
+        <!-- Claim Detail -->
+        <action path="/claimDetail"
+                type="com.greylegacy.web.action.ClaimDetailAction"
+                scope="request">
+            <forward name="detail" path="/WEB-INF/jsp/claimDetail.jsp" />
+            <forward name="notFound" path="/WEB-INF/jsp/error.jsp" />
+        </action>
+
+        <!-- Adjuster Review - Display Form -->
+        <action path="/adjusterReview"
+                forward="/WEB-INF/jsp/adjusterReview.jsp" />
+
+        <!-- Adjuster Review - Submit -->
+        <action path="/submitReview"
+                type="com.greylegacy.web.action.AdjusterReviewAction"
+                name="adjusterReviewForm"
+                scope="request"
+                validate="true"
+                input="/WEB-INF/jsp/adjusterReview.jsp">
+            <forward name="success" path="/claimDetail.do" redirect="true" />
+            <forward name="failure" path="/WEB-INF/jsp/adjusterReview.jsp" />
+        </action>
+    </action-mappings>
+
+    <!-- Message Resources -->
+    <message-resources parameter="com.greylegacy.web.messages.ApplicationResources" />
+
+</struts-config>

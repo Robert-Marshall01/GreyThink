@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+            xmlns:tns="http://www.greylegacy.com/schema/claims"
+            targetNamespace="http://www.greylegacy.com/schema/claims"
+            elementFormDefault="qualified">
+
+    <!-- ================================================================== -->
+    <!-- Root elements                                                      -->
+    <!-- ================================================================== -->
+    <xsd:element name="submitClaimRequest"        type="tns:SubmitClaimRequest"/>
+    <xsd:element name="submitClaimResponse"       type="tns:SubmitClaimResponse"/>
+    <xsd:element name="getClaimStatusRequest"     type="tns:GetClaimStatusRequest"/>
+    <xsd:element name="getClaimStatusResponse"    type="tns:GetClaimStatusResponse"/>
+    <xsd:element name="getClaimDetailsRequest"    type="tns:GetClaimDetailsRequest"/>
+    <xsd:element name="getClaimDetailsResponse"   type="tns:GetClaimDetailsResponse"/>
+    <xsd:element name="updateClaimStatusRequest"  type="tns:UpdateClaimStatusRequest"/>
+    <xsd:element name="updateClaimStatusResponse" type="tns:UpdateClaimStatusResponse"/>
+    <xsd:element name="claimFault"                type="tns:ClaimFault"/>
+
+    <!-- ================================================================== -->
+    <!-- Simple types                                                       -->
+    <!-- ================================================================== -->
+    <xsd:simpleType name="ClaimStatusType">
+        <xsd:restriction base="xsd:string">
+            <xsd:enumeration value="FNOL_RECEIVED"/>
+            <xsd:enumeration value="UNDER_REVIEW"/>
+            <xsd:enumeration value="ADJUSTER_ASSIGNED"/>
+            <xsd:enumeration value="INVESTIGATION"/>
+            <xsd:enumeration value="APPROVED"/>
+            <xsd:enumeration value="DENIED"/>
+            <xsd:enumeration value="SETTLED"/>
+            <xsd:enumeration value="CLOSED"/>
+            <xsd:enumeration value="REOPENED"/>
+            <xsd:enumeration value="FRAUD_SUSPECTED"/>
+        </xsd:restriction>
+    </xsd:simpleType>
+
+    <xsd:simpleType name="ClaimTypeEnum">
+        <xsd:restriction base="xsd:string">
+            <xsd:enumeration value="COLLISION"/>
+            <xsd:enumeration value="COMPREHENSIVE"/>
+            <xsd:enumeration value="LIABILITY"/>
+            <xsd:enumeration value="PROPERTY_DAMAGE"/>
+            <xsd:enumeration value="BODILY_INJURY"/>
+            <xsd:enumeration value="MEDICAL"/>
+            <xsd:enumeration value="THEFT"/>
+            <xsd:enumeration value="FIRE"/>
+            <xsd:enumeration value="NATURAL_DISASTER"/>
+            <xsd:enumeration value="OTHER"/>
+        </xsd:restriction>
+    </xsd:simpleType>
+
+    <!-- ================================================================== -->
+    <!-- Complex types – Submit Claim                                       -->
+    <!-- ================================================================== -->
+    <xsd:complexType name="SubmitClaimRequest">
+        <xsd:sequence>
+            <xsd:element name="policyNumber"      type="xsd:string"/>
+            <xsd:element name="claimantFirstName"  type="xsd:string"/>
+            <xsd:element name="claimantLastName"   type="xsd:string"/>
+            <xsd:element name="claimType"          type="tns:ClaimTypeEnum"/>
+            <xsd:element name="lossDate"           type="xsd:date"/>
+            <xsd:element name="lossDescription"    type="xsd:string"/>
+            <xsd:element name="estimatedLoss"      type="xsd:decimal"/>
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <xsd:complexType name="SubmitClaimResponse">
+        <xsd:sequence>
+            <xsd:element name="claimNumber" type="xsd:string"/>
+            <xsd:element name="status"      type="tns:ClaimStatusType"/>
+            <xsd:element name="message"     type="xsd:string"/>
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <!-- ================================================================== -->
+    <!-- Complex types – Get Claim Status                                   -->
+    <!-- ================================================================== -->
+    <xsd:complexType name="GetClaimStatusRequest">
+        <xsd:sequence>
+            <xsd:element name="claimNumber" type="xsd:string"/>
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <xsd:complexType name="GetClaimStatusResponse">
+        <xsd:sequence>
+            <xsd:element name="claimNumber"    type="xsd:string"/>
+            <xsd:element name="status"         type="tns:ClaimStatusType"/>
+            <xsd:element name="adjusterCode"   type="xsd:string"  minOccurs="0"/>
+            <xsd:element name="estimatedLoss"  type="xsd:decimal" minOccurs="0"/>
+            <xsd:element name="approvedAmount" type="xsd:decimal" minOccurs="0"/>
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <!-- ================================================================== -->
+    <!-- Complex types – Get Claim Details                                  -->
+    <!-- ================================================================== -->
+    <xsd:complexType name="GetClaimDetailsRequest">
+        <xsd:sequence>
+            <xsd:element name="claimNumber" type="xsd:string"/>
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <xsd:complexType name="GetClaimDetailsResponse">
+        <xsd:sequence>
+            <xsd:element name="claimNumber"        type="xsd:string"/>
+            <xsd:element name="status"             type="tns:ClaimStatusType"/>
+            <xsd:element name="claimType"          type="tns:ClaimTypeEnum"/>
+            <xsd:element name="lossDate"           type="xsd:date"/>
+            <xsd:element name="reportedDate"       type="xsd:dateTime"/>
+            <xsd:element name="claimantFirstName"  type="xsd:string"/>
+            <xsd:element name="claimantLastName"   type="xsd:string"/>
+            <xsd:element name="adjusterCode"       type="xsd:string"  minOccurs="0"/>
+            <xsd:element name="estimatedLoss"      type="xsd:decimal" minOccurs="0"/>
+            <xsd:element name="approvedAmount"     type="xsd:decimal" minOccurs="0"/>
+            <xsd:element name="deductibleApplied"  type="xsd:decimal" minOccurs="0"/>
+            <xsd:element name="fraudScore"         type="xsd:int"     minOccurs="0"/>
+            <xsd:element name="fraudRiskLevel"     type="xsd:string"  minOccurs="0"/>
+            <xsd:element name="policyNumber"       type="xsd:string"/>
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <!-- ================================================================== -->
+    <!-- Fault                                                              -->
+    <!-- ================================================================== -->
+    <xsd:simpleType name="FaultCodeType">
+        <xsd:annotation>
+            <xsd:documentation>
+                Fault taxonomy for claim service errors.
+                SOAP fault codes follow a hierarchical naming convention:
+                CATEGORY.SPECIFIC_ERROR (e.g., VALIDATION.MISSING_FIELD).
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:restriction base="xsd:string">
+            <!-- Validation faults -->
+            <xsd:enumeration value="VALIDATION.MISSING_FIELD"/>
+            <xsd:enumeration value="VALIDATION.INVALID_FORMAT"/>
+            <xsd:enumeration value="VALIDATION.INVALID_ENUM"/>
+            <xsd:enumeration value="VALIDATION.DATE_RANGE"/>
+            <!-- Business rule faults -->
+            <xsd:enumeration value="BUSINESS.POLICY_NOT_FOUND"/>
+            <xsd:enumeration value="BUSINESS.CLAIM_NOT_FOUND"/>
+            <xsd:enumeration value="BUSINESS.POLICY_INACTIVE"/>
+            <xsd:enumeration value="BUSINESS.COVERAGE_EXPIRED"/>
+            <xsd:enumeration value="BUSINESS.DUPLICATE_CLAIM"/>
+            <xsd:enumeration value="BUSINESS.INVALID_STATUS_TRANSITION"/>
+            <xsd:enumeration value="BUSINESS.CLAIM_LOCKED"/>
+            <!-- Authorization faults -->
+            <xsd:enumeration value="AUTH.UNAUTHORIZED"/>
+            <xsd:enumeration value="AUTH.INSUFFICIENT_PRIVILEGE"/>
+            <!-- System faults -->
+            <xsd:enumeration value="SYSTEM.INTERNAL_ERROR"/>
+            <xsd:enumeration value="SYSTEM.SERVICE_UNAVAILABLE"/>
+            <xsd:enumeration value="SYSTEM.TIMEOUT"/>
+            <xsd:enumeration value="SYSTEM.DATABASE_ERROR"/>
+        </xsd:restriction>
+    </xsd:simpleType>
+
+    <xsd:simpleType name="FaultSeverityType">
+        <xsd:restriction base="xsd:string">
+            <xsd:enumeration value="ERROR"/>
+            <xsd:enumeration value="WARNING"/>
+            <xsd:enumeration value="FATAL"/>
+        </xsd:restriction>
+    </xsd:simpleType>
+
+    <xsd:complexType name="ClaimFault">
+        <xsd:sequence>
+            <xsd:element name="errorCode"    type="tns:FaultCodeType"/>
+            <xsd:element name="errorMessage" type="xsd:string"/>
+            <xsd:element name="severity"     type="tns:FaultSeverityType" minOccurs="0"/>
+            <xsd:element name="timestamp"    type="xsd:dateTime"/>
+            <xsd:element name="correlationId" type="xsd:string" minOccurs="0"/>
+            <xsd:element name="fieldName"    type="xsd:string" minOccurs="0">
+                <xsd:annotation>
+                    <xsd:documentation>The request field that caused a validation fault.</xsd:documentation>
+                </xsd:annotation>
+            </xsd:element>
+        </xsd:sequence>
+        <xsd:attribute name="retryable" type="xsd:boolean" default="false">
+            <xsd:annotation>
+                <xsd:documentation>Indicates whether the client should retry the request.</xsd:documentation>
+            </xsd:annotation>
+        </xsd:attribute>
+    </xsd:complexType>
+
+    <!-- ================================================================== -->
+    <!-- Complex types – Update Claim Status                                -->
+    <!-- ================================================================== -->
+    <xsd:complexType name="UpdateClaimStatusRequest">
+        <xsd:annotation>
+            <xsd:documentation>
+                Request to transition a claim to a new status.
+                The service validates the transition against the claim lifecycle
+                state machine (e.g., FNOL_RECEIVED → UNDER_REVIEW is valid,
+                but CLOSED → FNOL_RECEIVED is not).
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:sequence>
+            <xsd:element name="claimNumber" type="xsd:string"/>
+            <xsd:element name="newStatus"   type="tns:ClaimStatusType"/>
+            <xsd:element name="reason"      type="xsd:string" minOccurs="0"/>
+            <xsd:element name="updatedBy"   type="xsd:string"/>
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <xsd:complexType name="UpdateClaimStatusResponse">
+        <xsd:sequence>
+            <xsd:element name="claimNumber"    type="xsd:string"/>
+            <xsd:element name="previousStatus" type="tns:ClaimStatusType"/>
+            <xsd:element name="currentStatus"  type="tns:ClaimStatusType"/>
+            <xsd:element name="transitionDate" type="xsd:dateTime"/>
+            <xsd:element name="message"        type="xsd:string"/>
+        </xsd:sequence>
+    </xsd:complexType>
+
+</xsd:schema>

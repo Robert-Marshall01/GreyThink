@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+    MyBatis Policy Mapper
+    =====================
+    Reporting and lookup queries for the Policy domain that require
+    database-specific syntax or complex joins beyond HQL convenience.
+    
+    Demonstrates:
+      - Nested result maps for one-to-many (Policy → Endorsements)
+      - Dynamic SQL with <set> for partial updates
+      - Stored procedure result set mapping
+      - Window functions for ranking/pagination
+-->
+<mapper namespace="com.greylegacy.dao.mybatis.PolicyMyBatisDao">
+
+    <cache eviction="LRU" flushInterval="600000" size="256" readOnly="true"/>
+
+    <!-- ================================================================ -->
+    <!-- Result Maps                                                       -->
+    <!-- ================================================================ -->
+
+    <resultMap id="policyFullMap" type="Policy">
+        <id     property="id"              column="ID"/>
+        <result property="policyNumber"    column="POLICY_NUMBER"/>
+        <result property="status"          column="STATUS"          typeHandler="org.apache.ibatis.type.EnumTypeHandler"/>
+        <result property="policyType"      column="POLICY_TYPE"     typeHandler="org.apache.ibatis.type.EnumTypeHandler"/>
+        <result property="holderFirstName" column="HOLDER_FIRST_NAME"/>
+        <result property="holderLastName"  column="HOLDER_LAST_NAME"/>
+        <result property="holderSsn"       column="HOLDER_SSN"/>
+        <result property="holderEmail"     column="HOLDER_EMAIL"/>
+        <result property="holderPhone"     column="HOLDER_PHONE"/>
+        <result property="effectiveDate"   column="EFFECTIVE_DATE"/>
+        <result property="expirationDate"  column="EXPIRATION_DATE"/>
+        <result property="premiumAmount"   column="PREMIUM_AMOUNT"/>
+        <result property="coverageLimit"   column="COVERAGE_LIMIT"/>
+        <result property="deductible"      column="DEDUCTIBLE"/>
+        <result property="agentCode"       column="AGENT_CODE"/>
+        <result property="underwriterCode" column="UNDERWRITER_CODE"/>
+        <result property="createdDate"     column="CREATED_DATE"/>
+        <result property="updatedDate"     column="UPDATED_DATE"/>
+    </resultMap>
+
+    <!-- Policy with claims count and total exposure -->
+    <resultMap id="policyWithExposureMap" type="java.util.LinkedHashMap">
+        <result property="policyNumber"    column="POLICY_NUMBER"/>
+        <result property="status"          column="STATUS"/>
+        <result property="policyType"      column="POLICY_TYPE"/>
+        <result property="holderName"      column="HOLDER_NAME"/>
+        <result property="premiumAmount"   column="PREMIUM_AMOUNT"/>
+        <result property="coverageLimit"   column="COVERAGE_LIMIT"/>
+        <result property="effectiveDate"   column="EFFECTIVE_DATE"/>
+        <result property="expirationDate"  column="EXPIRATION_DATE"/>
+        <result property="claimCount"      column="CLAIM_COUNT"/>
+        <result property="totalExposure"   column="TOTAL_EXPOSURE"/>
+        <result property="lossRatio"       column="LOSS_RATIO"/>
+    </resultMap>
+
+    <!-- ================================================================ -->
+    <!-- SELECT Queries                                                    -->
+    <!-- ================================================================ -->
+
+    <!-- Lookup by policy number (the most common query in the application) -->
+    <select id="findByPolicyNumber" parameterType="string" resultMap="policyFullMap">
+        SELECT *
+        FROM POLICY
+        WHERE POLICY_NUMBER = #{policyNumber}
+          AND (DELETED = FALSE OR DELETED IS NULL)
+    </select>
+
+    <!-- Dynamic search analogous to the Struts ClaimSearchAction -->
+    <select id="searchPolicies" parameterType="map" resultMap="policyFullMap">
+        SELECT *
+        FROM POLICY
+        <where>
+            <if test="policyNumber != null and policyNumber != ''">
+                AND POLICY_NUMBER LIKE #{policyNumber} || '%'
+            </if>
+            <if test="status != null and status != ''">
+                AND STATUS = #{status}
+            </if>
+            <if test="policyType != null and policyType != ''">
+                AND POLICY_TYPE = #{policyType}
+            </if>
+            <if test="holderLastName != null and holderLastName != ''">
+                AND UPPER(HOLDER_LAST_NAME) LIKE UPPER(#{holderLastName}) || '%'
+            </if>
+            <if test="agentCode != null and agentCode != ''">
+                AND AGENT_CODE = #{agentCode}
+            </if>
+            <if test="effectiveDateFrom != null">
+                AND EFFECTIVE_DATE &gt;= #{effectiveDateFrom}
+            </if>
+            <if test="effectiveDateTo != null">
+                AND EFFECTIVE_DATE &lt;= #{effectiveDateTo}
+            </if>
+            AND (DELETED = FALSE OR DELETED IS NULL)
+        </where>
+        ORDER BY POLICY_NUMBER
+        <if test="limit != null">
+            LIMIT #{limit}
+            <if test="offset != null">
+                OFFSET #{offset}
+            </if>
+        </if>
+    </select>
+
+    <!-- Policy exposure report with aggregated claim data -->
+    <select id="getPolicyExposureReport" resultMap="policyWithExposureMap">
+        SELECT
+            p.POLICY_NUMBER,
+            p.STATUS,
+            p.POLICY_TYPE,
+            p.HOLDER_FIRST_NAME || ' ' || p.HOLDER_LAST_NAME AS HOLDER_NAME,
+            p.PREMIUM_AMOUNT,
+            p.COVERAGE_LIMIT,
+            p.EFFECTIVE_DATE,
+            p.EXPIRATION_DATE,
+            COUNT(c.ID)                 AS CLAIM_COUNT,
+            COALESCE(SUM(c.ESTIMATED_LOSS), 0) AS TOTAL_EXPOSURE,
+            CASE
+                WHEN p.PREMIUM_AMOUNT > 0
+                THEN CAST(COALESCE(SUM(c.APPROVED_AMOUNT), 0) / p.PREMIUM_AMOUNT AS DECIMAL(10,4))
+                ELSE NULL
+            END                         AS LOSS_RATIO
+        FROM POLICY p
+        LEFT JOIN CLAIM c ON c.POLICY_ID = p.ID
+             AND (c.DELETED = FALSE OR c.DELETED IS NULL)
+        WHERE (p.DELETED = FALSE OR p.DELETED IS NULL)
+        GROUP BY p.POLICY_NUMBER, p.STATUS, p.POLICY_TYPE,
+                 p.HOLDER_FIRST_NAME, p.HOLDER_LAST_NAME,
+                 p.PREMIUM_AMOUNT, p.COVERAGE_LIMIT,
+                 p.EFFECTIVE_DATE, p.EXPIRATION_DATE
+        <choose>
+            <when test="sortBy != null and sortBy == 'exposure'">
+                ORDER BY TOTAL_EXPOSURE DESC
+            </when>
+            <when test="sortBy != null and sortBy == 'lossRatio'">
+                ORDER BY LOSS_RATIO DESC NULLS LAST
+            </when>
+            <otherwise>
+                ORDER BY p.POLICY_NUMBER
+            </otherwise>
+        </choose>
+    </select>
+
+    <!-- Expiring policies for renewal processing -->
+    <select id="findExpiringPolicies" parameterType="int" resultMap="policyFullMap">
+        SELECT *
+        FROM POLICY
+        WHERE STATUS = 'ACTIVE'
+          AND EXPIRATION_DATE BETWEEN CURRENT_DATE AND DATEADD('DAY', #{daysAhead}, CURRENT_DATE)
+          AND (DELETED = FALSE OR DELETED IS NULL)
+        ORDER BY EXPIRATION_DATE ASC
+    </select>
+
+    <!-- ================================================================ -->
+    <!-- UPDATE with Dynamic <set>                                         -->
+    <!-- ================================================================ -->
+    <!-- Partial update — only sets columns that are non-null in the map. -->
+    <!-- Avoids overwriting fields the caller didn't intend to change.    -->
+
+    <update id="partialUpdate" parameterType="map">
+        UPDATE POLICY
+        <set>
+            <if test="status != null">
+                STATUS = #{status},
+            </if>
+            <if test="premiumAmount != null">
+                PREMIUM_AMOUNT = #{premiumAmount},
+            </if>
+            <if test="coverageLimit != null">
+                COVERAGE_LIMIT = #{coverageLimit},
+            </if>
+            <if test="deductible != null">
+                DEDUCTIBLE = #{deductible},
+            </if>
+            <if test="holderEmail != null">
+                HOLDER_EMAIL = #{holderEmail},
+            </if>
+            <if test="holderPhone != null">
+                HOLDER_PHONE = #{holderPhone},
+            </if>
+            UPDATED_DATE = CURRENT_TIMESTAMP,
+            UPDATED_BY = #{updatedBy, jdbcType=VARCHAR},
+            VERSION = VERSION + 1
+        </set>
+        WHERE ID = #{id}
+          AND VERSION = #{expectedVersion}
+    </update>
+
+    <!-- Policy history (SCD Type 2) lookup -->
+    <select id="getPolicyHistory" parameterType="long" resultType="java.util.LinkedHashMap">
+        SELECT
+            HISTORY_ID,
+            POLICY_NUMBER,
+            STATUS,
+            POLICY_TYPE,
+            HOLDER_FIRST_NAME || ' ' || HOLDER_LAST_NAME AS HOLDER_NAME,
+            PREMIUM_AMOUNT,
+            COVERAGE_LIMIT,
+            DEDUCTIBLE,
+            EFFECTIVE_FROM,
+            EFFECTIVE_TO,
+            IS_CURRENT,
+            CHANGE_REASON,
+            CHANGED_BY
+        FROM POLICY_HISTORY
+        WHERE POLICY_ID = #{policyId}
+        ORDER BY EFFECTIVE_FROM DESC
+    </select>
+
+</mapper>

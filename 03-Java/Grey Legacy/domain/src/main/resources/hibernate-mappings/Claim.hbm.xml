@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+        "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+        "http://www.hibernate.org/dtd/hibernate-mapping-3.0.dtd">
+
+<hibernate-mapping package="com.greylegacy.domain">
+
+    <class name="Claim" table="CLAIM">
+
+        <id name="id" column="ID" type="long">
+            <generator class="sequence">
+                <param name="sequence_name">CLAIM_SEQ</param>
+            </generator>
+        </id>
+
+        <version name="version" column="VERSION"/>
+
+        <property name="claimNumber"       column="CLAIM_NUMBER"/>
+        <property name="status"            column="STATUS"              type="string"/>
+        <property name="claimType"         column="CLAIM_TYPE"          type="string"/>
+        <property name="lossDate"          column="LOSS_DATE"           type="date"/>
+        <property name="reportedDate"      column="REPORTED_DATE"      type="timestamp"/>
+        <property name="lossDescription"   column="LOSS_DESCRIPTION"/>
+        <property name="lossLocation"      column="LOSS_LOCATION"/>
+        <property name="claimantFirstName" column="CLAIMANT_FIRST_NAME"/>
+        <property name="claimantLastName"  column="CLAIMANT_LAST_NAME"/>
+        <property name="claimantPhone"     column="CLAIMANT_PHONE"/>
+        <property name="claimantEmail"     column="CLAIMANT_EMAIL"/>
+        <property name="adjusterCode"      column="ADJUSTER_CODE"/>
+        <property name="estimatedLoss"     column="ESTIMATED_LOSS"     type="big_decimal"/>
+        <property name="approvedAmount"    column="APPROVED_AMOUNT"    type="big_decimal"/>
+        <property name="deductibleApplied" column="DEDUCTIBLE_APPLIED" type="big_decimal"/>
+        <property name="fraudRiskLevel"    column="FRAUD_RISK_LEVEL"   type="string"/>
+        <property name="fraudScore"        column="FRAUD_SCORE"        type="integer"/>
+        <property name="fraudScoredDate"   column="FRAUD_SCORED_DATE"  type="timestamp"/>
+        <property name="closedDate"        column="CLOSED_DATE"        type="timestamp"/>
+        <property name="closedReason"      column="CLOSED_REASON"/>
+        <property name="createdBy"         column="CREATED_BY"/>
+        <property name="createdDate"       column="CREATED_DATE"       type="timestamp"/>
+        <property name="updatedBy"         column="UPDATED_BY"/>
+        <property name="updatedDate"       column="UPDATED_DATE"       type="timestamp"/>
+
+        <many-to-one name="policy" class="Policy" column="POLICY_ID" lazy="proxy"/>
+
+        <bag name="payments" inverse="true" lazy="true" cascade="all-delete-orphan">
+            <key column="CLAIM_ID"/>
+            <one-to-many class="ClaimPayment"/>
+        </bag>
+
+        <bag name="auditEntries" inverse="true" lazy="true" cascade="all-delete-orphan">
+            <key column="CLAIM_ID"/>
+            <one-to-many class="ClaimAuditEntry"/>
+        </bag>
+
+        <bag name="notes" inverse="true" lazy="true" cascade="all-delete-orphan">
+            <key column="CLAIM_ID"/>
+            <one-to-many class="ClaimNote"/>
+        </bag>
+
+    </class>
+
+</hibernate-mapping>

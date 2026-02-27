@@ -1,0 +1,328 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app xmlns="http://xmlns.jcp.org/xml/ns/javaee"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee
+                             http://xmlns.jcp.org/xml/ns/javaee/web-app_3_1.xsd"
+         version="3.1">
+
+    <display-name>Grey Legacy Claims System</display-name>
+
+    <!-- Spring Application Context Configuration -->
+    <context-param>
+        <param-name>contextConfigLocation</param-name>
+        <param-value>
+            classpath:applicationContext.xml,
+            classpath:applicationContext-dao.xml,
+            classpath:applicationContext-service.xml,
+            classpath:applicationContext-jms.xml,
+            classpath:applicationContext-jmx.xml,
+            classpath:applicationContext-spring-batch.xml
+        </param-value>
+    </context-param>
+
+    <!-- Spring Context Loader Listener -->
+    <listener>
+        <listener-class>org.springframework.web.context.ContextLoaderListener</listener-class>
+    </listener>
+
+    <!-- ==================== Filters ==================== -->
+
+    <!-- Audit Logging Filter -->
+    <filter>
+        <filter-name>auditLoggingFilter</filter-name>
+        <filter-class>com.greylegacy.web.filter.AuditLoggingFilter</filter-class>
+    </filter>
+    <filter-mapping>
+        <filter-name>auditLoggingFilter</filter-name>
+        <url-pattern>/*</url-pattern>
+    </filter-mapping>
+
+    <!-- Session Timeout Filter -->
+    <filter>
+        <filter-name>sessionTimeoutFilter</filter-name>
+        <filter-class>com.greylegacy.web.filter.SessionTimeoutFilter</filter-class>
+        <init-param>
+            <param-name>loginPage</param-name>
+            <param-value>/login.jsp</param-value>
+        </init-param>
+    </filter>
+    <filter-mapping>
+        <filter-name>sessionTimeoutFilter</filter-name>
+        <url-pattern>*.do</url-pattern>
+    </filter-mapping>
+
+    <!-- Hibernate Open Session in View Filter -->
+    <filter>
+        <filter-name>hibernateFilter</filter-name>
+        <filter-class>org.springframework.orm.hibernate5.support.OpenSessionInViewFilter</filter-class>
+        <init-param>
+            <param-name>sessionFactoryBeanName</param-name>
+            <param-value>sessionFactory</param-value>
+        </init-param>
+    </filter>
+    <filter-mapping>
+        <filter-name>hibernateFilter</filter-name>
+        <url-pattern>/*</url-pattern>
+    </filter-mapping>
+
+    <!-- ==================== Servlets ==================== -->
+
+    <!-- Struts Action Servlet -->
+    <servlet>
+        <servlet-name>action</servlet-name>
+        <servlet-class>org.apache.struts.action.ActionServlet</servlet-class>
+        <init-param>
+            <param-name>config</param-name>
+            <param-value>/WEB-INF/struts-config.xml</param-value>
+        </init-param>
+        <load-on-startup>1</load-on-startup>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>action</servlet-name>
+        <url-pattern>*.do</url-pattern>
+    </servlet-mapping>
+
+    <!-- Apache CXF Servlet for Web Services -->
+    <servlet>
+        <servlet-name>CXFServlet</servlet-name>
+        <servlet-class>org.apache.cxf.transport.servlet.CXFServlet</servlet-class>
+        <load-on-startup>2</load-on-startup>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>CXFServlet</servlet-name>
+        <url-pattern>/services/*</url-pattern>
+    </servlet-mapping>
+
+    <!-- Spring MVC DispatcherServlet for REST API (pre-Boot, XML-configured) -->
+    <servlet>
+        <servlet-name>spring-mvc</servlet-name>
+        <servlet-class>org.springframework.web.servlet.DispatcherServlet</servlet-class>
+        <init-param>
+            <param-name>contextConfigLocation</param-name>
+            <param-value>/WEB-INF/spring-mvc-servlet.xml</param-value>
+        </init-param>
+        <load-on-startup>3</load-on-startup>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>spring-mvc</servlet-name>
+        <url-pattern>/api/*</url-pattern>
+    </servlet-mapping>
+
+    <!-- ==================== Security Constraints ==================== -->
+    <!--
+         Container-managed security using JAAS authentication.
+         The servlet container enforces these constraints before the
+         request reaches any servlet or filter (except the
+         login/error pages themselves).
+
+         Role mapping:
+           CLAIMS_ADJUSTER  — View and process assigned claims
+           CLAIMS_MANAGER   — All adjuster permissions + approve/deny claims
+           ADMIN            — Full system access including configuration
+           READONLY         — Dashboard and search only (auditors, observers)
+           SYSTEM_BATCH     — Batch job endpoints only (no UI access)
+
+         For Tomcat:   JAASRealm or UserDatabaseRealm in server.xml
+         For JBoss:    security-domain in standalone.xml (see config/jboss/)
+         For WebSphere: application security binding (ibm-web-bnd.xml)
+    -->
+
+    <!-- Protect claims processing pages — adjuster level and above -->
+    <security-constraint>
+        <web-resource-collection>
+            <web-resource-name>Claims Processing</web-resource-name>
+            <description>FNOL submission, claim detail, adjuster review</description>
+            <url-pattern>/claims/*</url-pattern>
+            <url-pattern>/fnol.do</url-pattern>
+            <url-pattern>/claimSearch.do</url-pattern>
+            <url-pattern>/claimDetail.do</url-pattern>
+            <url-pattern>/adjusterReview.do</url-pattern>
+            <http-method>GET</http-method>
+            <http-method>POST</http-method>
+        </web-resource-collection>
+        <auth-constraint>
+            <role-name>CLAIMS_ADJUSTER</role-name>
+            <role-name>CLAIMS_MANAGER</role-name>
+            <role-name>ADMIN</role-name>
+        </auth-constraint>
+        <user-data-constraint>
+            <transport-guarantee>CONFIDENTIAL</transport-guarantee>
+        </user-data-constraint>
+    </security-constraint>
+
+    <!-- Dashboard and search — available to all authenticated roles -->
+    <security-constraint>
+        <web-resource-collection>
+            <web-resource-name>Dashboard and Search</web-resource-name>
+            <url-pattern>/dashboard.do</url-pattern>
+            <url-pattern>/api/dashboard/*</url-pattern>
+        </web-resource-collection>
+        <auth-constraint>
+            <role-name>READONLY</role-name>
+            <role-name>CLAIMS_ADJUSTER</role-name>
+            <role-name>CLAIMS_MANAGER</role-name>
+            <role-name>ADMIN</role-name>
+        </auth-constraint>
+    </security-constraint>
+
+    <!-- REST API endpoints — require adjuster or above -->
+    <security-constraint>
+        <web-resource-collection>
+            <web-resource-name>REST API</web-resource-name>
+            <url-pattern>/api/v1/*</url-pattern>
+            <http-method>GET</http-method>
+            <http-method>POST</http-method>
+            <http-method>PUT</http-method>
+            <http-method>DELETE</http-method>
+        </web-resource-collection>
+        <auth-constraint>
+            <role-name>CLAIMS_ADJUSTER</role-name>
+            <role-name>CLAIMS_MANAGER</role-name>
+            <role-name>ADMIN</role-name>
+        </auth-constraint>
+        <user-data-constraint>
+            <transport-guarantee>CONFIDENTIAL</transport-guarantee>
+        </user-data-constraint>
+    </security-constraint>
+
+    <!-- SOAP Web Services — WS-Security handles auth at message level,
+         but container constraint provides defense-in-depth -->
+    <security-constraint>
+        <web-resource-collection>
+            <web-resource-name>SOAP Services</web-resource-name>
+            <url-pattern>/services/*</url-pattern>
+        </web-resource-collection>
+        <!-- No auth-constraint: SOAP services use WS-Security UsernameToken
+             for authentication. Container auth is not applied to allow the
+             CXF interceptor chain to handle security at the message level.
+             Uncomment the auth-constraint below to add transport-level
+             authentication as defense-in-depth:
+        <auth-constraint>
+            <role-name>CLAIMS_ADJUSTER</role-name>
+            <role-name>CLAIMS_MANAGER</role-name>
+            <role-name>ADMIN</role-name>
+            <role-name>SYSTEM_BATCH</role-name>
+        </auth-constraint>
+        -->
+        <user-data-constraint>
+            <transport-guarantee>CONFIDENTIAL</transport-guarantee>
+        </user-data-constraint>
+    </security-constraint>
+
+    <!-- Admin-only: JMX HTTP connector, configuration endpoints -->
+    <security-constraint>
+        <web-resource-collection>
+            <web-resource-name>Administration</web-resource-name>
+            <url-pattern>/admin/*</url-pattern>
+            <url-pattern>/api/admin/*</url-pattern>
+        </web-resource-collection>
+        <auth-constraint>
+            <role-name>ADMIN</role-name>
+        </auth-constraint>
+        <user-data-constraint>
+            <transport-guarantee>CONFIDENTIAL</transport-guarantee>
+        </user-data-constraint>
+    </security-constraint>
+
+    <!-- Block direct access to WEB-INF and META-INF -->
+    <security-constraint>
+        <web-resource-collection>
+            <web-resource-name>Internal Resources</web-resource-name>
+            <url-pattern>/WEB-INF/*</url-pattern>
+            <url-pattern>/META-INF/*</url-pattern>
+        </web-resource-collection>
+        <!-- Empty auth-constraint = NO access for anyone -->
+        <auth-constraint/>
+    </security-constraint>
+
+    <!-- ==================== Login Configuration ==================== -->
+    <!--
+         FORM-based login for browser clients.
+         The container redirects unauthenticated requests to login.jsp
+         and posts credentials to j_security_check (container-managed URL).
+
+         For BASIC auth (simpler, used with curl/Postman testing):
+           <login-config>
+               <auth-method>BASIC</auth-method>
+               <realm-name>Grey Legacy Claims System</realm-name>
+           </login-config>
+
+         For CLIENT-CERT (mutual TLS, used in partner integrations):
+           <login-config>
+               <auth-method>CLIENT-CERT</auth-method>
+           </login-config>
+    -->
+    <login-config>
+        <auth-method>FORM</auth-method>
+        <realm-name>Grey Legacy Claims System</realm-name>
+        <form-login-config>
+            <form-login-page>/login.jsp</form-login-page>
+            <form-error-page>/loginError.jsp</form-error-page>
+        </form-login-config>
+    </login-config>
+
+    <!-- ==================== Security Roles ==================== -->
+
+    <security-role>
+        <description>Read-only access to dashboards and reports (auditors)</description>
+        <role-name>READONLY</role-name>
+    </security-role>
+    <security-role>
+        <description>Claims adjusters — process and investigate claims</description>
+        <role-name>CLAIMS_ADJUSTER</role-name>
+    </security-role>
+    <security-role>
+        <description>Claims managers — approve/deny, reassign, escalate</description>
+        <role-name>CLAIMS_MANAGER</role-name>
+    </security-role>
+    <security-role>
+        <description>System administrators — full access</description>
+        <role-name>ADMIN</role-name>
+    </security-role>
+    <security-role>
+        <description>Batch processing service accounts</description>
+        <role-name>SYSTEM_BATCH</role-name>
+    </security-role>
+
+    <!-- ==================== Session Config ==================== -->
+
+    <session-config>
+        <session-timeout>30</session-timeout>
+        <!-- HttpOnly prevents JavaScript access to session cookie (XSS mitigation) -->
+        <cookie-config>
+            <http-only>true</http-only>
+            <secure>true</secure>
+            <max-age>1800</max-age>
+        </cookie-config>
+        <tracking-mode>COOKIE</tracking-mode>
+    </session-config>
+
+    <!-- ==================== Welcome File List ==================== -->
+
+    <welcome-file-list>
+        <welcome-file>index.jsp</welcome-file>
+    </welcome-file-list>
+
+    <!-- ==================== Error Pages ==================== -->
+
+    <error-page>
+        <error-code>401</error-code>
+        <location>/WEB-INF/jsp/error.jsp</location>
+    </error-page>
+
+    <error-page>
+        <error-code>403</error-code>
+        <location>/WEB-INF/jsp/error.jsp</location>
+    </error-page>
+
+    <error-page>
+        <error-code>404</error-code>
+        <location>/WEB-INF/jsp/error.jsp</location>
+    </error-page>
+
+    <error-page>
+        <error-code>500</error-code>
+        <location>/WEB-INF/jsp/error.jsp</location>
+    </error-page>
+
+</web-app>

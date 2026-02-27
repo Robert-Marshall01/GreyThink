@@ -1,0 +1,16 @@
+claimNumber,policyNumber,claimantFirstName,claimantLastName,claimType,lossDate,lossDescription,estimatedLoss,lossLocation
+CLM-2025-00101,POL-AUTO-44210,James,Henderson,COLLISION,2025-08-14,Rear-end collision at stoplight on Main St,8500.00,Springfield IL
+CLM-2025-00102,POL-HOME-77823,Maria,Gonzalez,FIRE,2025-07-22,Kitchen fire caused by electrical fault,42000.00,Dallas TX
+CLM-2025-00103,POL-AUTO-44215,Robert,Chen,COMPREHENSIVE,2025-09-01,Hail damage to windshield and roof,3200.00,Denver CO
+CLM-2025-00104,POL-COMM-99101,Westside Bakery LLC,Corp,PROPERTY_DAMAGE,2025-06-30,"Water damage from burst pipe, affecting inventory and flooring",67500.00,Portland OR
+CLM-2025-00105,POL-AUTO-44220,Samantha,Williams,LIABILITY,2025-08-05,Multi-vehicle accident on I-95 southbound,15000.00,Richmond VA
+CLM-2025-00106,POL-HOME-77830,David,Okafor,NATURAL_DISASTER,2025-09-15,Tornado damage to roof and detached garage,58000.00,Tulsa OK
+CLM-2025-00107,POL-AUTO-44225,Emily,Johansson,THEFT,2025-07-10,Vehicle stolen from grocery store parking lot,22000.00,Minneapolis MN
+CLM-2025-00108,POL-HOME-77835,Patricia,Alvarez,FIRE,2025-08-20,"Grill fire spread to deck, minor structural damage",11500.00,Phoenix AZ
+CLM-2025-00109,POL-AUTO-44230,Michael,Patel,COLLISION,2025-09-08,Side-swipe on highway merge lane,4800.00,Atlanta GA
+CLM-2025-00110,POL-LIFE-55501,Karen,O'Brien,MEDICAL,2025-05-18,Emergency surgery following workplace accident,95000.00,Chicago IL
+CLM-2025-00111,POL-AUTO-44235,Thomas,Nguyen,COMPREHENSIVE,2025-09-20,Flood damage — vehicle submerged in parking garage,18500.00,Houston TX
+CLM-2025-00112,POL-COMM-99110,Apex Manufacturing Inc,Corp,PROPERTY_DAMAGE,2025-07-01,"Equipment failure, conveyor belt destroyed",125000.00,Detroit MI
+CLM-2025-00113,POL-HOME-77840,Linda,Kowalski,THEFT,2025-08-28,Burglary — electronics and jewellery stolen,14200.00,Seattle WA
+CLM-2025-00114,POL-AUTO-44240,Jennifer,Barnes,BODILY_INJURY,2025-06-15,"Pedestrian struck in crosswalk, minor injuries",7500.00,Boston MA
+CLM-2025-00115,POL-HOME-77845,Richard,"St. James, Jr.",NATURAL_DISASTER,2025-09-25,"Hurricane wind damage to siding, windows, and roof",72000.00,Miami FL

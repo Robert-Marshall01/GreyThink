@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://schemas.xmlsoap.org/wsdl/"
+             xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+             xmlns:tns="http://www.greylegacy.com/services/claims"
+             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+             xmlns:ct="http://www.greylegacy.com/schema/claims"
+             name="ClaimService"
+             targetNamespace="http://www.greylegacy.com/services/claims">
+
+    <!-- ================================================================== -->
+    <!-- Type imports                                                       -->
+    <!-- ================================================================== -->
+    <types>
+        <xsd:schema targetNamespace="http://www.greylegacy.com/services/claims">
+            <xsd:import namespace="http://www.greylegacy.com/schema/claims"
+                        schemaLocation="../xsd/claims-types.xsd"/>
+        </xsd:schema>
+    </types>
+
+    <!-- ================================================================== -->
+    <!-- Messages                                                           -->
+    <!-- ================================================================== -->
+    <message name="submitClaimRequest">
+        <part name="parameters" element="ct:submitClaimRequest"/>
+    </message>
+    <message name="submitClaimResponse">
+        <part name="parameters" element="ct:submitClaimResponse"/>
+    </message>
+
+    <message name="getClaimStatusRequest">
+        <part name="parameters" element="ct:getClaimStatusRequest"/>
+    </message>
+    <message name="getClaimStatusResponse">
+        <part name="parameters" element="ct:getClaimStatusResponse"/>
+    </message>
+
+    <message name="getClaimDetailsRequest">
+        <part name="parameters" element="ct:getClaimDetailsRequest"/>
+    </message>
+    <message name="getClaimDetailsResponse">
+        <part name="parameters" element="ct:getClaimDetailsResponse"/>
+    </message>
+
+    <message name="updateClaimStatusRequest">
+        <part name="parameters" element="ct:updateClaimStatusRequest"/>
+    </message>
+    <message name="updateClaimStatusResponse">
+        <part name="parameters" element="ct:updateClaimStatusResponse"/>
+    </message>
+
+    <message name="claimServiceFault">
+        <part name="fault" element="ct:claimFault"/>
+    </message>
+
+    <!-- ================================================================== -->
+    <!-- Port Type                                                          -->
+    <!-- ================================================================== -->
+    <portType name="ClaimServicePortType">
+        <operation name="submitClaim">
+            <documentation>
+                Submit a new First Notice of Loss (FNOL) claim.
+                Validates the associated policy and creates the claim record.
+            </documentation>
+            <input message="tns:submitClaimRequest"/>
+            <output message="tns:submitClaimResponse"/>
+            <fault name="ClaimServiceFault" message="tns:claimServiceFault"/>
+        </operation>
+        <operation name="getClaimStatus">
+            <documentation>
+                Retrieve the current status of an existing claim.
+            </documentation>
+            <input message="tns:getClaimStatusRequest"/>
+            <output message="tns:getClaimStatusResponse"/>
+            <fault name="ClaimServiceFault" message="tns:claimServiceFault"/>
+        </operation>
+        <operation name="getClaimDetails">
+            <documentation>
+                Retrieve full details of an existing claim including
+                adjuster assignment, fraud scoring, and payment info.
+            </documentation>
+            <input message="tns:getClaimDetailsRequest"/>
+            <output message="tns:getClaimDetailsResponse"/>
+            <fault name="ClaimServiceFault" message="tns:claimServiceFault"/>
+        </operation>
+        <operation name="updateClaimStatus">
+            <documentation>
+                Transition a claim to a new status. The transition is validated
+                against the claim lifecycle state machine. Invalid transitions
+                (e.g., CLOSED → FNOL_RECEIVED) will raise a SOAP fault.
+            </documentation>
+            <input message="tns:updateClaimStatusRequest"/>
+            <output message="tns:updateClaimStatusResponse"/>
+            <fault name="ClaimServiceFault" message="tns:claimServiceFault"/>
+        </operation>
+    </portType>
+
+    <!-- ================================================================== -->
+    <!-- SOAP 1.1 Binding                                                   -->
+    <!-- ================================================================== -->
+    <binding name="ClaimServiceSoapBinding" type="tns:ClaimServicePortType">
+        <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+
+        <operation name="submitClaim">
+            <soap:operation soapAction="http://www.greylegacy.com/services/claims/submitClaim"/>
+            <input>
+                <soap:body use="literal"/>
+            </input>
+            <output>
+                <soap:body use="literal"/>
+            </output>
+            <fault name="ClaimServiceFault">
+                <soap:fault name="ClaimServiceFault" use="literal"/>
+            </fault>
+        </operation>
+
+        <operation name="getClaimStatus">
+            <soap:operation soapAction="http://www.greylegacy.com/services/claims/getClaimStatus"/>
+            <input>
+                <soap:body use="literal"/>
+            </input>
+            <output>
+                <soap:body use="literal"/>
+            </output>
+            <fault name="ClaimServiceFault">
+                <soap:fault name="ClaimServiceFault" use="literal"/>
+            </fault>
+        </operation>
+
+        <operation name="getClaimDetails">
+            <soap:operation soapAction="http://www.greylegacy.com/services/claims/getClaimDetails"/>
+            <input>
+                <soap:body use="literal"/>
+            </input>
+            <output>
+                <soap:body use="literal"/>
+            </output>
+            <fault name="ClaimServiceFault">
+                <soap:fault name="ClaimServiceFault" use="literal"/>
+            </fault>
+        </operation>
+
+        <operation name="updateClaimStatus">
+            <soap:operation soapAction="http://www.greylegacy.com/services/claims/updateClaimStatus"/>
+            <input>
+                <soap:body use="literal"/>
+            </input>
+            <output>
+                <soap:body use="literal"/>
+            </output>
+            <fault name="ClaimServiceFault">
+                <soap:fault name="ClaimServiceFault" use="literal"/>
+            </fault>
+        </operation>
+    </binding>
+
+    <!-- ================================================================== -->
+    <!-- Service                                                            -->
+    <!-- ================================================================== -->
+    <service name="ClaimService">
+        <port name="ClaimServicePort" binding="tns:ClaimServiceSoapBinding">
+            <soap:address location="http://localhost:8080/grey-legacy/services/ClaimService"/>
+        </port>
+    </service>
+
+</definitions>

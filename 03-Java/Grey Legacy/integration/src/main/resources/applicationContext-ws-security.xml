@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:jaxws="http://cxf.apache.org/jaxws"
+       xsi:schemaLocation="
+           http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans.xsd
+           http://cxf.apache.org/jaxws
+           http://cxf.apache.org/schemas/jaxws.xsd">
+
+    <!--
+        WS-Security Configuration for Grey Legacy SOAP Endpoints
+        ==========================================================
+        Adds authentication and message-level security to the existing
+        CXF web service endpoints defined in applicationContext-integration.xml.
+
+        In legacy enterprise environments, SOAP web services required
+        WS-Security for:
+          - Username/Password Token authentication (OASIS WSS specification)
+          - Message signing (XML Digital Signatures)
+          - Message encryption (XML Encryption)
+          - Timestamp validation (to prevent replay attacks)
+
+        This configuration uses CXF's WSS4J interceptors to apply
+        WS-Security policies without modifying the service implementation code.
+
+        References:
+          - OASIS WS-Security specification (2004)
+          - WSS4J (Web Services Security for Java)
+          - CXF Security: http://cxf.apache.org/docs/ws-security.html
+    -->
+
+    <!-- ================================================================== -->
+    <!-- WSS4J Callback Handler for Username Token Validation               -->
+    <!-- ================================================================== -->
+    <!-- In production, this would authenticate against LDAP, a database,   -->
+    <!-- or an enterprise identity provider. This implementation uses a     -->
+    <!-- properties file for development/testing.                            -->
+    <bean id="serverPasswordCallback"
+          class="com.greylegacy.integration.security.ServerPasswordCallback">
+        <property name="credentialsFile" value="classpath:ws-security.properties"/>
+    </bean>
+
+    <!-- ================================================================== -->
+    <!-- Inbound WSS4J Interceptor (request-side security)                 -->
+    <!-- ================================================================== -->
+    <!-- Applied to incoming SOAP requests. Validates:                       -->
+    <!--   1. UsernameToken (authentication)                                -->
+    <!--   2. Timestamp (anti-replay, max 5-minute clock skew)              -->
+    <!--   3. Signature (message integrity, if signing is enabled)          -->
+    <bean id="wss4jInInterceptor"
+          class="org.apache.cxf.ws.security.wss4j.WSS4JInInterceptor">
+        <constructor-arg>
+            <map>
+                <!-- Action: which WS-Security headers to process -->
+                <entry key="action" value="UsernameToken Timestamp"/>
+
+                <!-- Password type: digest (hashed) vs. text -->
+                <entry key="passwordType" value="PasswordDigest"/>
+
+                <!-- Callback handler for server-side password validation -->
+                <entry key="passwordCallbackRef" value="serverPasswordCallback"/>
+
+                <!-- Timestamp: require it and validate within 300s (5 min) -->
+                <entry key="timeToLive" value="300"/>
+
+                <!-- Must understand the security header -->
+                <entry key="mustUnderstand" value="true"/>
+            </map>
+        </constructor-arg>
+    </bean>
+
+    <!-- ================================================================== -->
+    <!-- Outbound WSS4J Interceptor (response-side security)               -->
+    <!-- ================================================================== -->
+    <!-- Applied to outgoing SOAP responses. Adds a Timestamp header       -->
+    <!-- to the response for the client to validate.                        -->
+    <bean id="wss4jOutInterceptor"
+          class="org.apache.cxf.ws.security.wss4j.WSS4JOutInterceptor">
+        <constructor-arg>
+            <map>
+                <entry key="action" value="Timestamp"/>
+                <entry key="timeToLive" value="300"/>
+            </map>
+        </constructor-arg>
+    </bean>
+
+    <!-- ================================================================== -->
+    <!-- Apply WS-Security to Claim Web Service Endpoint                    -->
+    <!-- ================================================================== -->
+    <!-- Overrides the base endpoint from applicationContext-integration.xml -->
+    <!-- to add security interceptors.                                       -->
+    <jaxws:endpoint id="securedClaimWebService"
+                    implementor="#claimWebServiceImpl"
+                    address="/ClaimService">
+        <jaxws:inInterceptors>
+            <ref bean="wss4jInInterceptor"/>
+        </jaxws:inInterceptors>
+        <jaxws:outInterceptors>
+            <ref bean="wss4jOutInterceptor"/>
+        </jaxws:outInterceptors>
+        <jaxws:properties>
+            <!-- Enable MTOM for binary attachments (claim documents/photos) -->
+            <entry key="mtom-enabled" value="true"/>
+        </jaxws:properties>
+    </jaxws:endpoint>
+
+    <!-- ================================================================== -->
+    <!-- Apply WS-Security to Policy Lookup Web Service Endpoint            -->
+    <!-- ================================================================== -->
+    <jaxws:endpoint id="securedPolicyLookupWebService"
+                    implementor="#policyLookupWebServiceImpl"
+                    address="/PolicyLookupService">
+        <jaxws:inInterceptors>
+            <ref bean="wss4jInInterceptor"/>
+        </jaxws:inInterceptors>
+        <jaxws:outInterceptors>
+            <ref bean="wss4jOutInterceptor"/>
+        </jaxws:outInterceptors>
+    </jaxws:endpoint>
+
+</beans>

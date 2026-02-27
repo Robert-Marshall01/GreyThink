@@ -1,0 +1,582 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ============================================================================
+     Grey Legacy Insurance Claims System - Apache Ant Build File
+     
+     This Ant build script provides an alternative build mechanism to the
+     primary Maven build. Many legacy enterprise shops maintain Ant builds
+     alongside Maven for backward compatibility with existing CI/CD pipelines,
+     deployment scripts, and developer workflows.
+     
+     Usage:
+       ant clean compile   - Clean and compile all modules
+       ant test            - Run unit tests
+       ant war             - Build the WAR file
+       ant ear             - Build the EAR file
+       ant dist            - Full distribution build
+       ant deploy          - Deploy WAR to Tomcat
+       ant javadoc         - Generate Javadoc
+     
+     Author: Grey Legacy Build Engineering
+     Last Modified: 2025-11-15
+     ============================================================================ -->
+<project name="grey-legacy" default="dist" basedir=".">
+
+    <description>
+        Ant build file for the Grey Legacy enterprise insurance claims processing
+        system. This multi-module project includes domain, dao, service, web,
+        batch, and integration modules packaged as a WAR and EAR.
+    </description>
+
+    <!-- ====================================================================
+         Load external build properties. These are environment-specific and
+         should NOT be checked into source control in production.
+         ==================================================================== -->
+    <property file="build.properties"/>
+
+    <!-- ====================================================================
+         Directory structure properties
+         ==================================================================== -->
+    <property name="src.dir"       value="${basedir}"/>
+    <property name="build.dir"     value="${basedir}/build"/>
+    <property name="dist.dir"      value="${basedir}/dist"/>
+    <property name="lib.dir"       value="${basedir}/lib"/>
+    <property name="webapp.dir"    value="${basedir}/web/src/webapp"/>
+    <property name="classes.dir"   value="${build.dir}/classes"/>
+    <property name="test.dir"      value="${build.dir}/test-classes"/>
+    <property name="reports.dir"   value="${build.dir}/test-reports"/>
+    <property name="javadoc.dir"   value="${build.dir}/javadoc"/>
+
+    <!-- WAR/EAR output file names -->
+    <property name="war.file"      value="${app.name}.war"/>
+    <property name="ear.file"      value="${app.name}.ear"/>
+    <property name="batch.jar"     value="${app.name}-batch.jar"/>
+
+    <!-- Java compiler settings (loaded from build.properties, defaults here) -->
+    <property name="java.source"   value="1.8"/>
+    <property name="java.target"   value="1.8"/>
+
+    <!-- Deployment settings -->
+    <property name="tomcat.home"   value="/opt/tomcat"/>
+
+    <!-- ====================================================================
+         Classpath definition - references all JARs in the lib directory.
+         In a legacy environment, dependencies are typically vendored into
+         a lib/ folder rather than resolved from a repository at build time.
+         ==================================================================== -->
+    <path id="project.classpath">
+        <fileset dir="${lib.dir}" includes="*.jar" erroronmissingdir="false"/>
+        <!-- Include compiled classes from dependent modules -->
+        <pathelement location="${classes.dir}/domain"/>
+        <pathelement location="${classes.dir}/dao"/>
+        <pathelement location="${classes.dir}/service"/>
+        <pathelement location="${classes.dir}/web"/>
+        <pathelement location="${classes.dir}/batch"/>
+        <pathelement location="${classes.dir}/integration"/>
+    </path>
+
+    <!-- Test classpath extends project classpath with test libraries -->
+    <path id="test.classpath">
+        <path refid="project.classpath"/>
+        <fileset dir="${lib.dir}" includes="junit-*.jar,hamcrest-*.jar,mockito-*.jar" erroronmissingdir="false"/>
+        <pathelement location="${test.dir}"/>
+    </path>
+
+    <!-- ====================================================================
+         Conditional properties for environment-specific behavior.
+         Set -Denv=production on command line to activate production targets.
+         ==================================================================== -->
+    <condition property="is.production">
+        <equals arg1="${env}" arg2="production"/>
+    </condition>
+    <condition property="is.development">
+        <not><isset property="is.production"/></not>
+    </condition>
+
+    <!-- ====================================================================
+         Target: init
+         Creates the build output directory structure.
+         ==================================================================== -->
+    <target name="init" description="Initialize build directory structure">
+        <echo message="Initializing build directories for ${app.name}..."/>
+        <mkdir dir="${build.dir}"/>
+        <mkdir dir="${classes.dir}/domain"/>
+        <mkdir dir="${classes.dir}/dao"/>
+        <mkdir dir="${classes.dir}/service"/>
+        <mkdir dir="${classes.dir}/web"/>
+        <mkdir dir="${classes.dir}/batch"/>
+        <mkdir dir="${classes.dir}/integration"/>
+        <mkdir dir="${test.dir}"/>
+        <mkdir dir="${reports.dir}"/>
+        <mkdir dir="${dist.dir}"/>
+        <tstamp>
+            <format property="build.timestamp" pattern="yyyy-MM-dd HH:mm:ss"/>
+        </tstamp>
+        <echo message="Build timestamp: ${build.timestamp}"/>
+    </target>
+
+    <!-- ====================================================================
+         Target: clean
+         Removes all build artifacts and output directories.
+         ==================================================================== -->
+    <target name="clean" description="Remove all build artifacts">
+        <echo message="Cleaning build and dist directories..."/>
+        <delete dir="${build.dir}" failonerror="false"/>
+        <delete dir="${dist.dir}" failonerror="false"/>
+    </target>
+
+    <!-- ====================================================================
+         Target: resolve
+         Placeholder for dependency resolution. In production environments,
+         Apache Ivy would be used here to resolve dependencies from an
+         internal Nexus/Artifactory repository.
+         ==================================================================== -->
+    <target name="resolve" description="Resolve dependencies (placeholder for Ivy)">
+        <!-- 
+             In production, use Apache Ivy for dependency resolution:
+             
+             <ivy:retrieve pattern="${lib.dir}/[artifact]-[revision].[ext]"
+                           conf="compile,runtime"/>
+             
+             Ivy settings would reference the internal Nexus repository at:
+               http://nexus.greylegacy.internal/repository/maven-public/
+             
+             For now, dependencies are expected to be pre-populated in ${lib.dir}
+             either manually or via a prior Maven build (mvn dependency:copy-dependencies).
+        -->
+        <echo message="Dependency resolution: ensure ${lib.dir} contains required JARs."/>
+        <echo message="Run 'mvn dependency:copy-dependencies -DoutputDirectory=lib' to populate."/>
+    </target>
+
+    <!-- ====================================================================
+         Target: compile-domain
+         Compiles the domain module (POJOs, Hibernate entities, enums).
+         This module has no internal dependencies.
+         ==================================================================== -->
+    <target name="compile-domain" depends="init,resolve"
+            description="Compile the domain module">
+        <echo message="Compiling domain module..."/>
+        <javac srcdir="${src.dir}/domain/src/main/java"
+               destdir="${classes.dir}/domain"
+               source="${java.source}"
+               target="${java.target}"
+               debug="on"
+               deprecation="on"
+               includeantruntime="false"
+               encoding="UTF-8">
+            <classpath refid="project.classpath"/>
+        </javac>
+        <!-- Copy Hibernate mapping files alongside compiled classes -->
+        <copy todir="${classes.dir}/domain" failonerror="false">
+            <fileset dir="${src.dir}/domain/src/main/resources" includes="**/*"/>
+        </copy>
+    </target>
+
+    <!-- ====================================================================
+         Target: compile-dao
+         Compiles the DAO module (data access layer, Hibernate DAOs).
+         Depends on the domain module for entity classes.
+         ==================================================================== -->
+    <target name="compile-dao" depends="compile-domain"
+            description="Compile the dao module">
+        <echo message="Compiling dao module..."/>
+        <javac srcdir="${src.dir}/dao/src/main/java"
+               destdir="${classes.dir}/dao"
+               source="${java.source}"
+               target="${java.target}"
+               debug="on"
+               deprecation="on"
+               includeantruntime="false"
+               encoding="UTF-8">
+            <classpath refid="project.classpath"/>
+        </javac>
+        <copy todir="${classes.dir}/dao" failonerror="false">
+            <fileset dir="${src.dir}/dao/src/main/resources" includes="**/*"/>
+        </copy>
+    </target>
+
+    <!-- ====================================================================
+         Target: compile-service
+         Compiles the service module (business logic, Spring services).
+         Depends on the dao module (and transitively on domain).
+         ==================================================================== -->
+    <target name="compile-service" depends="compile-dao"
+            description="Compile the service module">
+        <echo message="Compiling service module..."/>
+        <javac srcdir="${src.dir}/service/src/main/java"
+               destdir="${classes.dir}/service"
+               source="${java.source}"
+               target="${java.target}"
+               debug="on"
+               deprecation="on"
+               includeantruntime="false"
+               encoding="UTF-8">
+            <classpath refid="project.classpath"/>
+        </javac>
+        <copy todir="${classes.dir}/service" failonerror="false">
+            <fileset dir="${src.dir}/service/src/main/resources" includes="**/*"/>
+        </copy>
+    </target>
+
+    <!-- ====================================================================
+         Target: compile-web
+         Compiles the web module (Struts actions, form beans, controllers).
+         Depends on the service module.
+         ==================================================================== -->
+    <target name="compile-web" depends="compile-service"
+            description="Compile the web module">
+        <echo message="Compiling web module..."/>
+        <javac srcdir="${src.dir}/web/src/main/java"
+               destdir="${classes.dir}/web"
+               source="${java.source}"
+               target="${java.target}"
+               debug="on"
+               deprecation="on"
+               includeantruntime="false"
+               encoding="UTF-8">
+            <classpath refid="project.classpath"/>
+        </javac>
+        <copy todir="${classes.dir}/web" failonerror="false">
+            <fileset dir="${src.dir}/web/src/main/resources" includes="**/*"/>
+        </copy>
+    </target>
+
+    <!-- ====================================================================
+         Target: compile-batch
+         Compiles the batch module (Spring Batch jobs, scheduled tasks).
+         Depends on the service module.
+         ==================================================================== -->
+    <target name="compile-batch" depends="compile-service"
+            description="Compile the batch module">
+        <echo message="Compiling batch module..."/>
+        <javac srcdir="${src.dir}/batch/src/main/java"
+               destdir="${classes.dir}/batch"
+               source="${java.source}"
+               target="${java.target}"
+               debug="on"
+               deprecation="on"
+               includeantruntime="false"
+               encoding="UTF-8">
+            <classpath refid="project.classpath"/>
+        </javac>
+        <copy todir="${classes.dir}/batch" failonerror="false">
+            <fileset dir="${src.dir}/batch/src/main/resources" includes="**/*"/>
+        </copy>
+    </target>
+
+    <!-- ====================================================================
+         Target: compile-integration
+         Compiles the integration module (JMS, SOAP, ETL connectors).
+         Depends on the service module.
+         ==================================================================== -->
+    <target name="compile-integration" depends="compile-service"
+            description="Compile the integration module">
+        <echo message="Compiling integration module..."/>
+        <javac srcdir="${src.dir}/integration/src/main/java"
+               destdir="${classes.dir}/integration"
+               source="${java.source}"
+               target="${java.target}"
+               debug="on"
+               deprecation="on"
+               includeantruntime="false"
+               encoding="UTF-8">
+            <classpath refid="project.classpath"/>
+        </javac>
+        <copy todir="${classes.dir}/integration" failonerror="false">
+            <fileset dir="${src.dir}/integration/src/main/resources" includes="**/*"/>
+        </copy>
+    </target>
+
+    <!-- ====================================================================
+         Target: compile
+         Master compile target that builds all modules in dependency order.
+         ==================================================================== -->
+    <target name="compile" depends="compile-web,compile-batch,compile-integration"
+            description="Compile all modules">
+        <echo message="All modules compiled successfully."/>
+    </target>
+
+    <!-- ====================================================================
+         Target: test
+         Runs JUnit unit tests across all modules. Results are written
+         to the test-reports directory in plain text format.
+         ==================================================================== -->
+    <target name="test" depends="compile" description="Run unit tests">
+        <echo message="Running unit tests..."/>
+        <junit fork="yes"
+               forkmode="once"
+               printsummary="on"
+               haltonfailure="no"
+               failureproperty="tests.failed">
+            <classpath refid="test.classpath"/>
+            <formatter type="plain"/>
+            <formatter type="xml"/>
+            <batchtest todir="${reports.dir}">
+                <fileset dir="${src.dir}/domain/src/test/java" includes="**/*Test.java" erroronmissingdir="false"/>
+                <fileset dir="${src.dir}/dao/src/test/java" includes="**/*Test.java" erroronmissingdir="false"/>
+                <fileset dir="${src.dir}/service/src/test/java" includes="**/*Test.java" erroronmissingdir="false"/>
+                <fileset dir="${src.dir}/web/src/test/java" includes="**/*Test.java" erroronmissingdir="false"/>
+                <fileset dir="${src.dir}/batch/src/test/java" includes="**/*Test.java" erroronmissingdir="false"/>
+            </batchtest>
+        </junit>
+        <fail if="tests.failed" message="One or more unit tests failed. Check ${reports.dir} for details."/>
+    </target>
+
+    <!-- ====================================================================
+         Target: war
+         Packages the web application as a WAR file including compiled
+         classes from all dependent modules, web resources, and libraries.
+         ==================================================================== -->
+    <target name="war" depends="compile" description="Create WAR file">
+        <echo message="Building WAR: ${war.file}"/>
+        <war destfile="${build.dir}/${war.file}"
+             webxml="${webapp.dir}/WEB-INF/web.xml">
+            <!-- Include static web resources (JSPs, CSS, JS) -->
+            <fileset dir="${webapp.dir}">
+                <exclude name="WEB-INF/web.xml"/>
+            </fileset>
+            <!-- Include compiled classes from all modules -->
+            <classes dir="${classes.dir}/domain"/>
+            <classes dir="${classes.dir}/dao"/>
+            <classes dir="${classes.dir}/service"/>
+            <classes dir="${classes.dir}/web"/>
+            <!-- Include runtime libraries -->
+            <lib dir="${lib.dir}" erroronmissingdir="false">
+                <include name="*.jar"/>
+                <!-- Exclude servlet API - provided by container -->
+                <exclude name="servlet-api*.jar"/>
+                <exclude name="jsp-api*.jar"/>
+            </lib>
+        </war>
+    </target>
+
+    <!-- ====================================================================
+         Target: ear
+         Creates the EAR (Enterprise Application Archive) wrapping the
+         WAR and batch JAR for deployment to a Java EE application server.
+         ==================================================================== -->
+    <target name="ear" depends="war" description="Create EAR file">
+        <echo message="Building batch JAR: ${batch.jar}"/>
+        <!-- First, build the batch module JAR -->
+        <jar destfile="${build.dir}/${batch.jar}">
+            <fileset dir="${classes.dir}/batch"/>
+            <fileset dir="${classes.dir}/domain"/>
+            <fileset dir="${classes.dir}/dao"/>
+            <fileset dir="${classes.dir}/service"/>
+        </jar>
+        <echo message="Building EAR: ${ear.file}"/>
+        <ear destfile="${build.dir}/${ear.file}"
+             appxml="${basedir}/ear/src/main/application/META-INF/application.xml">
+            <!-- Include the WAR module -->
+            <fileset dir="${build.dir}" includes="${war.file}"/>
+            <!-- Include the batch JAR module -->
+            <fileset dir="${build.dir}" includes="${batch.jar}"/>
+            <!-- Include shared libraries in the EAR lib/ directory -->
+            <zipfileset dir="${lib.dir}" prefix="lib" erroronmissingdir="false">
+                <include name="*.jar"/>
+                <exclude name="servlet-api*.jar"/>
+                <exclude name="jsp-api*.jar"/>
+            </zipfileset>
+        </ear>
+    </target>
+
+    <!-- ====================================================================
+         Target: dist
+         Creates the full distribution, copying final artifacts to dist/.
+         ==================================================================== -->
+    <target name="dist" depends="war,ear" description="Create full distribution">
+        <echo message="Creating distribution in ${dist.dir}..."/>
+        <copy file="${build.dir}/${war.file}" todir="${dist.dir}"/>
+        <copy file="${build.dir}/${ear.file}" todir="${dist.dir}"/>
+        <echo message="Distribution complete. Artifacts available in ${dist.dir}"/>
+        <echo message="  WAR: ${dist.dir}/${war.file}"/>
+        <echo message="  EAR: ${dist.dir}/${ear.file}"/>
+    </target>
+
+    <!-- ====================================================================
+         Target: deploy
+         Deploys the WAR file to the local Tomcat installation.
+         Only available in non-production environments by default.
+         For production deployments, use the Jenkins pipeline.
+         ==================================================================== -->
+    <target name="deploy" depends="war" if="is.development"
+            description="Deploy WAR to Tomcat (dev only)">
+        <echo message="Deploying ${war.file} to ${tomcat.home}/webapps/"/>
+        <copy file="${build.dir}/${war.file}"
+              todir="${tomcat.home}/webapps/"
+              overwrite="true"/>
+        <echo message="Deployment complete. Restart Tomcat if necessary."/>
+    </target>
+
+    <!-- Production deploy guard - warns if attempting prod deploy via Ant -->
+    <target name="deploy-prod" if="is.production"
+            description="Production deployment guard">
+        <fail message="Production deployments must go through the Jenkins pipeline. Use 'ant deploy' for dev environments only."/>
+    </target>
+
+    <!-- ====================================================================
+         Target: javadoc
+         Generates Javadoc API documentation for all modules.
+         ==================================================================== -->
+    <target name="javadoc" description="Generate Javadoc documentation">
+        <echo message="Generating Javadoc..."/>
+        <mkdir dir="${javadoc.dir}"/>
+        <javadoc destdir="${javadoc.dir}"
+                 author="true"
+                 version="true"
+                 use="true"
+                 windowtitle="Grey Legacy Claims System API"
+                 doctitle="Grey Legacy Insurance Claims System"
+                 header="Grey Legacy v1.0.0"
+                 access="protected"
+                 encoding="UTF-8">
+            <classpath refid="project.classpath"/>
+            <packageset dir="${src.dir}/domain/src/main/java"/>
+            <packageset dir="${src.dir}/dao/src/main/java"/>
+            <packageset dir="${src.dir}/service/src/main/java"/>
+            <packageset dir="${src.dir}/web/src/main/java"/>
+            <packageset dir="${src.dir}/batch/src/main/java"/>
+            <packageset dir="${src.dir}/integration/src/main/java"/>
+            <bottom>
+                <![CDATA[<em>Copyright &#169; 2024 Grey Legacy Insurance. All Rights Reserved.</em>]]>
+            </bottom>
+        </javadoc>
+        <echo message="Javadoc generated in ${javadoc.dir}"/>
+    </target>
+
+    <!-- ====================================================================
+         Target: checkstyle
+         Runs Checkstyle static analysis against all source modules.
+         Requires checkstyle-all.jar in ${lib.dir}.
+         Legacy teams often run Checkstyle via Ant even when the main
+         build uses Maven, because the Ant task predates the Maven plugin
+         and old CI scripts reference it.
+         ==================================================================== -->
+    <target name="checkstyle" depends="init" description="Run Checkstyle analysis">
+        <echo message="Running Checkstyle analysis..."/>
+        <taskdef resource="com/puppycrawl/tools/checkstyle/ant/checkstyle-ant-task.properties"
+                 classpathref="project.classpath"/>
+        <checkstyle config="${basedir}/config/checkstyle/checkstyle.xml"
+                    failOnViolation="false">
+            <fileset dir="${src.dir}/domain/src/main/java" includes="**/*.java" erroronmissingdir="false"/>
+            <fileset dir="${src.dir}/dao/src/main/java" includes="**/*.java" erroronmissingdir="false"/>
+            <fileset dir="${src.dir}/service/src/main/java" includes="**/*.java" erroronmissingdir="false"/>
+            <fileset dir="${src.dir}/web/src/main/java" includes="**/*.java" erroronmissingdir="false"/>
+            <formatter type="plain"/>
+            <formatter type="xml" toFile="${reports.dir}/checkstyle-result.xml"/>
+        </checkstyle>
+        <echo message="Checkstyle report written to ${reports.dir}/checkstyle-result.xml"/>
+    </target>
+
+    <!-- ====================================================================
+         Target: db-schema
+         Deploys database schema scripts to the configured database.
+         Uses the Ant SQL task with properties from database.properties.
+         This target is the Ant equivalent of Flyway migrations —
+         on legacy systems, schema changes were applied via Ant/SQL tasks
+         or manual DBA execution.
+         ==================================================================== -->
+    <target name="db-schema" depends="init" description="Apply database schema scripts">
+        <echo message="Applying database schema to ${db.url}..."/>
+        <property file="${src.dir}/dao/src/main/resources/database.properties"/>
+        <sql driver="${db.driver.class:org.h2.Driver}"
+             url="${db.url}"
+             userid="${db.username}"
+             password="${db.password}"
+             classpathref="project.classpath"
+             onerror="continue"
+             delimiter=";">
+            <fileset dir="${src.dir}/dao/src/main/resources">
+                <include name="schema.sql"/>
+                <include name="schema-procedures.sql"/>
+                <include name="schema-security.sql"/>
+                <include name="schema-etl.sql"/>
+            </fileset>
+        </sql>
+        <echo message="Schema deployment complete."/>
+    </target>
+
+    <!-- ====================================================================
+         Target: backup
+         Creates a timestamped backup of the current distribution artifacts
+         and configuration files. This is the Ant equivalent of what
+         deploy.sh does before deploying — in regulated environments,
+         having a backup target in the build script is an audit requirement.
+         ==================================================================== -->
+    <target name="backup" description="Backup current deployment artifacts">
+        <property name="backup.dir" value="${basedir}/backups"/>
+        <tstamp>
+            <format property="backup.timestamp" pattern="yyyyMMdd-HHmmss"/>
+        </tstamp>
+        <property name="backup.name" value="${backup.dir}/${app.name}-${backup.timestamp}"/>
+        <mkdir dir="${backup.name}"/>
+        <echo message="Creating backup in ${backup.name}..."/>
+        <!-- Backup WAR if it exists -->
+        <copy todir="${backup.name}" failonerror="false">
+            <fileset dir="${build.dir}" includes="${war.file}"/>
+            <fileset dir="${build.dir}" includes="${ear.file}"/>
+        </copy>
+        <!-- Backup configuration -->
+        <copy todir="${backup.name}/config" failonerror="false">
+            <fileset dir="${basedir}/config" includes="**/*"/>
+        </copy>
+        <echo message="Backup complete: ${backup.name}"/>
+    </target>
+
+    <!-- ====================================================================
+         Target: verify-deployment
+         Post-deployment verification target. Checks that the deployed
+         application is accessible and returning expected HTTP status codes.
+         Used by automated deployment scripts and CI/CD pipelines to
+         confirm successful deployment before marking the build as passed.
+         ==================================================================== -->
+    <target name="verify-deployment" description="Verify deployed application health">
+        <echo message="Verifying deployment at ${deploy.url:http://localhost:8080/grey-legacy/}..."/>
+        <!-- Retry up to 12 times with 10 second intervals (2 minute max) -->
+        <waitfor maxwait="120" maxwaitunit="second" checkevery="10" checkeveryunit="second">
+            <http url="${deploy.url:http://localhost:8080/grey-legacy/}"/>
+        </waitfor>
+        <echo message="Application is responding. Deployment verified."/>
+    </target>
+
+    <!-- ====================================================================
+         Target: generate-build-info
+         Creates a build-info.properties file embedded in the WAR.
+         This allows the running application to report its exact build
+         version, timestamp, and source commit — critical for debugging
+         production issues in legacy environments where artifact
+         provenance is otherwise unclear.
+         ==================================================================== -->
+    <target name="generate-build-info" depends="init"
+            description="Generate build information properties file">
+        <tstamp>
+            <format property="build.time" pattern="yyyy-MM-dd'T'HH:mm:ssZ"/>
+        </tstamp>
+        <!-- Attempt to capture git commit hash -->
+        <exec executable="git" outputproperty="git.commit" failifexecutionfails="false" errorproperty="git.error">
+            <arg value="rev-parse"/>
+            <arg value="--short"/>
+            <arg value="HEAD"/>
+        </exec>
+        <property name="git.commit" value="unknown"/>
+        <exec executable="git" outputproperty="git.branch" failifexecutionfails="false" errorproperty="git.error2">
+            <arg value="rev-parse"/>
+            <arg value="--abbrev-ref"/>
+            <arg value="HEAD"/>
+        </exec>
+        <property name="git.branch" value="unknown"/>
+        <propertyfile file="${classes.dir}/web/build-info.properties"
+                      comment="Grey Legacy Build Information (auto-generated)">
+            <entry key="build.name" value="${app.name}"/>
+            <entry key="build.version" value="${app.version:1.0.0-SNAPSHOT}"/>
+            <entry key="build.timestamp" value="${build.time}"/>
+            <entry key="build.jdk" value="${java.version}"/>
+            <entry key="build.os" value="${os.name} ${os.version}"/>
+            <entry key="build.user" value="${user.name}"/>
+            <entry key="git.commit" value="${git.commit}"/>
+            <entry key="git.branch" value="${git.branch}"/>
+            <entry key="build.number" value="${build.number:local}"/>
+        </propertyfile>
+        <echo message="Build info generated: commit=${git.commit}, branch=${git.branch}"/>
+    </target>
+
+</project>

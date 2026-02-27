@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://schemas.xmlsoap.org/wsdl/"
+             xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+             xmlns:tns="http://www.greylegacy.com/services/policy"
+             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+             xmlns:pt="http://www.greylegacy.com/schema/policy"
+             name="PolicyLookupService"
+             targetNamespace="http://www.greylegacy.com/services/policy">
+
+    <!-- ================================================================== -->
+    <!-- Type imports                                                       -->
+    <!-- ================================================================== -->
+    <types>
+        <xsd:schema targetNamespace="http://www.greylegacy.com/services/policy">
+            <xsd:import namespace="http://www.greylegacy.com/schema/policy"
+                        schemaLocation="../xsd/policy-types.xsd"/>
+        </xsd:schema>
+    </types>
+
+    <!-- ================================================================== -->
+    <!-- Messages                                                           -->
+    <!-- ================================================================== -->
+    <message name="policyLookupRequest">
+        <part name="parameters" element="pt:policyLookupRequest"/>
+    </message>
+    <message name="policyLookupResponse">
+        <part name="parameters" element="pt:policyLookupResponse"/>
+    </message>
+
+    <message name="validateCoverageRequest">
+        <part name="parameters" element="pt:validateCoverageRequest"/>
+    </message>
+    <message name="validateCoverageResponse">
+        <part name="parameters" element="pt:validateCoverageResponse"/>
+    </message>
+
+    <message name="policyServiceFault">
+        <part name="fault" element="pt:policyFault"/>
+    </message>
+
+    <!-- ================================================================== -->
+    <!-- Port Type                                                          -->
+    <!-- ================================================================== -->
+    <portType name="PolicyLookupServicePortType">
+        <operation name="lookupPolicy">
+            <input message="tns:policyLookupRequest"/>
+            <output message="tns:policyLookupResponse"/>
+            <fault name="PolicyServiceFault" message="tns:policyServiceFault"/>
+        </operation>
+        <operation name="validateCoverage">
+            <input message="tns:validateCoverageRequest"/>
+            <output message="tns:validateCoverageResponse"/>
+            <fault name="PolicyServiceFault" message="tns:policyServiceFault"/>
+        </operation>
+    </portType>
+
+    <!-- ================================================================== -->
+    <!-- SOAP 1.1 Binding                                                   -->
+    <!-- ================================================================== -->
+    <binding name="PolicyLookupServiceSoapBinding" type="tns:PolicyLookupServicePortType">
+        <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+
+        <operation name="lookupPolicy">
+            <soap:operation soapAction="http://www.greylegacy.com/services/policy/lookupPolicy"/>
+            <input>
+                <soap:body use="literal"/>
+            </input>
+            <output>
+                <soap:body use="literal"/>
+            </output>
+            <fault name="PolicyServiceFault">
+                <soap:fault name="PolicyServiceFault" use="literal"/>
+            </fault>
+        </operation>
+
+        <operation name="validateCoverage">
+            <soap:operation soapAction="http://www.greylegacy.com/services/policy/validateCoverage"/>
+            <input>
+                <soap:body use="literal"/>
+            </input>
+            <output>
+                <soap:body use="literal"/>
+            </output>
+            <fault name="PolicyServiceFault">
+                <soap:fault name="PolicyServiceFault" use="literal"/>
+            </fault>
+        </operation>
+    </binding>
+
+    <!-- ================================================================== -->
+    <!-- Service                                                            -->
+    <!-- ================================================================== -->
+    <service name="PolicyLookupService">
+        <port name="PolicyLookupServicePort" binding="tns:PolicyLookupServiceSoapBinding">
+            <soap:address location="http://localhost:8080/grey-legacy/services/PolicyLookupService"/>
+        </port>
+    </service>
+
+</definitions>

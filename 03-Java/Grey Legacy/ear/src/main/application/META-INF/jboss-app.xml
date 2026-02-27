@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Grey Legacy Insurance Claims System - JBoss/WildFly Deployment Descriptor
+
+    This descriptor provides JBoss-specific deployment configuration for the
+    Grey Legacy EAR, including classloader isolation and module loading order.
+    Required for JBoss EAP 7.x and WildFly deployments.
+-->
+<jboss-app xmlns="http://www.jboss.com/xml/ns/javaee"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:schemaLocation="http://www.jboss.com/xml/ns/javaee
+                               http://www.jboss.org/j2ee/schema/jboss-app_7_0.xsd">
+
+    <!--
+        Classloader isolation: Ensure this application has its own isolated
+        classloader to prevent conflicts with other deployed EARs on the
+        same application server. This is critical in shared environments
+        where multiple applications may use different versions of the same
+        libraries (e.g., Hibernate, Spring, Commons).
+    -->
+    <loader-repository>
+        com.greylegacy:loader=grey-legacy-ear
+        <loader-repository-config>
+            java2ParentDelegation=false
+        </loader-repository-config>
+    </loader-repository>
+
+    <!--
+        Module loading order: Use strict ordering to ensure modules are
+        initialized in the correct dependency sequence. The web module
+        depends on services provided by the batch/utility JAR, so strict
+        ordering prevents ClassNotFoundException during deployment.
+    -->
+    <module-order>strict</module-order>
+
+</jboss-app>

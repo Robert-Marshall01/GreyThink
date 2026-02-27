@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE configuration PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-config.dtd">
+<!--
+    MyBatis Configuration for Grey Legacy
+    ======================================
+    Demonstrates a hybrid ORM strategy: Hibernate handles standard CRUD and
+    entity lifecycle management while MyBatis drives complex, read-heavy
+    reporting queries that need fine-grained SQL control.
+
+    This is a common pattern in mature enterprises — Hibernate was adopted
+    first, but as reporting needs grew, teams added MyBatis to avoid HQL
+    limitations and leverage database-specific features without abandoning
+    the existing Hibernate-based write layer.
+
+    Integration:
+      - SqlSessionFactory is created by Spring's SqlSessionFactoryBean
+        (see applicationContext-dao.xml) and shares the same DataSource
+        with the Hibernate SessionFactory.
+      - Transaction management uses Spring's existing HibernateTransactionManager
+        via DataSourceUtils connection synchronisation.
+-->
+<configuration>
+
+    <settings>
+        <!-- Map DB columns like CLAIM_NUMBER to Java fields like claimNumber -->
+        <setting name="mapUnderscoreToCamelCase" value="true"/>
+        <!-- Use JDBC getGeneratedKeys() for sequence-based inserts -->
+        <setting name="useGeneratedKeys" value="true"/>
+        <!-- Send statement-level timeout to the JDBC driver -->
+        <setting name="defaultStatementTimeout" value="30"/>
+        <!-- Log implementation -->
+        <setting name="logImpl" value="SLF4J"/>
+        <!-- Lazy-load associations — null until accessed -->
+        <setting name="lazyLoadingEnabled" value="true"/>
+        <setting name="aggressiveLazyLoading" value="false"/>
+        <!-- 2nd-level cache is global off; individual mappers opt in -->
+        <setting name="cacheEnabled" value="true"/>
+    </settings>
+
+    <!-- Type Aliases — short names for domain objects used in mapper XML -->
+    <typeAliases>
+        <typeAlias alias="Claim"           type="com.greylegacy.domain.Claim"/>
+        <typeAlias alias="Policy"          type="com.greylegacy.domain.Policy"/>
+        <typeAlias alias="ClaimPayment"    type="com.greylegacy.domain.ClaimPayment"/>
+        <typeAlias alias="Adjuster"        type="com.greylegacy.domain.Adjuster"/>
+        <typeAlias alias="ClaimAuditEntry" type="com.greylegacy.domain.ClaimAuditEntry"/>
+        <typeAlias alias="ClaimNote"       type="com.greylegacy.domain.ClaimNote"/>
+
+        <!-- Enum aliases -->
+        <typeAlias alias="ClaimStatus"     type="com.greylegacy.domain.ClaimStatus"/>
+        <typeAlias alias="ClaimType"       type="com.greylegacy.domain.ClaimType"/>
+        <typeAlias alias="PolicyStatus"    type="com.greylegacy.domain.PolicyStatus"/>
+        <typeAlias alias="PolicyType"      type="com.greylegacy.domain.PolicyType"/>
+        <typeAlias alias="FraudRiskLevel"  type="com.greylegacy.domain.FraudRiskLevel"/>
+        <typeAlias alias="PaymentStatus"   type="com.greylegacy.domain.PaymentStatus"/>
+    </typeAliases>
+
+    <!-- Type Handlers for Java enum ↔ VARCHAR conversion -->
+    <typeHandlers>
+        <typeHandler handler="org.apache.ibatis.type.EnumTypeHandler"
+                     javaType="com.greylegacy.domain.ClaimStatus"/>
+        <typeHandler handler="org.apache.ibatis.type.EnumTypeHandler"
+                     javaType="com.greylegacy.domain.ClaimType"/>
+        <typeHandler handler="org.apache.ibatis.type.EnumTypeHandler"
+                     javaType="com.greylegacy.domain.PolicyStatus"/>
+        <typeHandler handler="org.apache.ibatis.type.EnumTypeHandler"
+                     javaType="com.greylegacy.domain.PolicyType"/>
+        <typeHandler handler="org.apache.ibatis.type.EnumTypeHandler"
+                     javaType="com.greylegacy.domain.FraudRiskLevel"/>
+        <typeHandler handler="org.apache.ibatis.type.EnumTypeHandler"
+                     javaType="com.greylegacy.domain.PaymentStatus"/>
+    </typeHandlers>
+
+    <!-- Mapper registration (XML SQL mapping files) -->
+    <mappers>
+        <mapper resource="mybatis/ClaimMapper.xml"/>
+        <mapper resource="mybatis/PolicyMapper.xml"/>
+    </mappers>
+
+</configuration>

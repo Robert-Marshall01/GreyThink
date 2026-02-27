@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ============================================================================
+  Grey Legacy — Tomcat Users (Container-Managed Authentication)
+  ============================================================================
+  This file provides the user database for the UserDatabaseRealm configured
+  in server.xml.  In production, this is replaced by an LDAP Realm or a
+  JDBC Realm backed by the application database.
+
+  Roles map directly to the <security-role> entries in application.xml
+  and the @RolesAllowed annotations in service beans.
+
+  Typically lives at: $CATALINA_HOME/conf/tomcat-users.xml
+  ============================================================================
+-->
+<tomcat-users xmlns="http://tomcat.apache.org/xml"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="http://tomcat.apache.org/xml tomcat-users.xsd"
+              version="1.0">
+
+    <!-- ================================================================== -->
+    <!-- Roles                                                               -->
+    <!-- ================================================================== -->
+    <!--
+        Role hierarchy (implicit seniority, enforced in code):
+          ADMIN > CLAIMS_MANAGER > CLAIMS_ADJUSTER > READONLY
+
+        SYSTEM_BATCH is a technical role for batch job service accounts.
+    -->
+    <role rolename="READONLY"/>
+    <role rolename="CLAIMS_ADJUSTER"/>
+    <role rolename="CLAIMS_MANAGER"/>
+    <role rolename="ADMIN"/>
+    <role rolename="SYSTEM_BATCH"/>
+
+    <!-- Tomcat manager roles (ops access only) -->
+    <role rolename="manager-gui"/>
+    <role rolename="manager-script"/>
+    <role rolename="manager-jmx"/>
+
+    <!-- ================================================================== -->
+    <!-- Development / Test Users                                            -->
+    <!-- ================================================================== -->
+    <!--
+        WARNING: These credentials are for local development ONLY.
+        Production uses LDAP via the JNDIRealm in server.xml.
+
+        Passwords should be digested in any non-dev environment:
+          $CATALINA_HOME/bin/digest.sh -a SHA-256 -s 16 <password>
+    -->
+
+    <!-- Standard adjuster (day-to-day claims processing) -->
+    <user username="adjuster1"
+          password="adj_password_2025"
+          roles="CLAIMS_ADJUSTER,READONLY"/>
+
+    <!-- Senior adjuster (can view all claims, limited admin) -->
+    <user username="adjuster2"
+          password="adj2_password_2025"
+          roles="CLAIMS_ADJUSTER,READONLY"/>
+
+    <!-- Claims manager (supervisor — can approve, escalate, reassign) -->
+    <user username="manager1"
+          password="mgr_password_2025"
+          roles="CLAIMS_MANAGER,CLAIMS_ADJUSTER,READONLY"/>
+
+    <!-- System administrator (full access) -->
+    <user username="admin"
+          password="admin_password_2025"
+          roles="ADMIN,CLAIMS_MANAGER,CLAIMS_ADJUSTER,READONLY,manager-gui,manager-jmx"/>
+
+    <!-- Batch processing service account (no UI access) -->
+    <user username="batch_service"
+          password="batch_svc_2025"
+          roles="SYSTEM_BATCH"/>
+
+    <!-- Read-only auditor (compliance team, view only) -->
+    <user username="auditor"
+          password="audit_readonly_2025"
+          roles="READONLY"/>
+
+    <!-- Tomcat manager (ops team only — deploy/undeploy via script) -->
+    <user username="deployer"
+          password="deploy_prod_2025"
+          roles="manager-script"/>
+
+</tomcat-users>
