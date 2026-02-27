@@ -1,0 +1,555 @@
+/* ─────────────────────────────────────────────────────────────
+   Grey DB — Admin UI Styles
+   Clean developer-focused dashboard theme
+   ───────────────────────────────────────────────────────────── */
+
+:root {
+    --grey-50: #f8f9fa;
+    --grey-100: #f1f3f5;
+    --grey-200: #e9ecef;
+    --grey-300: #dee2e6;
+    --grey-400: #ced4da;
+    --grey-500: #adb5bd;
+    --grey-600: #868e96;
+    --grey-700: #495057;
+    --grey-800: #343a40;
+    --grey-900: #212529;
+    --primary: #4263eb;
+    --primary-light: #5c7cfa;
+    --primary-dark: #3b5bdb;
+    --success: #40c057;
+    --warning: #fab005;
+    --danger: #fa5252;
+    --info: #15aabf;
+    --bg: #0f1117;
+    --bg-card: #1a1d27;
+    --bg-input: #252830;
+    --text: #e1e4e8;
+    --text-dim: #8b949e;
+    --border: #30363d;
+    --radius: 8px;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ── Layout ──────────────────────────────────────────── */
+
+.app-layout {
+    display: flex;
+    min-height: 100vh;
+}
+
+.sidebar {
+    width: 260px;
+    background: var(--bg-card);
+    border-right: 1px solid var(--border);
+    padding: 20px 0;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-logo {
+    padding: 0 20px 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 12px;
+}
+
+.sidebar-logo h1 {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sidebar-logo h1 span {
+    color: var(--primary);
+}
+
+.sidebar-logo p {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 2px;
+}
+
+.sidebar-nav {
+    flex: 1;
+    padding: 0 8px;
+}
+
+.nav-section {
+    margin-bottom: 8px;
+}
+
+.nav-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    padding: 12px 12px 4px;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+}
+
+.nav-item:hover {
+    background: var(--bg-input);
+    color: var(--text);
+}
+
+.nav-item.active {
+    background: var(--primary);
+    color: white;
+}
+
+.nav-item svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+.main-content {
+    flex: 1;
+    padding: 24px 32px;
+    overflow-y: auto;
+    max-height: 100vh;
+}
+
+.page-header {
+    margin-bottom: 24px;
+}
+
+.page-header h2 {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.page-header p {
+    color: var(--text-dim);
+    font-size: 14px;
+}
+
+/* ── Cards ──────────────────────────────────────────── */
+
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.card-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+}
+
+.stat-card .label,
+.stat-label {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+}
+
+.stat-card .value,
+.stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    font-feature-settings: 'tnum';
+}
+
+.stat-card .value.success {
+    color: var(--success);
+}
+
+.stat-card .value.warning {
+    color: var(--warning);
+}
+
+.stat-card .value.danger {
+    color: var(--danger);
+}
+
+.stat-card .value.info {
+    color: var(--info);
+}
+
+/* ── Tables ──────────────────────────────────────────── */
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.data-table th {
+    text-align: left;
+    padding: 10px 12px;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+}
+
+.data-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+}
+
+.data-table tr:hover td {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.data-table .mono {
+    font-family: var(--font-mono);
+    font-size: 13px;
+}
+
+/* ── Buttons ─────────────────────────────────────────── */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: var(--radius);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text);
+    transition: all 0.15s;
+}
+
+.btn:hover {
+    border-color: var(--grey-500);
+}
+
+.btn-primary {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: var(--primary-light);
+}
+
+.btn-danger {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: white;
+}
+
+.btn-sm {
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+/* ── Inputs ──────────────────────────────────────────── */
+
+.input,
+.textarea,
+.select {
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+    transition: border-color 0.15s;
+}
+
+.input:focus,
+.textarea:focus,
+.select:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+.input-group {
+    margin-bottom: 12px;
+}
+
+.input-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 4px;
+    color: var(--text-dim);
+}
+
+/* ── SQL Editor ──────────────────────────────────────── */
+
+.sql-editor {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.6;
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    color: #e6edf3;
+    min-height: 200px;
+    width: 100%;
+    resize: vertical;
+    tab-size: 2;
+}
+
+.sql-editor:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(66, 99, 235, 0.15);
+}
+
+/* ── Results ─────────────────────────────────────────── */
+
+.results-panel {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow-x: auto;
+    margin-top: 16px;
+}
+
+.results-panel .data-table th {
+    position: sticky;
+    top: 0;
+    background: var(--bg-card);
+}
+
+.results-meta {
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--text-dim);
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 16px;
+}
+
+/* ── Badges ──────────────────────────────────────────── */
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.badge-success {
+    background: rgba(64, 192, 87, 0.15);
+    color: var(--success);
+}
+
+.badge-warning {
+    background: rgba(250, 176, 5, 0.15);
+    color: var(--warning);
+}
+
+.badge-danger {
+    background: rgba(250, 82, 82, 0.15);
+    color: var(--danger);
+}
+
+.badge-info {
+    background: rgba(21, 170, 191, 0.15);
+    color: var(--info);
+}
+
+.badge-primary {
+    background: rgba(66, 99, 235, 0.15);
+    color: var(--primary-light);
+}
+
+/* ── Tabs ────────────────────────────────────────────── */
+
+.tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 16px;
+    gap: 0;
+}
+
+.tab {
+    padding: 8px 16px;
+    font-size: 14px;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+}
+
+.tab:hover {
+    color: var(--text);
+}
+
+.tab.active,
+.tab-active {
+    color: var(--primary-light);
+    border-bottom-color: var(--primary);
+}
+
+/* ── Warning box ─────────────────────────────────────── */
+
+.warning-box {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: var(--radius);
+    margin-bottom: 12px;
+    font-size: 13px;
+}
+
+.warning-box.info {
+    background: rgba(21, 170, 191, 0.1);
+    border-left: 3px solid var(--info);
+}
+
+.warning-box.warning {
+    background: rgba(250, 176, 5, 0.1);
+    border-left: 3px solid var(--warning);
+}
+
+.warning-box.danger {
+    background: rgba(250, 82, 82, 0.1);
+    border-left: 3px solid var(--danger);
+}
+
+/* ── Loading ─────────────────────────────────────────── */
+
+.spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.loading-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    color: var(--text-dim);
+    gap: 12px;
+}
+
+/* ── Empty state ─────────────────────────────────────── */
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-dim);
+}
+
+.empty-state h3 {
+    font-size: 18px;
+    margin-bottom: 8px;
+    color: var(--text);
+}
+
+.empty-state p {
+    font-size: 14px;
+}
+
+/* ── Scrollbar ───────────────────────────────────────── */
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--grey-700);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--grey-600);
+}

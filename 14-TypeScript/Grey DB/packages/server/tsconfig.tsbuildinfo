@@ -1,0 +1,1 @@
+{"root":["./src/index.ts","./src/middleware/auth.ts","./src/routes/ai.ts","./src/routes/ops.ts","./src/routes/query.ts","./src/routes/schema.ts","./src/routes/tenants.ts"],"version":"5.9.3"}

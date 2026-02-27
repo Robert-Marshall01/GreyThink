@@ -1,0 +1,55 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: greydb-postgres
+    environment:
+      POSTGRES_USER: greydb
+      POSTGRES_PASSWORD: greydb_secret
+      POSTGRES_DB: greydb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U greydb"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+    container_name: greydb-server
+    ports:
+      - "4000:4000"
+    environment:
+      GREY_DB_HOST: postgres
+      GREY_DB_PORT: 5432
+      GREY_DB_DATABASE: greydb
+      GREY_DB_USER: greydb
+      GREY_DB_PASSWORD: greydb_secret
+      PORT: 4000
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ui
+    container_name: greydb-ui
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: http://localhost:4000
+    depends_on:
+      - server
+
+volumes:
+  pgdata:

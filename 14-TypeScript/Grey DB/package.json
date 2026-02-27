@@ -1,0 +1,30 @@
+{
+    "name": "grey-db",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Postgres-backed data platform — schema design, migrations, multi-tenancy, query ergonomics, AI-assisted querying",
+    "workspaces": [
+        "packages/*",
+        "examples/*"
+    ],
+    "scripts": {
+        "build": "npm run build --workspaces",
+        "dev:server": "npm run dev --workspace=packages/server",
+        "dev:ui": "npm run dev --workspace=packages/ui",
+        "dev": "concurrently \"npm run dev:server\" \"npm run dev:ui\"",
+        "lint": "eslint packages/*/src --ext .ts,.tsx",
+        "test": "jest --passWithNoTests",
+        "bench": "npx ts-node packages/core/benchmarks/pure.ts",
+        "bench:db": "npx ts-node packages/core/benchmarks/run.ts",
+        "crm:migrate": "npx ts-node examples/crm/src/migrate.ts",
+        "crm:seed": "npx ts-node examples/crm/src/seed.ts",
+        "crm:dev": "npx ts-node examples/crm/src/server.ts"
+    },
+    "devDependencies": {
+        "@types/jest": "^30.0.0",
+        "concurrently": "^8.2.2",
+        "jest": "^30.2.0",
+        "ts-jest": "^29.4.6",
+        "typescript": "^5.4.0"
+    }
+}

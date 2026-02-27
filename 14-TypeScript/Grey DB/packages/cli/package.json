@@ -1,0 +1,28 @@
+{
+    "name": "@grey-db/cli",
+    "version": "1.0.0",
+    "description": "CLI for Grey DB — schema migrations, tenant management, query analysis, AI-assisted querying",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "bin": {
+        "greydb": "./dist/index.js"
+    },
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsc --watch",
+        "start": "node dist/index.js"
+    },
+    "dependencies": {
+        "@grey-db/core": "1.0.0",
+        "commander": "^12.1.0",
+        "chalk": "^4.1.2",
+        "ora": "^5.4.1",
+        "cli-table3": "^0.6.5",
+        "inquirer": "^8.2.6",
+        "dotenv": "^16.4.5"
+    },
+    "devDependencies": {
+        "@types/inquirer": "^8.2.10",
+        "typescript": "^5.4.0"
+    }
+}
