@@ -359,6 +359,22 @@ const result = await pipeline.ingest(csvText);
 - [Performance model](docs/performance-model.md)
 - [Schema evolution](docs/schema-evolution.md)
 
+## Installation
+
+Platform-specific installers are in the [`installers/`](installers/) directory. See the [installer README](installers/README.md) for full details.
+
+**Linux / macOS:**
+```bash
+sudo bash installers/install.sh
+```
+
+**Windows (PowerShell as Administrator):**
+```powershell
+powershell -ExecutionPolicy Bypass -File installers\install.ps1
+```
+
+To uninstall, use the corresponding uninstaller for your platform — see [installers/README.md](installers/README.md).
+
 ## License
 
 MIT
