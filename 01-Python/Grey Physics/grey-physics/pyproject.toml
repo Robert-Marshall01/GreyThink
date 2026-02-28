@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "grey-physics"
+version = "0.1.0"
+description = "A PhD-level physics and mathematics operating system and IDE"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Proprietary"}
+authors = [{name = "Grey Physics Team"}]
+
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+]
+
+[project.optional-dependencies]
+gpu = ["cupy>=12.0"]
+viz = ["matplotlib>=3.7", "plotly>=5.14"]
+ide = ["textual>=0.40", "rich>=13.0"]
+all = ["grey-physics[gpu,viz,ide]"]
+dev = ["pytest>=7.0", "pytest-cov>=4.0", "mypy>=1.0"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["grey_physics*"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
