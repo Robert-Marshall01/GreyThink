@@ -204,6 +204,274 @@ ant dist
 mvn clean install -pl !modernization
 ```
 
+## Installation
+
+Grey Legacy provides platform-specific installers for Windows, Linux, and macOS. Each installer handles all prerequisites, deploys the application on Apache Tomcat 8.5, registers a system service, and installs a desktop dashboard application.
+
+### Prerequisites
+
+- **Java 8+** (JDK) — must be installed and available on `PATH` (or `JAVA_HOME` set)
+- **Network access** — if Tomcat is not bundled, the installer downloads it from Apache archives automatically
+
+### Building the Installers
+
+```bash
+# Build the WAR and package distributable archives for all platforms
+chmod +x installers/build-installers.sh
+./installers/build-installers.sh
+
+# Skip the Maven build if you already have a WAR
+./installers/build-installers.sh --skip-build
+```
+
+This produces distributable archives in `dist/`:
+- `greylegacy-1.0.0-windows.zip`
+- `greylegacy-1.0.0-linux.tar.gz`
+- `greylegacy-1.0.0-macos.tar.gz`
+
+### Building the GUI Installer & Desktop App
+
+```bash
+cd installers
+bash gui/build-gui.sh
+```
+
+This compiles and packages two JARs:
+- `gui/greylegacy-installer.jar` — graphical installer/uninstaller wizard
+- `gui/greylegacy-app.jar` — post-installation desktop dashboard
+
+### Linux
+
+**Install** (requires root):
+
+```bash
+sudo ./installers/linux/install.sh
+```
+
+| Option | Description |
+|--------|-------------|
+| `--silent` | Non-interactive installation |
+| `--install-dir <path>` | Installation directory (default: `/opt/greylegacy`) |
+| `--port <port>` | HTTP port (default: `8080`) |
+| `--user <user>` | Service user account (default: `greylegacy`) |
+| `--skip-firewall` | Skip firewall configuration |
+
+What the installer does:
+1. Verifies Java installation
+2. Creates a dedicated service user (`greylegacy`)
+3. Downloads and extracts Apache Tomcat 8.5.100 (or uses bundled/pre-installed)
+4. Deploys the application WAR to Tomcat
+5. Copies configuration files and generates `setenv.sh`
+6. Sets file ownership and permissions
+7. Creates a systemd service (`greylegacy`) with security hardening and auto-restart
+8. Configures firewall (firewalld, ufw, or iptables)
+9. Installs the desktop dashboard app with a `.desktop` shortcut in the application menu
+
+**Uninstall**:
+
+```bash
+sudo ./installers/linux/uninstall.sh
+```
+
+| Option | Description |
+|--------|-------------|
+| `--silent` | Non-interactive uninstallation |
+| `--keep-data` | Preserve application data directory |
+| `--keep-logs` | Preserve log files |
+| `--keep-user` | Keep the service user account |
+
+**Service management after installation**:
+
+```bash
+sudo systemctl start greylegacy     # Start the service
+sudo systemctl stop greylegacy      # Stop the service
+sudo systemctl restart greylegacy   # Restart the service
+sudo systemctl status greylegacy    # Check status
+journalctl -u greylegacy -f         # Follow service logs
+```
+
+### Windows
+
+**Install** (requires Administrator):
+
+```cmd
+installers\windows\install.cmd
+```
+
+| Option | Description |
+|--------|-------------|
+| `--silent` | Non-interactive installation |
+| `--install-dir <path>` | Installation directory (default: `C:\GreyLegacy`) |
+| `--port <port>` | HTTP port (default: `8080`) |
+
+What the installer does:
+1. Verifies Java installation and `JAVA_HOME`
+2. Creates directory structure under the install directory
+3. Downloads and extracts Apache Tomcat 8.5.100 (or uses bundled/pre-installed)
+4. Deploys the application WAR to Tomcat
+5. Copies configuration files and generates `setenv.bat`
+6. Registers a Windows service (`GreyLegacyTomcat`) with auto-start and failure recovery
+7. Adds a firewall rule for the HTTP port
+8. Creates an Add/Remove Programs entry
+9. Installs the desktop dashboard app with a Start Menu shortcut
+
+**Uninstall** (requires Administrator):
+
+```cmd
+installers\windows\uninstall.cmd
+```
+
+| Option | Description |
+|--------|-------------|
+| `--silent` | Non-interactive uninstallation |
+| `--keep-data` | Preserve the data directory |
+| `--keep-logs` | Preserve log files |
+
+**Service management after installation**:
+
+```cmd
+net start GreyLegacyTomcat    &rem Start the service
+net stop GreyLegacyTomcat     &rem Stop the service
+sc query GreyLegacyTomcat     &rem Check status
+```
+
+### macOS
+
+**Install** (requires sudo):
+
+```bash
+sudo ./installers/macos/install.sh
+```
+
+| Option | Description |
+|--------|-------------|
+| `--silent` | Non-interactive installation |
+| `--install-dir <path>` | Installation directory (default: `/usr/local/greylegacy`) |
+| `--port <port>` | HTTP port (default: `8080`) |
+
+What the installer does:
+1. Verifies Java installation (uses `/usr/libexec/java_home`)
+2. Creates directory structure under the install directory
+3. Downloads and extracts Apache Tomcat 8.5.100 (or uses bundled/pre-installed)
+4. Deploys the application WAR to Tomcat
+5. Copies configuration files and generates `setenv.sh`
+6. Creates a macOS LaunchDaemon (`com.greylegacy.tomcat`) for auto-start
+7. Sets file permissions
+8. Installs the desktop dashboard app in `/Applications/Grey Legacy.app`
+
+**Uninstall**:
+
+```bash
+sudo ./installers/macos/uninstall.sh
+```
+
+| Option | Description |
+|--------|-------------|
+| `--silent` | Non-interactive uninstallation |
+| `--keep-data` | Preserve the data directory |
+| `--keep-logs` | Preserve log files |
+
+**Service management after installation**:
+
+```bash
+sudo launchctl load /Library/LaunchDaemons/com.greylegacy.tomcat.plist     # Start
+sudo launchctl unload /Library/LaunchDaemons/com.greylegacy.tomcat.plist   # Stop
+sudo launchctl list | grep com.greylegacy.tomcat                           # Status
+```
+
+### GUI Installer
+
+For a graphical installation experience, launch the installer wizard:
+
+```bash
+java -jar installers/gui/greylegacy-installer.jar              # Install wizard
+java -jar installers/gui/greylegacy-installer.jar --uninstall  # Uninstall wizard
+```
+
+The wizard provides a 4-step guided process: Welcome → Configure (install directory, port) → Install (live progress) → Complete. It auto-detects the operating system and delegates to the appropriate platform CLI installer.
+
+### Bundling Tomcat
+
+To create self-contained installers that include Tomcat (no internet required):
+
+| Platform | Place this file in the platform installer directory |
+|----------|---------------------------------------------------|
+| Windows | `apache-tomcat-8.5.100-windows-x64.zip` |
+| Linux | `apache-tomcat-8.5.100.tar.gz` |
+| macOS | `apache-tomcat-8.5.100.tar.gz` |
+
+If Tomcat is not bundled, the installer downloads it automatically from Apache archives.
+
+---
+
+## Usage
+
+### Accessing the Application
+
+After installation and starting the service, the application is available at:
+
+```
+http://localhost:8080/greylegacy/
+```
+
+Replace `8080` with the port specified during installation if a custom port was used.
+
+#### Default Pages
+
+| URL | Description |
+|-----|-------------|
+| `/greylegacy/` | Main dashboard (redirects to login if unauthenticated) |
+| `/greylegacy/login.jsp` | FORM-based login page |
+| `/greylegacy/services/ClaimService?wsdl` | SOAP ClaimService WSDL |
+| `/greylegacy/services/PolicyLookupService?wsdl` | SOAP PolicyLookupService WSDL |
+
+### Desktop Dashboard App
+
+After installation, a desktop dashboard application is available for managing the Grey Legacy service without using the command line.
+
+**Launch from the application menu** (installed automatically) or manually:
+
+```bash
+java -jar /opt/greylegacy/greylegacy-app.jar          # Linux
+java -jar C:\GreyLegacy\greylegacy-app.jar             # Windows
+open "/Applications/Grey Legacy.app"                    # macOS
+```
+
+The dashboard provides:
+
+| Feature | Description |
+|---------|-------------|
+| **Service Status** | Real-time monitoring with auto-refresh every 10 seconds (checks HTTP health and OS-level service status) |
+| **Open Web UI** | Opens the application in your default web browser |
+| **Start / Stop / Restart** | Control the Tomcat service directly from the dashboard |
+| **Log Viewer** | Live tail of `catalina.out` with auto-scroll |
+| **System Tray** | Minimizes to the system tray with a right-click popup menu for quick access |
+
+### Viewing Logs
+
+```bash
+# Linux — follow systemd journal
+journalctl -u greylegacy -f
+
+# Linux / macOS — follow Tomcat log directly
+tail -f /opt/greylegacy/logs/catalina.out         # Linux
+tail -f /usr/local/greylegacy/logs/catalina.out   # macOS
+
+# Windows — open in text editor
+type C:\GreyLegacy\logs\catalina.out
+```
+
+### Health Checks
+
+A health check script is provided for monitoring:
+
+```bash
+chmod +x scripts/health-check.sh
+./scripts/health-check.sh
+```
+
+---
+
 ## Deployment
 
 ```bash
