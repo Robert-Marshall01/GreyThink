@@ -158,6 +158,9 @@ make
 # Release build
 make release
 
+# Build GTK3 GUI (requires libgtk-3-dev / gtk3-devel)
+make gui
+
 # Clean
 make clean
 
@@ -175,17 +178,34 @@ cmake --build .
 # Release build
 cmake -DCMAKE_BUILD_TYPE=Release ..
 cmake --build .
+
+# Disable GUI (if GTK3 is not available)
+cmake -DBUILD_GUI=OFF ..
 ```
 
 ---
 
 ## Running the Demo
 
+### CLI Mode
+
 ```bash
 ./build/bin/grey_firmware
 ```
 
-Output:
+### GUI Mode
+
+```bash
+./build/bin/grey_firmware_gui
+```
+
+The GUI provides a dashboard with:
+- **Module Status Panel** — live indicators for Scheduler, Message Bus, CAN, MQTT, Secure Boot, and Sensors
+- **Live Statistics** — sample counts, CAN frames, MQTT messages, error count, last sensor value
+- **Configuration** — demo mode selector, MQTT broker/port/topic, sensor rate
+- **Log Viewer** — timestamped, scrollable log output with clear button
+
+CLI Output:
 ```
 ╔════════════════════════════════════════════════════════════╗
 ║                     GREY FIRMWARE v1.0.0                    ║
@@ -270,6 +290,70 @@ Output:
 - **Severity classification**: debug, info, warning, error, critical
 - **Watchdog integration** for fault recovery
 - **Callback hooks** for custom error handling
+
+---
+
+## Installation
+
+Pre-built installers and uninstallers are provided for all major platforms.
+
+### Linux
+
+```bash
+# Build first
+make && make gui
+
+# Install (creates /opt/grey-firmware, symlinks in /usr/local/bin, .desktop entry)
+sudo ./installers/linux/install.sh
+
+# Or specify a custom prefix
+sudo ./installers/linux/install.sh --prefix /usr/local
+
+# Uninstall
+sudo grey_firmware_uninstall
+# or
+sudo ./installers/linux/uninstall.sh
+```
+
+### macOS
+
+```bash
+# Build first (requires: brew install gtk+3)
+make && make gui
+
+# Install (.app bundle in /Applications, CLI symlinks in /usr/local/bin)
+sudo ./installers/macos/install.sh
+
+# Uninstall
+sudo grey_firmware_uninstall
+# or
+sudo ./installers/macos/uninstall.sh
+```
+
+### Windows
+
+```bash
+# Build first (MSYS2/MinGW with GTK3)
+cmake --build build --config Release
+
+# Generate installer (requires NSIS: https://nsis.sourceforge.io)
+makensis installers\windows\grey_firmware_installer.nsi
+
+# Run the generated GreyFirmware-1.0.0-Setup.exe
+# Uninstall via Add/Remove Programs or the Start Menu shortcut
+```
+
+### CMake Packaging (all platforms)
+
+```bash
+cd build
+cmake --build . --target package
+```
+
+This produces platform-appropriate packages:
+- **Linux**: `.deb`, `.rpm`, `.tar.gz`
+- **macOS**: `.dmg`, `.tar.gz`
+- **Windows**: NSIS installer, `.zip`
 
 ---
 

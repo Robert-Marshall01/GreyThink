@@ -135,6 +135,50 @@ target_link_libraries(grey_firmware
 )
 
 # ============================================================================
+# GUI Target (requires GTK3)
+# ============================================================================
+
+option(BUILD_GUI "Build the GTK3 graphical interface" ON)
+
+if(BUILD_GUI)
+    find_package(PkgConfig)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(GTK3 gtk+-3.0)
+    endif()
+
+    if(GTK3_FOUND)
+        add_executable(grey_firmware_gui
+            src/gui/gui.c
+            src/gui/gui_main.c
+        )
+
+        target_include_directories(grey_firmware_gui PRIVATE
+            ${GTK3_INCLUDE_DIRS}
+        )
+
+        target_link_directories(grey_firmware_gui PRIVATE
+            ${GTK3_LIBRARY_DIRS}
+        )
+
+        target_link_libraries(grey_firmware_gui
+            grey_firmware_lib
+            ${GTK3_LIBRARIES}
+            m
+        )
+
+        target_compile_options(grey_firmware_gui PRIVATE
+            ${GTK3_CFLAGS_OTHER}
+        )
+
+        message(STATUS "  GUI target:  YES (GTK ${GTK3_VERSION})")
+    else()
+        message(STATUS "  GUI target:  NO  (GTK3 not found — install libgtk-3-dev)")
+    endif()
+else()
+    message(STATUS "  GUI target:  NO  (disabled via -DBUILD_GUI=OFF)")
+endif()
+
+# ============================================================================
 # Installation
 # ============================================================================
 
@@ -142,10 +186,59 @@ install(TARGETS grey_firmware
     RUNTIME DESTINATION bin
 )
 
+if(BUILD_GUI AND GTK3_FOUND)
+    install(TARGETS grey_firmware_gui
+        RUNTIME DESTINATION bin
+    )
+endif()
+
 install(DIRECTORY include/
     DESTINATION include/grey_firmware
     FILES_MATCHING PATTERN "*.h"
 )
+
+install(FILES LICENSE README.md
+    DESTINATION share/doc/grey-firmware
+)
+
+if(EXISTS ${CMAKE_SOURCE_DIR}/docs)
+    install(DIRECTORY docs/
+        DESTINATION share/doc/grey-firmware/docs
+    )
+endif()
+
+# ============================================================================
+# CPack - Cross-Platform Package Generation
+# ============================================================================
+
+set(CPACK_PACKAGE_NAME "grey-firmware")
+set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+set(CPACK_PACKAGE_VENDOR "Grey Firmware Team")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Modular Firmware Framework Demonstration")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/greyfirmware")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
+set(CPACK_RESOURCE_FILE_README "${CMAKE_SOURCE_DIR}/README.md")
+
+# Platform-specific CPack generators
+if(WIN32)
+    set(CPACK_GENERATOR "NSIS;ZIP")
+    set(CPACK_NSIS_DISPLAY_NAME "Grey Firmware")
+    set(CPACK_NSIS_PACKAGE_NAME "Grey Firmware")
+    set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+elseif(APPLE)
+    set(CPACK_GENERATOR "DragNDrop;TGZ")
+    set(CPACK_DMG_VOLUME_NAME "Grey Firmware")
+    set(CPACK_BUNDLE_NAME "Grey Firmware")
+else()
+    set(CPACK_GENERATOR "DEB;RPM;TGZ")
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Grey Firmware Team")
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libgtk-3-0 (>= 3.20)")
+    set(CPACK_DEBIAN_PACKAGE_SECTION "devel")
+    set(CPACK_RPM_PACKAGE_REQUIRES "gtk3 >= 3.20")
+    set(CPACK_RPM_PACKAGE_GROUP "Development/Tools")
+endif()
+
+include(CPack)
 
 # ============================================================================
 # Custom Targets
@@ -194,7 +287,14 @@ endif()
 
 message(STATUS "")
 message(STATUS "Grey Firmware v${PROJECT_VERSION}")
-message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
-message(STATUS "  C Compiler: ${CMAKE_C_COMPILER}")
+message(STATUS "  Build type:    ${CMAKE_BUILD_TYPE}")
+message(STATUS "  C Compiler:    ${CMAKE_C_COMPILER}")
 message(STATUS "  Install prefix: ${CMAKE_INSTALL_PREFIX}")
+message(STATUS "")
+message(STATUS "  Targets:  grey_firmware (CLI)")
+if(BUILD_GUI AND GTK3_FOUND)
+    message(STATUS "            grey_firmware_gui (GTK3 GUI)")
+endif()
+message(STATUS "")
+message(STATUS "  Packaging: cmake --build build --target package")
 message(STATUS "")

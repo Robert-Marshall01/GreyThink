@@ -254,7 +254,7 @@ TARGET := $(BIN_DIR)/$(PROJECT)
 # Build Rules
 # ============================================================================
 
-.PHONY: all clean debug release docs format analyze help test test-unit test-integ test-ai
+.PHONY: all clean debug release docs format analyze help test test-unit test-integ test-ai gui
 
 # Default target
 all: $(TARGET)
@@ -297,6 +297,7 @@ $(OBJ_DIR):
 	@mkdir -p $(OBJ_DIR)/vision $(OBJ_DIR)/marine $(OBJ_DIR)/renewable
 	@mkdir -p $(OBJ_DIR)/space_habitat $(OBJ_DIR)/energy_storage $(OBJ_DIR)/aviation $(OBJ_DIR)/space
 	@mkdir -p $(OBJ_DIR)/asteroid $(OBJ_DIR)/hyperloop $(OBJ_DIR)/hyperloop
+	@mkdir -p $(OBJ_DIR)/gui
 
 $(BIN_DIR):
 	@mkdir -p $(BIN_DIR)
@@ -766,6 +767,53 @@ analyze:
 	@cppcheck --enable=all --inconclusive --std=c11 \
 		-I$(INC_DIR) $(SRC_DIR) 2>/dev/null || echo "cppcheck not installed"
 
+# ============================================================================
+# GUI Target (requires GTK3: pkg-config --cflags --libs gtk+-3.0)
+# ============================================================================
+
+GTK3_CFLAGS := $(shell pkg-config --cflags gtk+-3.0 2>/dev/null)
+GTK3_LIBS   := $(shell pkg-config --libs gtk+-3.0 2>/dev/null)
+
+GUI_SRC := $(SRC_DIR)/gui/gui.c $(SRC_DIR)/gui/gui_main.c
+GUI_OBJS := $(OBJ_DIR)/gui/gui.o $(OBJ_DIR)/gui/gui_main.o
+GUI_TARGET := $(BIN_DIR)/$(PROJECT)_gui
+
+gui: $(GUI_TARGET)
+	@echo ""
+	@echo "GUI build complete: $(GUI_TARGET)"
+	@echo ""
+
+$(GUI_TARGET): $(LIB_OBJS) $(GUI_OBJS) | $(BIN_DIR)
+	@echo "[LD] $@"
+	@$(CC) $(TARGET_ARCH) $(LIB_OBJS) $(GUI_OBJS) -o $@ $(LDFLAGS) $(GTK3_LIBS)
+
+$(OBJ_DIR)/gui/%.o: $(SRC_DIR)/gui/%.c | $(OBJ_DIR)
+	@mkdir -p $(OBJ_DIR)/gui
+	@echo "[CC] $<"
+	@$(CC) $(CFLAGS) $(GTK3_CFLAGS) $(TARGET_ARCH) -MMD -MP -c $< -o $@
+
+# ============================================================================
+# Installer Targets
+# ============================================================================
+
+.PHONY: install-linux uninstall-linux install-macos uninstall-macos
+
+install-linux:
+	@chmod +x installers/linux/install.sh
+	@sudo installers/linux/install.sh
+
+uninstall-linux:
+	@chmod +x installers/linux/uninstall.sh
+	@sudo installers/linux/uninstall.sh
+
+install-macos:
+	@chmod +x installers/macos/install.sh
+	@sudo installers/macos/install.sh
+
+uninstall-macos:
+	@chmod +x installers/macos/uninstall.sh
+	@sudo installers/macos/uninstall.sh
+
 # Help
 help:
 	@echo ""
@@ -804,9 +852,17 @@ help:
 	@echo "  make test-orbital Run Orbital Manufacturing tests only"
 	@echo "  make test-asteroid Run Asteroid Drill tests only"
 	@echo "  make test-hyperloop Run Hyperloop Pod tests only"
+	@echo "  make gui        Build GTK3 GUI (requires libgtk-3-dev)"
 	@echo "  make docs       Generate documentation"
 	@echo "  make format     Format source code"
 	@echo "  make analyze    Run static analysis"
+	@echo ""
+	@echo "Installers:"
+	@echo "  make install-linux    Install on Linux (sudo)"
+	@echo "  make uninstall-linux  Uninstall from Linux (sudo)"
+	@echo "  make install-macos    Install on macOS (sudo)"
+	@echo "  make uninstall-macos  Uninstall from macOS (sudo)"
+	@echo "  (Windows: use NSIS with installers/windows/grey_firmware_installer.nsi)"
 	@echo ""
 	@echo "Cross-compilation:"
 	@echo "  make CROSS_COMPILE=arm-none-eabi-"
